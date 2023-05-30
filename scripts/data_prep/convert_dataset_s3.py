@@ -100,13 +100,13 @@ if __name__ == "__main__":
         loader = build_dataloader(data, batch_size=512)
         samples = generate_samples(loader, truncate_num_samples=None)
 
-        columns = {'text': 'str'}
+        columns = {'text': 'str', 'pile_set_name': 'str'}
         denominator = 210607728
 
         with MDSWriter(columns=columns,
-                       out=os.path.join("tmp", "base", split),
+                       out=os.path.join("/tmp", "base", split),
                        compression="zstd") as out:
             for step, sample in enumerate(
                     tqdm(samples, desc=split, total=denominator, leave=True)):
                 out.write(sample)
-                wandb.log(({'step': step, 'progress': step / len(denominator)}))
+                wandb.log(({'step': step, 'progress': step / denominator}))

@@ -11,6 +11,7 @@ from streaming import MDSWriter, StreamingDataset
 from torch.utils.data import DataLoader, IterableDataset
 from tqdm import tqdm
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
+import wandb
 import numpy as np
 
 PILE_SUBSETS = {
@@ -277,6 +278,10 @@ if __name__ == "__main__":
     parser.add_argument("--subset", type=str, required=True)
     args = parser.parse_args()
 
+    wandb.init(name=f"pile-{args.subset}-convert",
+               project="doremi-preprocess",
+               entity="mosaic-ml")
+
     s3_remote = "s3://mosaicml-internal-dataset-the-pile/mds/2"
     local = "/tmp/s3-pile"
     oci_remote = "oci://mosaicml-internal-dataset-pile/base"
@@ -310,10 +315,10 @@ if __name__ == "__main__":
                                                 chars_per_token=4,
                                                 max_length=2048)
 
-        token_name = "gpt-neox-20b-seq-len-2048"
         with MDSWriter(columns=columns,
-                       out=os.path.join("data", "subsets", args.subset,
-                                        "pre-concat", token_name, split),
+                       out=os.path.join("/tmp", subset, split),
                        compression="zstd") as out:
-            for sample in tqdm(samples, desc=split, total=denominator):
+            for step, sample in enumerate(
+                    tqdm(samples, desc=split, total=denominator)):
                 out.write(sample)
+                wandb.log(({'step': step, 'progress': step / denominator}))
