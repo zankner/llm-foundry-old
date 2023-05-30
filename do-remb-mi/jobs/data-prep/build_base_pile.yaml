@@ -12,5 +12,5 @@ integrations:
   ssh_clone: false # Should be true if using a private repo
 command: |
   cd llm-foundry
-  python  python scripts/data_prep/convert_dataset_s3.py
+  python scripts/data_prep/convert_dataset_s3.py
   oci os object bulk-upload -bn mosaicml-internal-dataset-pile --src-dir /tmp/base --prefix base
