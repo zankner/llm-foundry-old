@@ -324,6 +324,3 @@ if __name__ == "__main__":
 
                 if step % 1_000 == 0:
                     wandb.log(({'step': step, 'progress': step / denominator}))
-
-                if step == 10_000:
-                    break
