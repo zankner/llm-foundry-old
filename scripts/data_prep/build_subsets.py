@@ -1,4 +1,4 @@
-scripts/data_prep/build_subsets.py import os
+import os
 import platform
 import warnings
 from argparse import ArgumentParser, Namespace
