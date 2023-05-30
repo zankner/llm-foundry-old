@@ -316,7 +316,7 @@ if __name__ == "__main__":
                                                 max_length=2048)
 
         with MDSWriter(columns=columns,
-                       out=os.path.join("/tmp", subset, split),
+                       out=os.path.join("/tmp", args.subset, split),
                        compression="zstd") as out:
             for step, sample in enumerate(
                     tqdm(samples, desc=split, total=denominator)):
