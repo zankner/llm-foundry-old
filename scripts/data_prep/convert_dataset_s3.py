@@ -1,3 +1,4 @@
+scripts/data_prep/convert_dataset_s3.py
 import os
 import platform
 from argparse import ArgumentParser, Namespace
@@ -84,7 +85,7 @@ class NoConcatDataset(IterableDataset):
 if __name__ == "__main__":
     wandb.init(name="pile-base-convert",
                project="doremi-preprocess",
-               entity="mosaicml")
+               entity="mosaic-ml")
 
     s3_remote = "s3://mosaicml-internal-dataset-the-pile/mds/2"
     local = "/tmp/base"
