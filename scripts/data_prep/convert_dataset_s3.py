@@ -1,4 +1,3 @@
-scripts/data_prep/convert_dataset_s3.py
 import os
 import platform
 from argparse import ArgumentParser, Namespace
