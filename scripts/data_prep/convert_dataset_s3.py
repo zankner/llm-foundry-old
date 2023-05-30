@@ -1,4 +1,3 @@
-scripts/data_prep/convert_dataset_s3.py
 import os
 import platform
 from argparse import ArgumentParser, Namespace
@@ -88,7 +87,7 @@ if __name__ == "__main__":
                entity="mosaic-ml")
 
     s3_remote = "s3://mosaicml-internal-dataset-the-pile/mds/2"
-    local = "/tmp/base"
+    local = "/tmp/s3-pile"
     splits = ["train", "val", "test"]
 
     for split in splits:
@@ -105,7 +104,7 @@ if __name__ == "__main__":
         denominator = 210607728
 
         with MDSWriter(columns=columns,
-                       out=os.path.join("data", "base", split),
+                       out=os.path.join("tmp", "base", split),
                        compression="zstd") as out:
             for step, sample in enumerate(
                     tqdm(samples, desc=split, total=denominator, leave=True)):
