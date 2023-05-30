@@ -10,6 +10,7 @@ from streaming import MDSWriter, StreamingDataset
 from torch.utils.data import DataLoader, IterableDataset
 from tqdm import tqdm
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
+import wandb
 
 from llmfoundry.data import ConcatTokensDataset, NoConcatDataset
 
@@ -81,6 +82,10 @@ class NoConcatDataset(IterableDataset):
 
 
 if __name__ == "__main__":
+    wandb.init(name="pile-base-convert",
+               project="doremi-preprocess",
+               entity="mosaicml")
+
     s3_remote = "s3://mosaicml-internal-dataset-the-pile/mds/2"
     local = "/tmp/base"
     splits = ["train", "val", "test"]
@@ -101,8 +106,7 @@ if __name__ == "__main__":
         with MDSWriter(columns=columns,
                        out=os.path.join("data", "base", split),
                        compression="zstd") as out:
-            for sample in tqdm(samples,
-                               desc=split,
-                               total=denominator,
-                               leave=True):
+            for step, sample in enumerate(
+                    tqdm(samples, desc=split, total=denominator, leave=True)):
                 out.write(sample)
+                wandb.log(({'step': step, 'progress': step / len(denominator)}))
