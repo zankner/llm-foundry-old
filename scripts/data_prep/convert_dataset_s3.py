@@ -82,8 +82,7 @@ class NoConcatDataset(IterableDataset):
 
 if __name__ == "__main__":
     s3_remote = "s3://mosaicml-internal-dataset-the-pile/mds/2"
-    local = "/tmp/s3-pile"
-    oci_remote = "oci://mosaicml-internal-dataset-pile/base"
+    local = "/tmp/base"
     splits = ["train", "val", "test"]
 
     for split in splits:
