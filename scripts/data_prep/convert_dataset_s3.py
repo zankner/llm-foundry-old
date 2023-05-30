@@ -1,3 +1,4 @@
+scripts/data_prep/convert_dataset_s3.py
 import os
 import platform
 from argparse import ArgumentParser, Namespace
@@ -105,5 +106,5 @@ if __name__ == "__main__":
             for sample in tqdm(samples,
                                desc=split,
                                total=denominator,
-                               leave=False):
+                               leave=True):
                 out.write(sample)
