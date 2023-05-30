@@ -322,3 +322,6 @@ if __name__ == "__main__":
                     tqdm(samples, desc=split, total=denominator)):
                 out.write(sample)
                 wandb.log(({'step': step, 'progress': step / denominator}))
+
+                if step == 10_000:
+                    break
