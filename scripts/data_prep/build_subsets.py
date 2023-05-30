@@ -1,4 +1,4 @@
-import os
+scripts/data_prep/build_subsets.py import os
 import platform
 import warnings
 from argparse import ArgumentParser, Namespace
@@ -321,7 +321,9 @@ if __name__ == "__main__":
             for step, sample in enumerate(
                     tqdm(samples, desc=split, total=denominator)):
                 out.write(sample)
-                wandb.log(({'step': step, 'progress': step / denominator}))
+
+                if step % 1_000 == 0:
+                    wandb.log(({'step': step, 'progress': step / denominator}))
 
                 if step == 10_000:
                     break

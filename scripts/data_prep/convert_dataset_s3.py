@@ -109,4 +109,6 @@ if __name__ == "__main__":
             for step, sample in enumerate(
                     tqdm(samples, desc=split, total=denominator, leave=True)):
                 out.write(sample)
-                wandb.log(({'step': step, 'progress': step / denominator}))
+
+                if step % 1_000 == 0:
+                    wandb.log(({'step': step, 'progress': step / denominator}))
