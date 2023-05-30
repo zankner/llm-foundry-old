@@ -87,6 +87,7 @@ if __name__ == "__main__":
     splits = ["train", "val", "test"]
 
     for split in splits:
+        print(f"Converting split {split}")
         s3_data = StreamingDataset(remote=s3_remote,
                                    local=local,
                                    split=split,
@@ -101,5 +102,8 @@ if __name__ == "__main__":
         with MDSWriter(columns=columns,
                        out=os.path.join("data", "base", split),
                        compression="zstd") as out:
-            for sample in tqdm(samples, desc=split, total=denominator):
+            for sample in tqdm(samples,
+                               desc=split,
+                               total=denominator,
+                               leave=False):
                 out.write(sample)
