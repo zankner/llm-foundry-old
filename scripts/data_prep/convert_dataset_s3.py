@@ -15,6 +15,21 @@ import wandb
 from llmfoundry.data import ConcatTokensDataset, NoConcatDataset
 
 
+# When creating base version use index as uid for future reference
+class StreamingDatasetIndexed(StreamingDataset):
+
+    def __getitem__(self, index: int):
+        """Get sample by global index.
+        Args:
+            index (int): Sample index.
+        Returns:
+            Dict[str, Any]: Column name with sample data.
+        """
+        shard, index_in_shard = self.index.find_sample(index)
+        reader = self.shards[shard]
+        return reader[index_in_shard], index
+
+
 def build_dataloader(dataset, batch_size) -> DataLoader:
     # Multiple workers is only supported on linux machines
     if 'linux' in platform.platform().lower():
@@ -65,19 +80,18 @@ def generate_samples(
 class NoConcatDataset(IterableDataset):
     """An IterableDataset that returns text samples for MDSWriter.
 
-    Returns dicts of {'text': bytes}
+    Returns dicts of {'text': bytes, 'pile_set_name': str, 'uid': int}
     """
 
     def __init__(self, dataset):
         self.dataset = dataset
 
     def __iter__(self) -> Iterable[Dict[str, bytes]]:
-        for sample in self.dataset:
-            # print(sample)
-            # convert to bytes to store in MDS binary format
+        for sample, idx in self.dataset:
             yield {
                 'text': sample['text'],
-                'pile_set_name': sample['pile_set_name']
+                'pile_set_name': sample['pile_set_name'],
+                'uid': idx
             }
 
 
@@ -92,15 +106,15 @@ if __name__ == "__main__":
 
     for split in splits:
         print(f"Converting split {split}")
-        s3_data = StreamingDataset(remote=s3_remote,
-                                   local=local,
-                                   split=split,
-                                   shuffle=False)
+        s3_data = StreamingDatasetIndexed(remote=s3_remote,
+                                          local=local,
+                                          split=split,
+                                          shuffle=False)
         data = NoConcatDataset(s3_data)
         loader = build_dataloader(data, batch_size=512)
         samples = generate_samples(loader, truncate_num_samples=None)
 
-        columns = {'text': 'str', 'pile_set_name': 'str'}
+        columns = {'text': 'str', 'pile_set_name': 'str', 'uid': 'int'}
         denominator = 210607728
 
         with MDSWriter(columns=columns,
