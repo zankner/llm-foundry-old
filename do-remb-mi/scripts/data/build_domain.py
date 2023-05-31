@@ -1,7 +1,82 @@
-import argparse
+import os
+import warnings
+import platform
+from argparse import ArgumentParser, Namespace
+from dataclasses import dataclass
+from enum import Enum
+from typing import Dict, Iterable, Optional, Union
+
+import datasets as hf_datasets
+from streaming import MDSWriter, StreamingDataset
+from torch.utils.data import DataLoader, IterableDataset
+from tqdm import tqdm
+from transformers import AutoTokenizer, PreTrainedTokenizerBase
+import wandb
+import numpy as np
 
 
-#TODO: Change so that it returns elements based on the cluster assignment, ie a buffer per cluster
+# When creating base version use index as uid for future reference
+class StreamingDatasetIndexed(StreamingDataset):
+
+    def __getitem__(self, index: int):
+        """Get sample by global index.
+        Args:
+            index (int): Sample index.
+        Returns:
+            Dict[str, Any]: Column name with sample data.
+        """
+        shard, index_in_shard = self.index.find_sample(index)
+        reader = self.shards[shard]
+        return reader[index_in_shard], index
+
+
+def build_dataloader(dataset, batch_size) -> DataLoader:
+    # Multiple workers is only supported on linux machines
+    if 'linux' in platform.platform().lower():
+        num_workers = 64  # type: ignore
+    else:
+        num_workers = 0
+
+    # If using multiple workers, configure each worker to prefetch as many samples as it can, up to
+    # the aggregate device batch size
+    # If not using workers, the torch DataLoader expects the default value for prefetch_factor,
+    # which non-intuitively must be 2.
+    prefetch_factor = max(1, 2 * batch_size //
+                          num_workers) if num_workers > 0 else 2
+
+    return DataLoader(
+        dataset=dataset,
+        sampler=None,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        prefetch_factor=prefetch_factor,
+    )
+
+
+def generate_samples(
+        loader: DataLoader,
+        truncate_num_samples: Optional[int] = None
+) -> Iterable[Dict[str, bytes]]:
+    """Generator over samples of a dataloader.
+
+    Args:
+       loader (DataLoader): A dataloader emitting batches like {key: [sample0_bytes, sample1_bytes, sample2_bytes, ...]}
+       truncate_num_samples (Optional[int]): An optional # of samples to stop at.
+
+    Yields:
+        Sample dicts.
+    """
+    n_samples = 0
+    for batch in loader:
+        keys = list(batch.keys())
+        current_bs = len(batch[keys[0]])
+        for idx in range(current_bs):
+            if truncate_num_samples is not None and n_samples == truncate_num_samples:
+                return
+            n_samples += 1
+            yield {k: v[idx] for k, v in batch.items()}
+
+
 class ConcatTokensDataset(IterableDataset):
     """An IterableDataset that returns token samples for MDSWriter.
 
@@ -27,14 +102,14 @@ class ConcatTokensDataset(IterableDataset):
 
     def __init__(
         self,
-        hf_dataset: Union[hf_datasets.IterableDataset, hf_datasets.Dataset],
+        dataset,
         tokenizer: PreTrainedTokenizerBase,
         max_length: int,
         bos_text: str,
         eos_text: str,
         no_wrap: bool,
     ):
-        self.hf_dataset = hf_dataset
+        self.dataset = dataset
         self.tokenizer = tokenizer
         os.environ['TOKENIZERS_PARALLELISM'] = 'false'
         self.max_length = max_length
@@ -75,7 +150,7 @@ class ConcatTokensDataset(IterableDataset):
     def __iter__(self) -> Iterable[Dict[str, bytes]]:
 
         buffer = []
-        for sample in self.hf_dataset:
+        for sample in self.dataset:
             encoded = self.tokenizer(sample['text'],
                                      truncation=False,
                                      padding=False)
@@ -90,26 +165,70 @@ class ConcatTokensDataset(IterableDataset):
                 }
 
 
-def main(args):
-    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
-    tokenizer.model_max_length = int(1e30)
-    columns = {'tokens': 'bytes', 'domain': 'int'}
-
-    for split in args.splits:
-        dataset = build_domain_dataset()
-
-
+# TODO: REFAC TO TAKE IN THE EMBEDDINGS FOR CLUSTERS
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser()
+    parser = ArgumentParser()
+    parser.add_argument("--remote", type=str, required=True)
+    parser.add_argument("--local", type=str, default="/tmp/concat-local")
+    parser.add_argument("--splits",
+                        type=str,
+                        nargs="+",
+                        default=["train", "val", "test"])
+    parser.add_argument("--max-length", type=int, default=2048)
     parser.add_argument("--tokenizer",
                         type=str,
                         default="EleutherAI/gpt-neox-20b")
-    parser.add_argument("--eos-token", type=str, default="<|endoftext|>")
-    parser.add_argument("--remote",
-                        type=str,
-                        default="oci://mosaicml-internal-dataset-pile/base")
-    parser.add_argument("--splits", nargs="+", default=["train"])
+    parser.add_argument("--eos-text", type=str, default="<|endoftext|>")
+    parser.add_argument("--bos-text", type=str, default=None)
+    parser.add_argument('--no-wrap', default=False, action='store_true')
+    parser.add_argument("--no-wandb", action="store_true")
+    parser.add_argument("--wandb-name", type=str, default=None)
     args = parser.parse_args()
 
-    main(args)
+    if args.bos_text is None:
+        args.bos_text = ''
+    if args.eos_text is None:
+        args.eos_text = ''
+
+    use_wandb = not args.no_wandb
+    if use_wandb:
+        assert args.wandb_name is not None
+
+        wandb.init(name=args.wandb_name,
+                   project="doremi-preprocess",
+                   entity="mosaic-ml")
+
+    for split in args.splits:
+        print(f"Converting split {split}")
+        s3_data = StreamingDataset(remote=args.remote,
+                                   local=args.local,
+                                   split=split,
+                                   shuffle=False)
+
+        tokenizer = tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
+        tokenizer.model_max_length = int(1e30)
+
+        data = ConcatTokensDataset(
+            s3_data,
+            tokenizer=tokenizer,
+            max_length=args.max_length,
+            bos_text=args.bos_text,
+            eos_text=args.eos_text,
+            no_wrap=args.no_wrap,
+        )
+        loader = build_dataloader(data, batch_size=512)
+        samples = generate_samples(loader, truncate_num_samples=None)
+
+        columns = {'tokens': 'bytes'}
+        denominator = 210607728
+
+        with MDSWriter(columns=columns,
+                       out=os.path.join("/tmp", "pre-concat", split),
+                       compression="zstd") as out:
+            for step, sample in enumerate(
+                    tqdm(samples, desc=split, total=denominator, leave=True)):
+                out.write(sample)
+
+                if step % 1_000 == 0:
+                    wandb.log(({'step': step, 'progress': step / denominator}))
