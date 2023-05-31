@@ -17,5 +17,5 @@ scheduling:
 command: |
   pip install oci-cli
   cd llm-foundry
-  python scripts/data_prep/convert_dataset_s3.py
+  python do-remb-mi/scripts/data/convert_dataset_s3.py
   oci os object bulk-upload -bn mosaicml-internal-dataset-pile --src-dir /tmp/base --prefix base/ > /dev/null 2>&1
