@@ -74,10 +74,7 @@ def generate_samples(
             if truncate_num_samples is not None and n_samples == truncate_num_samples:
                 return
             n_samples += 1
-            sample = {k: v[idx] for k, v in batch.items() if k != "uid"}
-            if "uid" in batch:
-                sample["uid"] = batch["uid"][idx].item()
-            yield sample
+            yield {k: v[idx] for k, v in batch.items()}
 
 
 class ConcatTokensDataset(IterableDataset):
@@ -188,6 +185,11 @@ if __name__ == "__main__":
     parser.add_argument("--no-wandb", action="store_true")
     parser.add_argument("--wandb-name", type=str, default=None)
     args = parser.parse_args()
+    
+    if args.bos_text is None:
+        args.bos_text = ''
+    if args.eos_text is None:
+        args.eos_text = ''
 
     use_wandb = not args.no_wandb
     if use_wandb:
