@@ -10,6 +10,9 @@ integrations:
     # git_commit: # OR use your commit hash
     pip_install: -e .[gpu]
     ssh_clone: false # Should be true if using a private repo
+  - integration_type: pip_packages
+    packages:
+      - oci-cli
 scheduling:
   priority: TOBEFILLED
 command: |

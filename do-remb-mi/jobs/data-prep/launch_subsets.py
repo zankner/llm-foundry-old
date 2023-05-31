@@ -118,6 +118,7 @@ for subset in subsets:
     base_run = RunConfig.from_file(
         f"do-remb-mi/jobs/data-prep/yamls/build_subset_pile.yaml")
 
+    base_run.name = f"pile-{subset}"
     base_run.run_name = f"pile-{subset}"
 
     run_command = f"python scripts/data_prep/build_subsets.py --subset {subset}"
@@ -130,6 +131,4 @@ for subset in subsets:
     else:
         base_run.scheduling["priority"] = "low"
 
-    print(base_run)
-    print()
-    print()
+    create_run(base_run)
