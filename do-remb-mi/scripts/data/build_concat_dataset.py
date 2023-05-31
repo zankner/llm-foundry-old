@@ -15,6 +15,21 @@ import wandb
 import numpy as np
 
 
+# When creating base version use index as uid for future reference
+class StreamingDatasetIndexed(StreamingDataset):
+
+    def __getitem__(self, index: int):
+        """Get sample by global index.
+        Args:
+            index (int): Sample index.
+        Returns:
+            Dict[str, Any]: Column name with sample data.
+        """
+        shard, index_in_shard = self.index.find_sample(index)
+        reader = self.shards[shard]
+        return reader[index_in_shard], index
+
+
 def build_dataloader(dataset, batch_size) -> DataLoader:
     # Multiple workers is only supported on linux machines
     if 'linux' in platform.platform().lower():
@@ -58,12 +73,11 @@ def generate_samples(
         for idx in range(current_bs):
             if truncate_num_samples is not None and n_samples == truncate_num_samples:
                 return
-            domain_idx = batch["domain_idx"][idx].item()
             n_samples += 1
-            yield {k: v[idx] for k, v in batch.items()}, domain_idx
+            yield {k: v[idx] for k, v in batch.items()}
 
 
-class ConcatDomainsTokensDataset(IterableDataset):
+class ConcatTokensDataset(IterableDataset):
     """An IterableDataset that returns token samples for MDSWriter.
 
     Returns dicts of {'tokens': bytes}
@@ -90,7 +104,6 @@ class ConcatDomainsTokensDataset(IterableDataset):
         self,
         dataset,
         tokenizer: PreTrainedTokenizerBase,
-        num_domains: int,
         max_length: int,
         bos_text: str,
         eos_text: str,
@@ -98,7 +111,6 @@ class ConcatDomainsTokensDataset(IterableDataset):
     ):
         self.dataset = dataset
         self.tokenizer = tokenizer
-        self.num_domains = num_domains
         os.environ['TOKENIZERS_PARALLELISM'] = 'false'
         self.max_length = max_length
         self.bos_text = bos_text
@@ -137,24 +149,19 @@ class ConcatDomainsTokensDataset(IterableDataset):
 
     def __iter__(self) -> Iterable[Dict[str, bytes]]:
 
-        buffers = [[] for _ in range(self.num_domains)]
+        buffer = []
         for sample in self.dataset:
-            uid = sample['uid']
-            domain_idx = self.get_domain(uid)
             encoded = self.tokenizer(sample['text'],
                                      truncation=False,
                                      padding=False)
             iids = encoded['input_ids']
-            buffers[domain_idx] = buffers[
-                domain_idx] + self.bos_tokens + iids + self.eos_tokens
-            while len(buffers[domain_idx]) >= self.max_length:
-                concat_sample = buffers[domain_idx][:self.max_length]
-                buffers[domain_idx] = buffers[domain_idx][
-                    self.max_length:] if self.should_wrap else []
+            buffer = buffer + self.bos_tokens + iids + self.eos_tokens
+            while len(buffer) >= self.max_length:
+                concat_sample = buffer[:self.max_length]
+                buffer = buffer[self.max_length:] if self.should_wrap else []
                 yield {
                     # convert to bytes to store in MDS binary format
-                    'tokens': np.asarray(concat_sample).tobytes(),
-                    'domain_idx': domain_idx
+                    'tokens': np.asarray(concat_sample).tobytes()
                 }
 
 
@@ -194,16 +201,16 @@ if __name__ == "__main__":
 
     for split in args.splits:
         print(f"Converting split {split}")
-        streaming_data = StreamingDataset(remote=args.remote,
-                                          local=args.local,
-                                          split=split,
-                                          shuffle=False)
+        s3_data = StreamingDataset(remote=args.remote,
+                                   local=args.local,
+                                   split=split,
+                                   shuffle=False)
 
         tokenizer = tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
         tokenizer.model_max_length = int(1e30)
 
-        data = ConcatDomainsTokensDataset(
-            streaming_data,
+        data = ConcatTokensDataset(
+            s3_data,
             tokenizer=tokenizer,
             max_length=args.max_length,
             bos_text=args.bos_text,
@@ -216,18 +223,12 @@ if __name__ == "__main__":
         columns = {'tokens': 'bytes'}
         denominator = 210607728
 
-        # with MDSWriter(columns=columns,
-        #                out=os.path.join("/tmp", "pre-concat", split),
-        #                compression="zstd") as out:
-        writers = [
-            MDSWriter(columns=columns,
-                      out=os.path.join("/tmp", "domains",
-                                       f"domain-{domain_idx}", split),
-                      compression="zstd")
-        ]
-        for step, (sample, domain_idx) in enumerate(
-                tqdm(samples, desc=split, total=denominator, leave=True)):
-            [writers[domain_idx]].write(sample)
+        with MDSWriter(columns=columns,
+                       out=os.path.join("/tmp", "pre-concat", split),
+                       compression="zstd") as out:
+            for step, sample in enumerate(
+                    tqdm(samples, desc=split, total=denominator, leave=True)):
+                out.write(sample)
 
-            if step % 1_000 == 0:
-                wandb.log(({'step': step, 'progress': step / denominator}))
+                if step % 1_000 == 0:
+                    wandb.log(({'step': step, 'progress': step / denominator}))
