@@ -1,0 +1,21 @@
+run_name: pile-build
+platform: r1z1
+gpu_type: a100_80gb
+gpu_num: 8
+image: mosaicml/pytorch:1.13.1_cu117-python3.10-ubuntu20.04
+integrations:
+  - integration_type: git_repo
+    git_repo: zankner/llm-foundry
+    git_branch: zack/do-remb-mi
+    # git_commit: # OR use your commit hash
+    pip_install: -e .[gpu]
+    ssh_clone: false # Should be true if using a private repo
+  - integration_type: pip_packages
+    packages:
+      - oci-cli
+scheduling:
+command: |
+  pip install oci-cli
+  cd llm-foundry
+  python do-remb-mi/scripts/data/build_concat_dataset.py --remote oci://mosaicml-internal-dataset-pile/base --wandb-name pile-preconcat
+  oci os object bulk-upload -bn mosaicml-internal-dataset-pile --src-dir /tmp/pre-concat --prefix pre-concat/gpt-neox-20b-seqlen-2048/ > /dev/null 2>&1
