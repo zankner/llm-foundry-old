@@ -74,7 +74,7 @@ def generate_samples(
             if truncate_num_samples is not None and n_samples == truncate_num_samples:
                 return
             n_samples += 1
-            yield {k: v[idx] for k, v in batch.items()}
+            yield {**{k: v[idx] for k, v in batch.items() if k != "uid"}, "uid": batch["uid"][idx].item()}
 
 
 class NoConcatDataset(IterableDataset):
@@ -91,7 +91,7 @@ class NoConcatDataset(IterableDataset):
             yield {
                 'text': sample['text'],
                 'pile_set_name': sample['pile_set_name'],
-                'uid': idx
+                'uid': idx.item()
             }
 
 
