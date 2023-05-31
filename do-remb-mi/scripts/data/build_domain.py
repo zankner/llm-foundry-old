@@ -14,6 +14,14 @@ from transformers import AutoTokenizer, PreTrainedTokenizerBase
 import wandb
 import numpy as np
 
+PILE_DATA_SOURCES = [
+    "Pile-CC", "PubMed Central", "Books3", "OpenWebText2", "ArXiv", "Github",
+    "FreeLaw", "Stack Exchange", "USPTO Backgrounds", "PubMed Abstracts",
+    "Gutenberg (PG-19)", "OpenSubtitles", "Wikipedia (en)", "DM Mathematics",
+    "Ubuntu IRC", "BookCorpus2", "EuroParl", "HackerNews", "YoutubeSubtitles",
+    "PhilPapers", "NIH ExPorter", "Enron Emails"
+]
+
 
 def build_dataloader(dataset, batch_size) -> DataLoader:
     # Multiple workers is only supported on linux machines
@@ -135,12 +143,20 @@ class ConcatDomainsTokensDataset(IterableDataset):
                 'in duplicated special tokens. Please be sure this is what you intend.'
             )
 
+    def _get_domain(self, uid: int, pile_set_name: str) -> int:
+        if self.cluster_method == "data-source":
+            return PILE_DATA_SOURCES.index(pile_set_name)
+        else:
+            raise ValueError(
+                f"Unsupported cluster method: {self.cluster_method}")
+
     def __iter__(self) -> Iterable[Dict[str, bytes]]:
 
         buffers = [[] for _ in range(self.num_domains)]
         for sample in self.dataset:
             uid = sample['uid']
-            domain_idx = self.get_domain(uid)
+            pile_set_name = sample['pile_set_name']
+            domain_idx = self.get_domain(uid, pile_set_name)
             encoded = self.tokenizer(sample['text'],
                                      truncation=False,
                                      padding=False)
@@ -168,6 +184,7 @@ if __name__ == "__main__":
                         type=str,
                         nargs="+",
                         default=["train", "val", "test"])
+    parser.add_argument("--cluster-method", type=str, required=True)
     parser.add_argument("--max-length", type=int, default=2048)
     parser.add_argument("--tokenizer",
                         type=str,
@@ -216,9 +233,6 @@ if __name__ == "__main__":
         columns = {'tokens': 'bytes'}
         denominator = 210607728
 
-        # with MDSWriter(columns=columns,
-        #                out=os.path.join("/tmp", "pre-concat", split),
-        #                compression="zstd") as out:
         writers = [
             MDSWriter(columns=columns,
                       out=os.path.join("/tmp", "domains",
@@ -231,3 +245,6 @@ if __name__ == "__main__":
 
             if step % 1_000 == 0:
                 wandb.log(({'step': step, 'progress': step / denominator}))
+
+        for writer in writers:
+            writer.close()
