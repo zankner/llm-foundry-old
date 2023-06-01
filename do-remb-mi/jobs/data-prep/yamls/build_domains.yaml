@@ -1,4 +1,4 @@
-run_name: pile-build
+run_name: pile-subsets-build
 platform: r1z1
 gpu_type: a100_80gb
 gpu_num: 8
@@ -16,5 +16,5 @@ integrations:
 command: |
   pip install oci-cli
   cd llm-foundry
-  python do-remb-mi/scripts/data/build_domains.py --remote oci://mosaicml-internal-dataset-pile/base --cluster-method data-source --num-domains 22 --wandb-name pile-data-source --splits test
+  python do-remb-mi/scripts/data/build_domains.py --remote oci://mosaicml-internal-dataset-pile/base --cluster-method data-source --num-domains 22 --wandb-name pile-data-source
   oci os object bulk-upload -bn mosaicml-internal-doremi --src-dir /tmp/domains --prefix pile/pre-concat/gpt-neox-20b-seqlen-2048/data-sources/ > /dev/null 2>&1
