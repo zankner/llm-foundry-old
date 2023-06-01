@@ -1,12 +1,9 @@
 import os
 import warnings
 import platform
-from argparse import ArgumentParser, Namespace
-from dataclasses import dataclass
-from enum import Enum
-from typing import Dict, Iterable, Optional, Union
+from argparse import ArgumentParser
+from typing import Dict, Optional, Iterable
 
-import datasets as hf_datasets
 from streaming import MDSWriter, StreamingDataset
 from torch.utils.data import DataLoader, IterableDataset
 from tqdm import tqdm
@@ -16,7 +13,7 @@ import numpy as np
 
 PILE_DATA_SOURCES = [
     "Pile-CC", "PubMed Central", "Books3", "OpenWebText2", "ArXiv", "Github",
-    "FreeLaw", "Stack Exchange", "USPTO Backgrounds", "PubMed Abstracts",
+    "FreeLaw", "StackExchange", "USPTO Backgrounds", "PubMed Abstracts",
     "Gutenberg (PG-19)", "OpenSubtitles", "Wikipedia (en)", "DM Mathematics",
     "Ubuntu IRC", "BookCorpus2", "EuroParl", "HackerNews", "YoutubeSubtitles",
     "PhilPapers", "NIH ExPorter", "Enron Emails"
@@ -68,7 +65,9 @@ def generate_samples(
                 return
             domain_idx = batch["domain_idx"][idx].item()
             n_samples += 1
-            yield {k: v[idx] for k, v in batch.items()}, domain_idx
+            yield {
+                k: v[idx] for k, v in batch.items() if k != "domain_idx"
+            }, domain_idx
 
 
 class ConcatDomainsTokensDataset(IterableDataset):
@@ -96,9 +95,10 @@ class ConcatDomainsTokensDataset(IterableDataset):
 
     def __init__(
         self,
-        dataset,
+        dataset: StreamingDataset,
         tokenizer: PreTrainedTokenizerBase,
         num_domains: int,
+        cluster_method: str,
         max_length: int,
         bos_text: str,
         eos_text: str,
@@ -107,6 +107,7 @@ class ConcatDomainsTokensDataset(IterableDataset):
         self.dataset = dataset
         self.tokenizer = tokenizer
         self.num_domains = num_domains
+        self.cluster_method = cluster_method
         os.environ['TOKENIZERS_PARALLELISM'] = 'false'
         self.max_length = max_length
         self.bos_text = bos_text
@@ -156,7 +157,7 @@ class ConcatDomainsTokensDataset(IterableDataset):
         for sample in self.dataset:
             uid = sample['uid']
             pile_set_name = sample['pile_set_name']
-            domain_idx = self.get_domain(uid, pile_set_name)
+            domain_idx = self._get_domain(uid, pile_set_name)
             encoded = self.tokenizer(sample['text'],
                                      truncation=False,
                                      padding=False)
@@ -179,11 +180,12 @@ if __name__ == "__main__":
 
     parser = ArgumentParser()
     parser.add_argument("--remote", type=str, required=True)
-    parser.add_argument("--local", type=str, default="/tmp/concat-local")
+    parser.add_argument("--local", type=str, default="/tmp/domain-local")
     parser.add_argument("--splits",
                         type=str,
                         nargs="+",
                         default=["train", "val", "test"])
+    parser.add_argument("--num-domains", type=int, required=True)
     parser.add_argument("--cluster-method", type=str, required=True)
     parser.add_argument("--max-length", type=int, default=2048)
     parser.add_argument("--tokenizer",
@@ -222,6 +224,8 @@ if __name__ == "__main__":
         data = ConcatDomainsTokensDataset(
             streaming_data,
             tokenizer=tokenizer,
+            num_domains=args.num_domains,
+            cluster_method=args.cluster_method,
             max_length=args.max_length,
             bos_text=args.bos_text,
             eos_text=args.eos_text,
@@ -238,13 +242,15 @@ if __name__ == "__main__":
                       out=os.path.join("/tmp", "domains",
                                        f"domain-{domain_idx}", split),
                       compression="zstd")
+            for domain_idx in range(args.num_domains)
         ]
         for step, (sample, domain_idx) in enumerate(
                 tqdm(samples, desc=split, total=denominator, leave=True)):
-            [writers[domain_idx]].write(sample)
 
-            if step % 1_000 == 0:
+            writers[domain_idx].write(sample)
+
+            if use_wandb and step % 1_000 == 0:
                 wandb.log(({'step': step, 'progress': step / denominator}))
 
         for writer in writers:
-            writer.close()
+            writer.finish()
