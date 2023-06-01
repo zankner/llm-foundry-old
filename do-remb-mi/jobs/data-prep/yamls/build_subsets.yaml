@@ -17,4 +17,4 @@ command: |
   pip install oci-cli
   cd llm-foundry
   python do-remb-mi/scripts/data/build_subsets.py --remote oci://mosaicml-internal-dataset-pile/base --wandb-name pile-build-subsets
-  oci os object bulk-upload -bn mosaicml-internal-doremi --src-dir /tmp/subsets --prefix subsets/ > /dev/null 2>&1
+  oci os object bulk-upload -bn mosaicml-internal-dataset-pile --src-dir /tmp/subsets --prefix subsets/ > /dev/null 2>&1
