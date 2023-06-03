@@ -1,28 +1,28 @@
-name: zack-doremi-reference-125m
+name: zack-doremi-reference
 
 integrations:
   - integration_type: git_repo
-    git_branch: v0.1.1
-    git_repo: zack/llm-foundry
+    git_branch: zack/do-remb-mi
+    git_repo: zankner/llm-foundry
     pip_install: .[gpu]
-    ssh_clone: false
+    ssh_clone: true
   - integration_type: wandb
     entity: mosaic-ml
-    project: do-re-mi
+    project: DoRembMi
 
-image: mosaicml/pytorch:1.13.1_cu117-python3.10-ubuntu20.04
-cluster: <insert cluster name> # update for hero run
-gpu_num: <insert gpu num> # update for hero run
+image: mosaicml/llm-foundry:1.13.1_cu117-latest
+cluster: r1z1 # update for hero run
+gpu_num: 8 # update for hero run
 
 command: |-
   cd llm-foundry/scripts
   composer train/train.py /mnt/config/parameters.yaml || (echo "Command failed - killing python" && pkill python && exit 1)
 
 parameters:
-  global_seed: 17
+  global_seed: # Set in launch script
   max_seq_len: 2048 # max tokens per sequence during training
 
-  run_name: ref-125M-param
+  run_name: #Set in launch script
 
   # Model
   model:
@@ -33,7 +33,7 @@ parameters:
     n_layers: 12
     expansion_ratio: 4
     max_seq_len: ${max_seq_len}
-    vocab_size: 50368 # update for hero run with custom tokenizer
+    vocab_size: 50432 # update for hero run with custom tokenizer
     no_bias: true
     attn_config:
       alibi: true
@@ -49,11 +49,11 @@ parameters:
 
   # Optimization
   global_train_batch_size: 512 # ~1M tokens, update for hero run, must be divisible by gpu_num
-  max_duration: 1ep # update for hero run, e.g. 100000ba ~= 100B tokens
+  max_duration: # Set by launch script
 
   optimizer:
     name: decoupled_lionw
-    lr: 0.0006
+    lr: 2.0e-4
     betas:
       - 0.9
       - 0.95
@@ -67,8 +67,8 @@ parameters:
   # System
   seed: ${global_seed}
   precision: amp_bf16
-  device_train_microbatch_size: 16
-  device_eval_batch_size: 16
+  device_train_microbatch_size: 32
+  device_eval_batch_size: 32
 
   # FSDP
   fsdp_config:
@@ -90,17 +90,16 @@ parameters:
   python_log_level: DEBUG
   loggers:
     wandb:
-      project: do-re-mi
+      project: DoReMi
       tags:
-        - 125M-params
         - reference
         - seed-${global_seed}
       group: ${run_name}
 
   # Checkpointing
-  autoresume: true
+  autoresume: # Set by launch script
   save_filename: ep{epoch}-ba{batch}/rank{rank}.pt
-  save_folder: oci://mosaicml-internal-checkpoints/zack/do-re-mi/reference/${run_name}-${global_seed} # update for hero run
+  save_folder: oci://mosaicml-internal-checkpoints/zack/DoReMi/pile/reference/${run_name}-seed-${global_seed} # update for hero run
   save_interval: 1000ba # update for hero run, e.g. 2000ba
   save_num_checkpoints_to_keep: 1
 
@@ -140,7 +139,7 @@ parameters:
       shuffle_algo: py1b
       shuffle_seed: ${global_seed}
       local: /tmp/dataset/val_c4
-      remote: oci://mosaicml-internal-dataset-pile/pre-concat/pre-concat/gpt-neox-20b-seq-len-2048
+      remote: oci://mosaicml-internal-dataset-pile/pre-concat/gpt-neox-20b-seqlen-2048
       split: val
 
   # In-context-learning tasks
@@ -167,6 +166,5 @@ parameters:
       shuffle: true
       shuffle_algo: py1b
       shuffle_seed: ${global_seed}
-      local: /tmp/dataset/pile/
-      remote: oci://mosaicml-internal-dataset-pile/pre-concat/pre-concat/gpt-neox-20b-seq-len-2048
-      split: train
+      samples_per_epoch: # Fill with samples in the Pile
+      streams: # Filled by launch script

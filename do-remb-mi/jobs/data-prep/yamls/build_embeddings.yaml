@@ -1,3 +1,36 @@
+# run_name: bert-embeddings-pile
+# platform: r1z1
+# gpu_type: a100_80gb
+# gpu_num: 8
+# integrations:
+#   - integration_type: git_repo
+#     git_repo: mosaicml/data-team
+#     git_branch: zack/approx-dedupe
+#     # path: /data-dedupe
+#     # git_commit: # OR use your commit hash
+#     ssh_clone: true # Should be true if using a private repo
+# image: growlix/data-dedupe
+# command: |
+#   rm -rf streaming
+
+#   pip uninstall -y mosaicml-streaming
+
+#   pip install mosaicml-streaming wandb
+
+#   cd data-team
+
+#   git pull
+
+#   cd src/deduplication/approximate
+
+#   pip install --upgrade requests
+
+#   python get_embeddings.py --batch_size_dataloader 384 --batch_size_inference 768 --file_name EMB_MEMORY.npy --streaming_remote oci://mosaicml-internal-dataset-pile/subsets/{SUBSET}/train --uid_key uid --wandb-name embeddings-{SUBSET} --wandb-project doremi-preprocess
+
+#   oci os object put -bn mosaicml-internal-dataset-pile --file EMB_MEMORY.npy --name embeddings/subsets/{SUBSET}/train/embeddings.npy
+
+#   oci os object put -bn mosaicml-internal-dataset-pile --file ind2uid.pkl --name embeddings/subsets/{SUBSET}/train/ind2uid.pkl
+
 run_name: bert-embeddings-pile
 platform: r1z1
 gpu_type: a100_80gb
@@ -5,7 +38,7 @@ gpu_num: 8
 integrations:
   - integration_type: git_repo
     git_repo: mosaicml/data-team
-    git_branch: zack/approx-dedupe
+    git_branch: zack/composer-refac-dedupe
     # path: /data-dedupe
     # git_commit: # OR use your commit hash
     ssh_clone: true # Should be true if using a private repo
@@ -15,7 +48,8 @@ command: |
 
   pip uninstall -y mosaicml-streaming
 
-  pip install mosaicml-streaming wandb
+  pip install git+https://github.com/karan6181/streaming.git@fix_thread_shutdown
+  pip install mosaicml wandb
 
   cd data-team
 
@@ -25,8 +59,4 @@ command: |
 
   pip install --upgrade requests
 
-  python get_embeddings.py --batch_size_dataloader 384 --batch_size_inference 768 --file_name EMB_MEMORY.npy --streaming_remote oci://mosaicml-internal-dataset-pile/base/test --uid_key uid
-
-  oci os object put -bn mosaicml-internal-dataset-pile --file EMB_MEMORY.npy --name embeddings/23-03-31/embeddings.npy
-
-  oci os object put -bn mosaicml-internal-dataset-pile --file ind2uid.pkl --name embeddings/23-03-31/ind2uid.pkl
+  composer -n 8 get_embeddings.py --batch_size_dataloader 24 --batch_size_inference 768 --file_name EMB_MEMORY.npy --streaming_remote oci://mosaicml-internal-dataset-pile/subsets/{SUBSET}/train --uid_key uid --wandb-name embeddings-{SUBSET} --wandb-project doremi-preprocess
