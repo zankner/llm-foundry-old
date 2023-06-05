@@ -5,8 +5,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from composer import State, Trainer, Callback
-from composer.callbacks import RuntimeEstimator
-from composer.loggers import Logger
+from composer.loggers import Logger, WandBLogger
 from composer.metrics.nlp import LanguageCrossEntropy
 import composer.utils.dist as dist
 from streaming import MDSWriter
@@ -100,59 +99,70 @@ def main(args):
     device_batch_size = int(args.batch_size / dist.get_world_size())
     assert args.batch_size % device_batch_size == 0, "Batch size must be divisible by the number of devices"
 
-    for domain_id in range(args.num_domains):
-        print(f"Starting to build losses for domain {domain_id}...")
+    splits = ["train"]
+    for split in splits:
+        for domain_id in range(args.num_domains):
+            print(f"Starting to build losses for domain {domain_id}...")
 
-        streaming_writer_path = f"/tmp/domains/domain-{domain_id}/train"
+            streaming_writer_path = f"/tmp/domains/domain-{domain_id}/split"
 
-        tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
-        dataset = StreamingTextDataset(
-            tokenizer=tokenizer,
-            max_seq_len=args.max_seq_len,
-            remote=
-            f"oci://mosaicml-internal-doremi/pile/pre-concat/gpt-neox-20b-seqlen-2048/data-sources/domain-{domain_id}",
-            local=f"/tmp/streaming/domain-{domain_id}",
-            split="val",
-            batch_size=device_batch_size,
-            shuffle=False,
-            shuffle_algo='py1b',
-        )
-        lm_collate_fn = transformers.DataCollatorForLanguageModeling(
-            tokenizer=dataset.tokenizer, mlm=False)
-        collate_fn = ConcatenatedSequenceCollatorWrapper(
-            base_collator=lm_collate_fn,
-            eos_token_id=args.eos_token_id,
-            bos_token_id=None)  #Fix
-        dataloader = DataLoader(
-            dataset,
-            collate_fn=collate_fn,
-            batch_size=device_batch_size,
-            drop_last=False,
-            num_workers=8,
-            pin_memory=True,
-            prefetch_factor=2,
-            persistent_workers=True,
-        )
+            tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
+            dataset = StreamingTextDataset(
+                tokenizer=tokenizer,
+                max_seq_len=args.max_seq_len,
+                remote=
+                f"oci://mosaicml-internal-doremi/pile/pre-concat/gpt-neox-20b-seqlen-2048/data-sources/domain-{domain_id}",  # TODO: SHOULD BE A PASSED ARG
+                local=f"/tmp/streaming/domain-{domain_id}",
+                split=split,
+                batch_size=device_batch_size,
+                shuffle=False,
+            )
+            lm_collate_fn = transformers.DataCollatorForLanguageModeling(
+                tokenizer=dataset.tokenizer, mlm=False)
+            collate_fn = ConcatenatedSequenceCollatorWrapper(
+                base_collator=lm_collate_fn,
+                eos_token_id=args.eos_token_id,
+                bos_token_id=None)
+            dataloader = DataLoader(
+                dataset,
+                collate_fn=collate_fn,
+                batch_size=device_batch_size,
+                drop_last=False,
+                num_workers=8,
+                pin_memory=True,
+                prefetch_factor=2,
+                persistent_workers=True,
+            )
 
-        model, fsdp_cfg = build_model(args.ref_model_size,
-                                      tokenizer=tokenizer,
-                                      max_seq_len=args.max_seq_len)
-        model.use_logits = False  # So that full ModellingOutputs passed to callback
-        model.val_metrics = {
-            LanguageCrossEntropy.__name__: LanguageCrossEntropy()
-        }  # Only metric we care about
+            model, fsdp_cfg = build_model(args.ref_model_size,
+                                          tokenizer=tokenizer,
+                                          max_seq_len=args.max_seq_len)
+            model.use_logits = False  # So that full ModellingOutputs passed to callback
+            model.val_metrics = {
+                LanguageCrossEntropy.__name__: LanguageCrossEntropy()
+            }  # Only metric we care about
 
-        ref_loss_callback = ReferenceLossCallback(
-            writer_path=streaming_writer_path)
+            ref_loss_callback = ReferenceLossCallback(
+                writer_path=streaming_writer_path)
+            callbacks = [ref_loss_callback]
 
-        trainer = Trainer(model=model,
-                          eval_dataloader=dataloader,
-                          progress_bar=True,
-                          load_path=args.ref_model_ckpt,
-                          fsdp_config=fsdp_cfg,
-                          callbacks=[ref_loss_callback])
-        trainer.eval()
-        trainer.close()
+            loggers = []
+            if not args.no_wandb:
+                loggers = [
+                    WandBLogger(project="doremi-preprocess",
+                                entity="mosaic-ml",
+                                name=f"ref-loss-domain-{domain_id}")
+                ]
+
+            trainer = Trainer(model=model,
+                              eval_dataloader=dataloader,
+                              progress_bar=True,
+                              load_path=args.ref_model_ckpt,
+                              fsdp_config=fsdp_cfg,
+                              callbacks=callbacks,
+                              loggers=loggers)
+            trainer.eval()
+            trainer.close()
 
 
 if __name__ == "__main__":
@@ -169,6 +179,7 @@ if __name__ == "__main__":
                         default="EleutherAI/gpt-neox-20b")
     parser.add_argument("--eos-token-id", type=int, default=0)
     parser.add_argument("--max-seq-len", type=int, default=2048)
+    parser.add_argument("--no-wandb", action="store_true")
     args = parser.parse_args()
 
     dist.initialize_dist(device="gpu")
