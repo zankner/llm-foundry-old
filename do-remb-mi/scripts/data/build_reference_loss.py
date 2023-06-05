@@ -19,11 +19,16 @@ from llmfoundry.models.mpt import ComposerMPTCausalLM
 
 class ReferenceLossCallback(Callback):
 
-    def __init__(self, writer_path: str) -> None:
+    def __init__(self, domain_idx: int, writer_path: str) -> None:
         super().__init__()
+        self.domain_idx = domain_idx
         streaming_writer = None
         if dist.get_global_rank() == 0:
-            columns = {"tokens": "bytes", "ref_losses": "bytes"}
+            columns = {
+                "tokens": "bytes",
+                "ref_losses": "bytes",
+                "domain_idx": "int"
+            }
             streaming_writer = MDSWriter(columns=columns,
                                          out=writer_path,
                                          compression="zstd")
@@ -41,8 +46,7 @@ class ReferenceLossCallback(Callback):
 
         losses = self.ref_loss_fn(ref_logits.view(-1, vocab_size),
                                   targets.view(-1))
-        losses = losses.view(
-            b, n_tokens)  # Might change from targets to batch input ids
+        losses = losses.view(b, n_tokens)
 
         all_losses = torch.vstack(dist.all_gather(losses))
         all_tokens = torch.vstack(dist.all_gather(tokens))
@@ -52,7 +56,8 @@ class ReferenceLossCallback(Callback):
                 byte_tokens = tokens.cpu().numpy().tobytes()
                 self.streaming_writer.write({
                     "tokens": byte_tokens,
-                    "ref_losses": byte_losses
+                    "ref_losses": byte_losses,
+                    "domain_idx": self.domain_idx
                 })
         dist.barrier()
 
@@ -149,7 +154,7 @@ def main(args):
             }  # Only metric we care about
 
             ref_loss_callback = ReferenceLossCallback(
-                writer_path=streaming_writer_path)
+                domain_idx=domain_id, writer_path=streaming_writer_path)
             callbacks = [ref_loss_callback]
 
             loggers = []
