@@ -100,6 +100,7 @@ class EmbedTokensDataset(IterableDataset):
 
         for sample in self.dataset:
             uid = sample['uid']
+            # print(sample)
             encoded = tokenizer(sample["text"],
                                 truncation=True,
                                 max_length=self.max_length,
@@ -137,12 +138,13 @@ if __name__ == "__main__":
                                 split=split,
                                 shuffle=False)
         n_samples = data.index.total_samples
-        data = NoConcatDataset(data)
+        denominator = n_samples * 6212 // (512 * 4)
+        data = EmbedTokensDataset(data, tokenizer, max_length=512)
         loader = build_dataloader(data, batch_size=512)
         samples = generate_samples(loader, truncate_num_samples=None)
 
         columns = {
-            'text': 'bytes',
+            'tokens': 'bytes',
             'token_type_ids': 'bytes',
             'attention_mask': 'bytes',
             'uid': 'int'
@@ -152,8 +154,8 @@ if __name__ == "__main__":
                        out=os.path.join("/tmp", "tokenize-embedding", split),
                        compression="zstd") as out:
             for step, sample in enumerate(
-                    tqdm(samples, desc=split, total=n_samples, leave=True)):
+                    tqdm(samples, desc=split, total=denominator, leave=True)):
                 out.write(sample)
 
                 if step % 1_000 == 0:
-                    wandb.log(({'step': step, 'progress': step / n_samples}))
+                    wandb.log(({'step': step, 'progress': step / denominator}))
