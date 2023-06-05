@@ -5,9 +5,13 @@ from utils import build_domain_streams
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--cluster", type=str, default="r1z1")
+    parser.add_argument("--ngpus", type=int, default=8)
     parser.add_argument("--model-size", type=str, default="125M")
+    parser.add_argument("--device-batch-size", type=int, default=32)
     parser.add_argument("--num-domains", type=int, default=22)
-    parser.add_argument("--resumable", action="store_true")
+    parser.add_argument("--autoresume", action="store_true")
+    parser.add_argument("--preemptible", action="store_true")
     parser.add_argument("--num-steps",
                         type=str,
                         required=True,
@@ -29,17 +33,26 @@ if __name__ == "__main__":
         base_run.parameters[
             "run_name"] = f"ref-{args.model_size}-param-step-{args.num_steps}"
 
-        if args.resumable:
+        base_run.cluster = args.cluster
+        base_run.gpu_num = args.ngpus
+
+        if args.preemptible:
+            assert args.autoresume is True, "Preemptible training requires autoresume"
             base_run.scheduling = {"resumable": True, "priority": "low"}
             base_run.parameters["autoresume"] = True
         else:
-            base_run.parameters["autoresume"] = False
+            base_run.parameters["autoresume"] = args.autoresume
 
         base_run.parameters["global_seed"] = seed
 
         base_run.parameters["loggers"]["wandb"]["tags"] += [
             args.model_size, f"steps-{args.num_steps}"
         ]
+
+        base_run.parameters[
+            "device_train_microbatch_size"] = args.device_batch_size
+        base_run.parameters[
+            "device_eval_microbatch_size"] = args.device_batch_size
 
         base_run.parameters["train_loader"]["dataset"][
             "streams"] = domain_streams

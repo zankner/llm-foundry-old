@@ -218,7 +218,7 @@ if __name__ == "__main__":
                                           split=split,
                                           shuffle=False)
 
-        tokenizer = tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
+        tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
         tokenizer.model_max_length = int(1e30)
 
         data = ConcatDomainsTokensDataset(
