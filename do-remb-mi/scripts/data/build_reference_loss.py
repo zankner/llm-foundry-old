@@ -33,6 +33,7 @@ class ReferenceLossCallback(Callback):
 
     def eval_after_forward(self, state: State, logger: Logger) -> None:
         ref_logits = state.outputs.logits
+        tokens = state.batch["input_ids"]
         targets = state.model.get_targets(state.batch)
         b, n_tokens, vocab_size = ref_logits.shape
 
@@ -44,7 +45,7 @@ class ReferenceLossCallback(Callback):
             b, n_tokens)  # Might change from targets to batch input ids
 
         all_losses = torch.vstack(dist.all_gather(losses))
-        all_tokens = torch.vstack(dist.all_gather(targets))
+        all_tokens = torch.vstack(dist.all_gather(tokens))
         if dist.get_global_rank() == 0:
             for losses, tokens in zip(all_losses, all_tokens):
                 byte_losses = losses.cpu().numpy().tobytes()

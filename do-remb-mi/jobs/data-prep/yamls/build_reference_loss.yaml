@@ -1,4 +1,4 @@
-run_name: pile-subsets-build
+run_name: pile-ref-build
 platform: r1z1
 gpu_type: a100_80gb
 gpu_num: 8
@@ -16,5 +16,5 @@ integrations:
 command: |
   pip install oci-cli
   cd llm-foundry
-  composer -n 2 do-remb-mi/scripts/data/build_reference_loss.py --batch-size 512 --num-domains 22 --ref-model-size 125M --ref-model-ckpt oci://mosaicml-internal-checkpoints/zack/DoReMi/pile/reference/ref-125M-param-step-100K-seed-17/ep0-ba100000/rank0.pt
+  composer -n 8 do-remb-mi/scripts/data/build_reference_loss.py --batch-size 256 --num-domains {NUM_DOMAINS} --subset-domains {SUBSET_DOMAINS} --ref-model-size 125M --ref-model-ckpt oci://mosaicml-internal-checkpoints/zack/DoReMi/pile/reference/ref-125M-param-step-100K-seed-17/ep0-ba100000/rank0.pt
   oci os object bulk-upload -bn mosaicml-internal-doremi --src-dir /tmp/domains --prefix pile/token-ref-loss/gpt-neox-20b-seqlen-2048/data-sources/ > /dev/null
