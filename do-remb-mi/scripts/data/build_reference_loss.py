@@ -105,15 +105,14 @@ def main(args):
     device_batch_size = int(args.batch_size / dist.get_world_size())
     assert args.batch_size % device_batch_size == 0, "Batch size must be divisible by the number of devices"
 
-    splits = ["train"]
-    for split in splits:
+    for split in args.splits:
         for domain_id in range(args.num_domains):
             if domain_id not in args.subset_domains:
                 continue
 
             print(f"Starting to build losses for domain {domain_id}...")
 
-            streaming_writer_path = f"/tmp/domains/domain-{domain_id}/split"
+            streaming_writer_path = f"/tmp/domains/domain-{domain_id}/{split}"
 
             tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
             dataset = StreamingTextDataset(
@@ -179,6 +178,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch-size", type=int, default=256)
+    parser.add_argument("--splits", nargs="+", type=str, default=["train"])
     parser.add_argument("--num-domains", type=int, required=True)
     parser.add_argument("--subset-domains", nargs="+", type=int, default=None)
     parser.add_argument("--ref-model-size",
