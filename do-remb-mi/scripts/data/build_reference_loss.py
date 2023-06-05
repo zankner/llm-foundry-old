@@ -102,6 +102,9 @@ def main(args):
     splits = ["train"]
     for split in splits:
         for domain_id in range(args.num_domains):
+            if domain_id not in args.subset_domains:
+                continue
+
             print(f"Starting to build losses for domain {domain_id}...")
 
             streaming_writer_path = f"/tmp/domains/domain-{domain_id}/split"
@@ -134,9 +137,11 @@ def main(args):
                 persistent_workers=True,
             )
 
-            model, fsdp_cfg = build_model(args.ref_model_size,
-                                          tokenizer=tokenizer,
-                                          max_seq_len=args.max_seq_len)
+            model, fsdp_cfg = build_model(
+                args.ref_model_size,
+                tokenizer=tokenizer,
+                max_seq_len=args.max_seq_len
+            )  # Probably want to move model building and all other building outside of loop
             model.use_logits = False  # So that full ModellingOutputs passed to callback
             model.val_metrics = {
                 LanguageCrossEntropy.__name__: LanguageCrossEntropy()
@@ -169,6 +174,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--num-domains", type=int, required=True)
+    parser.add_argument("--subset-domains", nargs="+", type=int, default=None)
     parser.add_argument("--ref-model-size",
                         type=str,
                         choices=["125M"],
@@ -181,6 +187,9 @@ if __name__ == "__main__":
     parser.add_argument("--max-seq-len", type=int, default=2048)
     parser.add_argument("--no-wandb", action="store_true")
     args = parser.parse_args()
+
+    if args.subset_domains is None:
+        args.subset_domains = list(range(args.num_domains))
 
     dist.initialize_dist(device="gpu")
 
