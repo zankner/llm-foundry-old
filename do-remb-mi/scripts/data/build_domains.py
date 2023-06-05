@@ -66,9 +66,7 @@ def generate_samples(
             domain_idx = batch["domain_idx"][idx].item()
             n_samples += 1
             yield {
-                **{
-                    k: v[idx] for k, v in batch.items() if k != "domain_idx"
-                }, "domain_idx": domain_idx
+                k: v[idx] for k, v in batch.items() if k != "domain_idx"
             }, domain_idx
 
 
@@ -236,7 +234,7 @@ if __name__ == "__main__":
         loader = build_dataloader(data, batch_size=512)
         samples = generate_samples(loader, truncate_num_samples=None)
 
-        columns = {'tokens': 'bytes', 'domain_idx': 'int'}
+        columns = {'tokens': 'bytes'}
         denominator = 210607728
 
         writers = [
