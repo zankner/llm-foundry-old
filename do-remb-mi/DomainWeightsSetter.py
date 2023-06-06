@@ -30,55 +30,32 @@ class DomeainWeightSetter(Callback):
 
     @torch.no_grad()
     def after_forward(self, state: State, logger: Logger) -> None:
-        batch = state.batch
-
-        proxy_logits = state.output.logits
-        ref_logits = batch["ref_logits"]
-        b, seq_len, _ = proxy_logits.shape
-
-        # TODO: Decide what data domain key is
-        # TODO: Implement in a more efficient way
-        # Compute the excess loss for the given inputs
-        num_tokens = torch.count_nonzero(batch["attention_mask"])
-        targets = state.model.get_targets(batch)
-
-        proxy_loss = state.model.loss_fn(
-            proxy_logits.view(-1, proxy_logits.logits.size(-1)),
-            targets.view(-1))
-        ref_loss = state.model.loss_fn(
-            ref_logits.view(-1, ref_logits.logits.size(-1)), targets.view(-1))
-        excess_loss = torch.maximum(proxy_loss - ref_loss,
-                                    torch.zeros_like(proxy_loss))
-        excess_loss = excess_loss.view()
-
-        # Compute the updates to the domain weights
-        excess_loss = excess_loss.view(b, seq_len)
-        excess_loss = torch.sum(excess_loss, dim=-1)
-        domain_excess_loss = torch.scatter_reduce(torch.zeros_like(
-            self.domain_weights),
-                                                  0,
-                                                  batch["domain"],
-                                                  excess_loss,
-                                                  reduce="sum")
-        domain_normalization = torch.scatter_reduce(torch.zeros_like(
-            self.domain_weights),
-                                                    0,
-                                                    batch["domain"],
-                                                    num_tokens,
-                                                    reduce="sum")
+        domain_excess_loss, seq_len_normalization = self.model.compute_domain_wise_excess_loss(
+            state.outputs,
+            state.batch,
+            self.domain_weights,
+            non_zero_excess=True)
 
         domain_excess_loss = torch.sum(all_gather(domain_excess_loss), dim=0)
-        domain_normalization = torch.sum(all_gather(domain_normalization),
-                                         dim=0)
+        seq_len_normalization = torch.sum(all_gather(seq_len_normalization),
+                                          dim=0)
+        seq_len_normalization = torch.maximum(
+            seq_len_normalization, torch.ones_like(
+                seq_len_normalization))  # Avoid changing unused domain weights
 
-        lambdas = domain_excess_loss / domain_normalization
+        lambdas = domain_excess_loss / seq_len_normalization
         domain_weights_prime = self.domain_weights * torch.exp(
             self.step_size * lambdas)
+        domain_weights_prime = domain_weights_prime / torch.sum(
+            domain_weights_prime)  # Normalizing domain weight update
+
         domain_weights = (1 - self.smoothing) * (
             domain_weights_prime / torch.sum(domain_weights_prime)
         ) + self.smoothing * self.domain_weights  # Compute EMA of domain weights
 
         self.domain_weights = domain_weights
         self.trajectory_domain_weights += domain_weights
+
+        state.batch_set_item(key="domain_weights", value=self.domain_weights)
 
         # TODO: Need to add logging of domain weights over trajectory
