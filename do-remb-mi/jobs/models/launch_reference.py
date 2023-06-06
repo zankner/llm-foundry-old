@@ -10,6 +10,7 @@ if __name__ == "__main__":
     parser.add_argument("--model-size", type=str, default="125M")
     parser.add_argument("--device-batch-size", type=int, default=32)
     parser.add_argument("--num-domains", type=int, default=22)
+    parser.add_argument("--not-embed", action="store_true")
     parser.add_argument("--autoresume", action="store_true")
     parser.add_argument("--preemptible", action="store_true")
     parser.add_argument("--num-steps",
@@ -20,8 +21,15 @@ if __name__ == "__main__":
                         default=[17])  # Add more later
     args = parser.parse_args()
 
+    embed = not args.not_embed
+    if embed:
+        data_remote_dir = "data-sources"
+    else:
+        data_remote_dir = f"{args.num_domains}-clusters"
+
     domain_streams = build_domain_streams(
         args.num_domains,
+        data_remote_dir,
         proportions=[1 / args.num_domains for _ in range(args.num_domains)])
 
     for seed in args.seeds:

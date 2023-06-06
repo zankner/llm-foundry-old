@@ -148,11 +148,22 @@ class StreamingTextDataset(StreamingDataset):
             np.frombuffer(sample['tokens'],
                           dtype=np.int64)[:self.max_seq_len].copy())
 
+    def _read_binary_reference_losses(self, sample):
+        return torch.from_numpy(
+            np.frombuffer(sample['ref_losses'],
+                          dtype=np.float16)[:self.max_seq_len].copy())
+
     # How to process a sample
     def __getitem__(self, idx: int):
         sample = super().__getitem__(idx)
         if 'text' in sample:
             token_sample = self._tokenize(sample)
+        elif 'ref_losses' in sample:
+            token_sample = {
+                "tokens": self._read_binary_tokenized_sample(sample),
+                "ref_losses": self._read_binary_reference_losses(sample),
+                "domain_idx": sample["domain_idx"]
+            }
         elif 'tokens' in sample:
             token_sample = self._read_binary_tokenized_sample(sample)
         else:
@@ -190,8 +201,12 @@ class ConcatenatedSequenceCollatorWrapper:
             self.bos_mode = True
 
     def __call__(self, examples: List[Any]) -> Dict[str, torch.Tensor]:
-        batch = self.base_collator(examples)
+        batch = self.base_collator([example["tokens"] for example in examples])
         batch['sequence_id'] = self.get_sequence_id_from_batch(batch)
+        batch["ref_losses"] = torch.vstack(
+            [example["ref_losses"] for example in examples])
+        batch["domain_idx"] = torch.tensor(
+            [example["domain_idx"] for example in examples])
         return batch
 
     def get_sequence_id_from_batch(

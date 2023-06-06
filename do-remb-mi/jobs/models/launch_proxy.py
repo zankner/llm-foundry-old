@@ -11,8 +11,9 @@ if __name__ == "__main__":
     parser.add_argument("--device-batch-size", type=int, default=16)
     parser.add_argument("--step-size", type=float, default=1.0)
     parser.add_argument("--smoothing", type=float, default=1e-4)
-    parser.add_argument("--init-dist", type="str", default="uniform")
+    parser.add_argument("--init-dist", type=str, default="uniform")
     parser.add_argument("--num-domains", type=int, default=22)
+    parser.add_argument("--not-embed", action="store_true")
     parser.add_argument("--ref-model", type=str, required=True)
     parser.add_argument("--autoresume", action="store_true")
     parser.add_argument("--preemptible", action="store_true")
@@ -24,8 +25,17 @@ if __name__ == "__main__":
                         default=[17])  # Add more later
     args = parser.parse_args()
 
+    embed = not args.not_embed
+    if embed:
+        data_remote_dir = "data-sources"
+    else:
+        data_remote_dir = f"{args.num_domains}-clusters"
+
     uniform_proportions = [1 / args.num_domains] * args.num_domains
-    domain_streams = build_domain_streams(args.num_domains, uniform_proportions)
+    domain_streams = build_domain_streams(args.num_domains,
+                                          data_remote_dir,
+                                          uniform_proportions,
+                                          ref_dataset=True)
 
     for seed in args.seeds:
         base_run = RunConfig.from_file(
@@ -75,5 +85,6 @@ if __name__ == "__main__":
         base_run.parameters["algorithms"]["doremi"][
             "init_dist"] = args.init_dist
 
-        run = create_run(base_run)
-        print(f"Launched proxy training for seed {seed} with in {run.name}")
+        print(type(base_run))
+        # run = create_run(base_run)
+        # print(f"Launched proxy training for seed {seed} with in {run.name}")

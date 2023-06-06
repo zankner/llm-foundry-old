@@ -42,6 +42,8 @@ class DomeainWeightSetter(Algorithm):
     def match(self, event: Event, state: State) -> bool:
         return event == Event.AFTER_FORWARD or event == Event.INIT or event == Event.FIT_END
 
+    # TODO: PROBABLY HAVE IT OVERWRITE EXISTING FILES SO WE CAN DO RESUMPTION SINCE
+    # UPLOAD DOMAIN WEIGHTS MORE FREQUENTLY THEN CKPT
     def _upload_data(self, data, path: str, uploader: RemoteUploadedDownloader,
                      state: State):
         with tempfile.NamedTemporaryFile() as tmp_file:
