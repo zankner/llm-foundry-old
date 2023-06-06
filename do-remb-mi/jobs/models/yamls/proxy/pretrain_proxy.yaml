@@ -67,8 +67,8 @@ parameters:
   # System
   seed: ${global_seed}
   precision: amp_bf16
-  device_train_microbatch_size: 32
-  device_eval_batch_size: 32
+  device_train_microbatch_size: 16
+  device_eval_batch_size: 16
 
   # FSDP
   fsdp_config:
@@ -109,10 +109,11 @@ parameters:
   algorithms:
     doremi:
       num_domains: # Set by launch script
-      save_dir: pile/proxy/${run_name}-seed-${global_seed} # Update based on end save
+      save_dir: pile/proxy-weights/${run_name}-seed-${global_seed} # Update based on end save
       step_size: # Set by launch script
       smoothing: # Set by launch script
       init_dist: # Set by launch script
+      log_domain_weights_freq: 100 # Will be interpreted as batches, for prod. code make official Timestamp obj.
     gradient_clipping:
       clipping_threshold: 1
       clipping_type: norm

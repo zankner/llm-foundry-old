@@ -9,7 +9,7 @@ import torch
 import numpy as np
 from composer import Algorithm, Event, State
 from composer.utils import dist
-from composer.loggers import Logger, FileLogger, RemoteUploadedDownloader
+from composer.loggers import Logger, RemoteUploadedDownloader
 
 
 class DomeainWeightSetter(Algorithm):
@@ -20,23 +20,24 @@ class DomeainWeightSetter(Algorithm):
         save_dir,
         step_size=1.0,
         smoothing=1e-4,
-        init_dist=None,
+        init_dist="uniform",
+        log_domain_weights_freq=100,
     ):
 
         self.step_size = step_size
         self.smoothing = smoothing
 
-        if init_dist:
-            self.domain_weights = init_dist
-        else:
+        if init_dist == "uniform":
             self.domain_weights = torch.ones(num_domains) / num_domains
+        else:
+            # self.domain_weights = init_dist
+            raise NotImplementedError(
+                "Only uniform initialization is supported")
+
         self.trajectory_domain_weights = self.domain_weights
 
         self.save_dir = save_dir
-        file_logger = None
-        if dist.get_global_rank() == 0:
-            file_logger = FileLogger("domain_weights.txt")  # set prefix of path
-        self.file_logger = file_logger
+        self._log_domain_weights_freq = log_domain_weights_freq
 
     def match(self, event: Event, state: State) -> bool:
         return event == Event.AFTER_FORWARD or event == Event.INIT or event == Event.FIT_END
