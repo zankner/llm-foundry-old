@@ -6,12 +6,19 @@ from utils import build_domain_streams
 baseline_proportions = [
     0.16, 0.127, 0.114, 0.09, 0.102, 0.098, 0.055, 0.056, 0.029, 0.024, 0.021,
     0.017, 0.037, 0.021, 0.012, 0.007, 0.009, 0.006, 0.008, 0.004, 0.002, 0.001
-]
+]  # Unchanged proportions in Pile
+
+replicate_proportions = [
+    0.6057, 0.0046, 0.0224, 0.1019, 0.0036, 0.0113, 0.0072, 0.0047, 0.0699,
+    0.0018, 0.0093, 0.0061, 0.0062, 0.0134, 0.0502, 0.0274, 0.0063, 0.0070
+]  # Weights from DoReMI paper for 280M ref model
 
 
 def get_proportions(domain_source: str):
     if args.domain_source == "baseline":
         return baseline_proportions
+    if args.domain_source == "replicate":
+        return replicate_proportions
     else:
         raise ValueError(f"Unknown domain source {domain_source}")
 
@@ -21,7 +28,7 @@ if __name__ == "__main__":
     parser.add_argument("--cluster", type=str, default="r8z6")
     parser.add_argument("--ngpus", type=int, default=32)
     parser.add_argument("--model-size", type=str, default="1B")
-    parser.add_argument("--device-batch-size", type=int, default=32)
+    parser.add_argument("--device-batch-size", type=int, default=16)
     parser.add_argument("--num-domains", type=int, default=22)
     parser.add_argument("--domain-source", type=str, required=True)
     parser.add_argument("--autoresume", action="store_true")
@@ -46,6 +53,9 @@ if __name__ == "__main__":
         )
         base_run.parameters[
             "run_name"] = f"final-{args.model_size}-param-step-{args.num_steps}-ds-{args.domain_source}"
+
+        base_run.cluster = args.cluster
+        base_run.gpu_num = args.ngpus
 
         if args.preemptible:
             assert args.autoresume is True, "Preemptible training requires autoresume"

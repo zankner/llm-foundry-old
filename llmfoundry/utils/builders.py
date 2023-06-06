@@ -10,7 +10,8 @@ from composer.callbacks import (LRMonitor, MemoryMonitor, OptimizerMonitor,
 from composer.core import Evaluator
 from composer.datasets.in_context_learning_evaluation import \
     get_icl_task_dataloader
-from composer.loggers import TensorboardLogger, WandBLogger
+from composer.loggers import (TensorboardLogger, WandBLogger,
+                              RemoteUploaderDownloader)
 from composer.optim import DecoupledAdamW
 from composer.optim.scheduler import (ConstantWithWarmupScheduler,
                                       CosineAnnealingWithWarmupScheduler,
@@ -21,6 +22,7 @@ from omegaconf import OmegaConf as om
 from transformers import (AutoTokenizer, PreTrainedTokenizer,
                           PreTrainedTokenizerFast)
 
+from llmfoundry.algorithms import DomainWeightsSetter
 from llmfoundry.callbacks import (FDiffMetrics, Generate, GlobalLRScaling,
                                   LayerFreezing, MonolithicCheckpointSaver,
                                   ScheduledGarbageCollector)
@@ -66,6 +68,8 @@ def build_logger(name, kwargs):
         return WandBLogger(**kwargs)
     elif name == 'tensorboard':
         return TensorboardLogger(**kwargs)
+    elif name == 'remote_uploader':
+        return RemoteUploaderDownloader(**kwargs)
     else:
         raise ValueError(f'Not sure how to build logger: {name}')
 
@@ -81,6 +85,8 @@ def build_algorithm(name, kwargs):
         return algorithms.GatedLinearUnits(**kwargs)
     elif name == 'low_precision_layernorm':
         return algorithms.LowPrecisionLayerNorm(**kwargs)
+    elif name == 'doremi':
+        return
     else:
         raise ValueError(f'Not sure how to build algorithm: {name}')
 

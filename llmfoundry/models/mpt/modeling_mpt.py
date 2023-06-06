@@ -200,8 +200,8 @@ class MPTModel(MPTPreTrainedModel):
                 # clamp to 0 necessary for torch 2.0 compile()
                 _s_k = max(0, attn_bias.size(-1) - s_k)
                 attn_bias = attn_bias[:, :, :, _s_k:]
-            if prefix_mask is not None and (attention_mask.shape !=
-                                            prefix_mask.shape):
+            if prefix_mask is not None and (attention_mask.shape
+                                            != prefix_mask.shape):
                 raise ValueError(
                     f'attention_mask shape={attention_mask.shape} ' +\
                     f'and prefix_mask shape={prefix_mask.shape} are not equal.'
@@ -701,3 +701,62 @@ class ComposerMPTCausalLM(HuggingFaceModel):
             self.model.config.d_model * (msl**2))
 
         return (params_flops_per_seq + attn_flops_per_seq) * 3 * bs
+
+
+class ComposerMPTProxyLM(ComposerMPTCausalLM):
+
+    def compute_domain_wise_excess_loss(self,
+                                        outputs,
+                                        batch,
+                                        domain_weights,
+                                        non_zero_excess=False):
+        # TODO: Implement in a more efficient way
+        proxy_logits = outputs.logits
+        b, seq_len, _ = proxy_logits.shape
+
+        # Compute the excess loss for the given inputs
+        num_tokens = torch.count_nonzero(
+            batch["attention_mask"], dim=-1
+        )  # Might not have attention mask, prob just get ignore toke (-100)
+        targets = self.get_targets(batch)
+
+        proxy_loss = self.loss_fn(
+            proxy_logits.view(-1, proxy_logits.logits.size(-1)),
+            targets.view(-1)).view(b, seq_len)
+        ref_loss = batch["ref_losses"]
+        excess_loss = proxy_loss - ref_loss
+
+        if non_zero_excess:
+            excess_loss = torch.maximum(
+                excess_loss, torch.zeros_like(proxy_loss))  # DRO gauruntees
+
+        excess_loss = torch.sum(excess_loss, dim=-1)
+
+        # Compute domain wise loss and normalization
+        domain_excess_loss = torch.scatter_reduce(
+            torch.zeros_like(domain_weights),
+            0,
+            batch["domain_idx"],
+            excess_loss,
+            reduce="sum")
+        seq_len_normalization = torch.scatter_reduce(
+            torch.zeros_like(domain_weights),
+            0,
+            batch["domain_idx"],
+            num_tokens,
+            reduce="sum")
+
+        return domain_excess_loss, seq_len_normalization
+
+    def loss(self, outputs, batch):
+        domain_excess_loss, seq_len_normalization = self.model.compute_domain_wise_excess_loss(
+            outputs, batch, batch["domain_weights"], non_zero_excess=False)
+
+        seq_len_normalization = torch.maximum(
+            seq_len_normalization, torch.ones_like(
+                seq_len_normalization))  # Avoid changing unused domain weights
+
+        weighted_domain_excess_loss = batch[
+            "domain_weights"] * domain_excess_loss / seq_len_normalization
+
+        return torch.sum(weighted_domain_excess_loss)
