@@ -18,8 +18,8 @@ try:
         triton_flash_attn_fn)
     from llmfoundry.models.layers.blocks import MPTMLP, MPTBlock
     from llmfoundry.models.model_registry import COMPOSER_MODEL_REGISTRY
-    from llmfoundry.models.mpt import (ComposerMPTCausalLM, MPTConfig,
-                                       MPTForCausalLM, MPTModel,
+    from llmfoundry.models.mpt import (ComposerMPTProxyLM, ComposerMPTCausalLM,
+                                       MPTConfig, MPTForCausalLM, MPTModel,
                                        MPTPreTrainedModel)
 
 except ImportError as e:
@@ -45,6 +45,7 @@ __all__ = [
     'MPTModel',
     'MPTForCausalLM',
     'ComposerMPTCausalLM',
+    'ComposerMPTProxyLM',
     'ComposerHFCausalLM',
     'ComposerHFPrefixLM',
     'ComposerHFT5',

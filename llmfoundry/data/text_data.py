@@ -5,7 +5,7 @@
 
 import os
 from itertools import islice
-from typing import Any, Callable, Dict, List, Optional, Sequence, Union
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Union
 
 import numpy as np
 import torch
@@ -201,12 +201,16 @@ class ConcatenatedSequenceCollatorWrapper:
             self.bos_mode = True
 
     def __call__(self, examples: List[Any]) -> Dict[str, torch.Tensor]:
-        batch = self.base_collator([example["tokens"] for example in examples])
+        if isinstance(examples[0], Mapping):
+            batch = self.base_collator([example["tokens"] for example in examples])
+        else:
+            batch = self.base_collator(examples)
         batch['sequence_id'] = self.get_sequence_id_from_batch(batch)
-        batch["ref_losses"] = torch.vstack(
-            [example["ref_losses"] for example in examples])
-        batch["domain_idx"] = torch.tensor(
-            [example["domain_idx"] for example in examples])
+        if isinstance(examples[0], Mapping):
+            batch["ref_losses"] = torch.vstack(
+                [example["ref_losses"] for example in examples])
+            batch["domain_idx"] = torch.tensor(
+                [example["domain_idx"] for example in examples])
         return batch
 
     def get_sequence_id_from_batch(

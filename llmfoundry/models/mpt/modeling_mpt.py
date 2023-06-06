@@ -705,6 +705,13 @@ class ComposerMPTCausalLM(HuggingFaceModel):
 
 class ComposerMPTProxyLM(ComposerMPTCausalLM):
 
+    # def __init__(
+    #     self,
+    #     om_model_config: DictConfig,
+    #     tokenizer: Optional[Tokenizer] = None,
+    # ):
+    #     super().__init__(om_model_config=om_model_config, tokenizer=tokenizer)
+
     def compute_domain_wise_excess_loss(self,
                                         outputs,
                                         batch,
@@ -749,7 +756,7 @@ class ComposerMPTProxyLM(ComposerMPTCausalLM):
         return domain_excess_loss, seq_len_normalization
 
     def loss(self, outputs, batch):
-        domain_excess_loss, seq_len_normalization = self.model.compute_domain_wise_excess_loss(
+        domain_excess_loss, seq_len_normalization = self.compute_domain_wise_excess_loss(
             outputs, batch, batch["domain_weights"], non_zero_excess=False)
 
         seq_len_normalization = torch.maximum(
