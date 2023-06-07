@@ -63,10 +63,8 @@ if __name__ == "__main__":
 
         # No microbatching allowed for proxy run
         assert 512 % args.ngpus == 0, "Must have no microbatching for proxy run"
-        base_run.parameters[
-            "device_train_microbatch_size"] = 512 / args.ngpus
-        base_run.parameters[
-            "device_eval_microbatch_size"] = 512 / args.ngpus
+        base_run.parameters["device_train_microbatch_size"] = 512 / args.ngpus
+        base_run.parameters["device_eval_batch_size"] = 512 / args.ngpus
 
         base_run.parameters["train_loader"]["dataset"][
             "streams"] = domain_streams
