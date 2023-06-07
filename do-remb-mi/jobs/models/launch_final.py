@@ -82,8 +82,7 @@ if __name__ == "__main__":
 
         base_run.parameters[
             "device_train_microbatch_size"] = args.device_batch_size
-        base_run.parameters[
-            "device_eval_microbatch_size"] = args.device_batch_size
+        base_run.parameters["device_eval_batch_size"] = args.device_batch_size
 
         base_run.parameters["train_loader"]["dataset"][
             "streams"] = domain_streams
