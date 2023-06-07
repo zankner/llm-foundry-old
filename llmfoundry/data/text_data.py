@@ -211,6 +211,7 @@ class ConcatenatedSequenceCollatorWrapper:
                 [example["ref_losses"] for example in examples])
             batch["domain_idx"] = torch.tensor(
                 [example["domain_idx"] for example in examples])
+            batch["domain_weights"] = torch.zeros_like( batch["domain_idx"]) # Filler because of batch_set_key reqs.
         return batch
 
     def get_sequence_id_from_batch(
