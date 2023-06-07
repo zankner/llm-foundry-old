@@ -705,12 +705,37 @@ class ComposerMPTCausalLM(HuggingFaceModel):
 
 class ComposerMPTProxyLM(ComposerMPTCausalLM):
 
-    # def __init__(
-    #     self,
-    #     om_model_config: DictConfig,
-    #     tokenizer: Optional[Tokenizer] = None,
-    # ):
-    #     super().__init__(om_model_config=om_model_config, tokenizer=tokenizer)
+    def __init__(
+        self,
+        om_model_config: DictConfig,
+        tokenizer: Optional[Tokenizer] = None,
+    ):
+        # TODO: Init is redundant with mpt causal init but need this loss fn as well
+        resolved_om_model_config = om.to_container(om_model_config,
+                                                   resolve=True)
+        hf_config = MPTConfig.from_dict(resolved_om_model_config)
+
+        super().__init__(om_model_config=om_model_config, tokenizer=tokenizer)
+
+        loss_fn_config = om_model_config.get('loss_fn', 'fused_crossentropy')
+        if loss_fn_config == 'fused_crossentropy':
+            try:
+                from flash_attn.losses.cross_entropy import CrossEntropyLoss as FusedCrossEntropyLoss  # type: ignore # isort: skip
+                if hf_config.verbose > 1:
+                    warnings.warn('Using Fused Cross Entropy Loss.')
+                self.ref_loss_fn = FusedCrossEntropyLoss(ignore_index=-100, reduction="none")
+            except:
+                raise ValueError(
+                    'Fused Cross Entropy is not installed. Either (1) have a CUDA-compatible GPU '
+                    'and `pip install .[gpu]` if installing from source or `pip install xentropy-cuda-lib@git+https://github.com/HazyResearch/flash-attention.git@v0.2.8#subdirectory=csrc/xentropy` '
+                    'if installing from pypi, or (2) set your config model.loss_fn=torch_crossentropy.'
+                )
+        elif loss_fn_config == 'torch_crossentropy':
+            self.ref_loss_fn = nn.CrossEntropyLoss(ignore_index=-100, reduction="none")
+        else:
+            raise ValueError(
+                f'Specified loss_fn={self.ref_loss_fn} not recognized. `loss_fn` must be one of [`fused_crossentropy`, `torch_crossentropy`].'
+            )
 
     def compute_domain_wise_excess_loss(self,
                                         outputs,
@@ -720,15 +745,16 @@ class ComposerMPTProxyLM(ComposerMPTCausalLM):
         # TODO: Implement in a more efficient way
         proxy_logits = outputs.logits
         b, seq_len, _ = proxy_logits.shape
+        device = proxy_logits.device
 
         # Compute the excess loss for the given inputs
-        num_tokens = torch.count_nonzero(
-            batch["attention_mask"], dim=-1
+        num_tokens = torch.sum(
+            batch["input_ids"] != -100, dim=-1
         )  # Might not have attention mask, prob just get ignore toke (-100)
         targets = self.get_targets(batch)
 
-        proxy_loss = self.loss_fn(
-            proxy_logits.view(-1, proxy_logits.logits.size(-1)),
+        proxy_loss = self.ref_loss_fn(
+            proxy_logits.view(-1, proxy_logits.size(-1)),
             targets.view(-1)).view(b, seq_len)
         ref_loss = batch["ref_losses"]
         excess_loss = proxy_loss - ref_loss
@@ -741,13 +767,14 @@ class ComposerMPTProxyLM(ComposerMPTCausalLM):
 
         # Compute domain wise loss and normalization
         domain_excess_loss = torch.scatter_reduce(
-            torch.zeros_like(domain_weights),
+            torch.zeros_like(domain_weights, device=device, dtype=excess_loss.dtype),
             0,
             batch["domain_idx"],
             excess_loss,
             reduce="sum")
+        # print(num_tokens, "num tokens")
         seq_len_normalization = torch.scatter_reduce(
-            torch.zeros_like(domain_weights),
+            torch.zeros_like(domain_weights, device=device, dtype=batch["domain_idx"].dtype),
             0,
             batch["domain_idx"],
             num_tokens,
@@ -765,5 +792,4 @@ class ComposerMPTProxyLM(ComposerMPTCausalLM):
 
         weighted_domain_excess_loss = batch[
             "domain_weights"] * domain_excess_loss / seq_len_normalization
-
         return torch.sum(weighted_domain_excess_loss)

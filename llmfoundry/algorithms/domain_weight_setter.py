@@ -41,7 +41,7 @@ class DomainWeightSetter(Algorithm):
         self.log_domain_weights_freq = log_domain_weights_freq
 
     def match(self, event: Event, state: State) -> bool:
-        return event == Event.FIT_START or event == Event.AFTER_LOAD or event == Event.FIT_END
+        return (event == Event.BEFORE_TRAIN_BATCH or event == Event.AFTER_FORWARD or event == Event.FIT_END or event == Event.AFTER_TRAIN_BATCH)
 
     
     def _upload_data(self, data, path: str, uploader: RemoteUploaderDownloader,
@@ -88,25 +88,37 @@ class DomainWeightSetter(Algorithm):
                             path=average_domain_weights_path,
                             uploader=remote_uploader,
                             state=state)
-        
-        dist.barrier()
 
     @torch.no_grad()
     def apply(self, event: Event, state: State, logger: Logger) -> None:
-        if event == Event.FIT_START:
+        device = state.batch["input_ids"].device
+        self.domain_weights = self.domain_weights.to(device)
+        self.trajectory_domain_weights = self.trajectory_domain_weights.to(device)
+        state.batch_set_item(key="domain_weights",
+                                value=self.domain_weights)
+        
+        if event == Event.BEFORE_TRAIN_BATCH:
+            if int(state.timestamp.batch) != 0:
+                return
+            device = state.batch["input_ids"].device
+            self.domain_weights = self.domain_weights.to(device)
+            self.trajectory_domain_weights = self.trajectory_domain_weights.to(device)
+            state.batch_set_item(key="domain_weights",
+                                 value=self.domain_weights)
+            
             self._log_domain_weights(state)
         elif event == Event.FIT_END:
             self._log_domain_weights(state, final=True)
         elif event == Event.AFTER_FORWARD:
-            print("Actually got called after forward")
-            domain_excess_loss, seq_len_normalization = self.model.compute_domain_wise_excess_loss(
+            domain_excess_loss, seq_len_normalization = state.model.compute_domain_wise_excess_loss(
                 state.outputs,
                 state.batch,
                 self.domain_weights,
                 non_zero_excess=True)
+            
 
-            domain_excess_loss = dist.all_reduce(domain_excess_loss, "sum")
-            seq_len_normalization = dist.all_reduce(seq_len_normalization,
+            dist.all_reduce(domain_excess_loss, "sum")
+            dist.all_reduce(seq_len_normalization,
                                                     "sum")
 
             seq_len_normalization = torch.maximum(
@@ -126,8 +138,10 @@ class DomainWeightSetter(Algorithm):
             self.domain_weights = domain_weights
             self.trajectory_domain_weights += domain_weights
 
-            print("about to set weights")
             state.batch_set_item(key="domain_weights",
                                  value=self.domain_weights)
 
             self._log_domain_weights(state)
+
+        dist.barrier()
+    

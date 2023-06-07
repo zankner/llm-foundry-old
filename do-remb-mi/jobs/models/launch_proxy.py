@@ -8,7 +8,6 @@ if __name__ == "__main__":
     parser.add_argument("--cluster", type=str, default="r8z6")
     parser.add_argument("--ngpus", type=int, default=16)
     parser.add_argument("--model-size", type=str, default="125M")
-    parser.add_argument("--device-batch-size", type=int, default=16)
     parser.add_argument("--step-size", type=float, default=1.0)
     parser.add_argument("--smoothing", type=float, default=1e-4)
     parser.add_argument("--init-dist", type=str, default="uniform")
@@ -62,10 +61,12 @@ if __name__ == "__main__":
             args.model_size, f"steps-{args.num_steps}", f"ref-{args.ref_model}"
         ]
 
+        # No microbatching allowed for proxy run
+        assert 512 % args.ngpus == 0, "Must have no microbatching for proxy run"
         base_run.parameters[
-            "device_train_microbatch_size"] = args.device_batch_size
+            "device_train_microbatch_size"] = 512 / args.ngpus
         base_run.parameters[
-            "device_eval_microbatch_size"] = args.device_batch_size
+            "device_eval_microbatch_size"] = 512 / args.ngpus
 
         base_run.parameters["train_loader"]["dataset"][
             "streams"] = domain_streams
