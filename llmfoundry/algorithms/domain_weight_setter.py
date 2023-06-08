@@ -47,12 +47,14 @@ class DomainWeightSetter(Algorithm):
 
     def _upload_data(self, data, path: str, uploader: RemoteUploaderDownloader,
                      state: State):
+        #print(data)
         with tempfile.NamedTemporaryFile() as tmp_file:
-            np.save(tmp_file, data)
+            np.save(tmp_file.name + ".npy", data)
+            #print(np.load(tmp_file.name + ".npy"))
             uploader.upload_file(
                 state=state,
                 remote_file_name=os.path.join(self.save_dir, path),
-                file_path=tmp_file.name,
+                file_path=tmp_file.name + ".npy",
                 overwrite=True
             )  # Overwrite to handle mismatch between weight freq and ckpt freq
 
