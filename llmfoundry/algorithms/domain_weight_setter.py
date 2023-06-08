@@ -1,3 +1,4 @@
+llmfoundry / algorithms / domain_weight_setter.py
 # Copyright 2022 MosaicML LLM Foundry authors
 # SPDX-License-Identifier: Apache-2.0
 
@@ -41,71 +42,74 @@ class DomainWeightSetter(Algorithm):
         self.log_domain_weights_freq = log_domain_weights_freq
 
     def match(self, event: Event, state: State) -> bool:
-        return (event == Event.BEFORE_TRAIN_BATCH or event == Event.AFTER_FORWARD or event == Event.FIT_END or event == Event.AFTER_TRAIN_BATCH)
+        return (event == Event.BEFORE_TRAIN_BATCH or
+                event == Event.AFTER_FORWARD or event == Event.FIT_END or
+                event == Event.AFTER_TRAIN_BATCH)
 
-    
     def _upload_data(self, data, path: str, uploader: RemoteUploaderDownloader,
                      state: State):
         with tempfile.NamedTemporaryFile() as tmp_file:
             np.save(tmp_file, data)
-            uploader.upload_file(state=state,
-                                 remote_file_name=os.path.join(
-                                     self.save_dir, path),
-                                 file_path=tmp_file.name,
-                                 overwrite=True
-                                 ) # Overwrite to handle mismatch between weight freq and ckpt freq
+            uploader.upload_file(
+                state=state,
+                remote_file_name=os.path.join(self.save_dir, path),
+                file_path=tmp_file.name,
+                overwrite=True
+            )  # Overwrite to handle mismatch between weight freq and ckpt freq
 
     def _log_domain_weights(self, state: State, final: bool = False) -> None:
         if dist.get_global_rank() == 0:
             remote_uploader = [
                 callback for callback in state.callbacks
-                if (isinstance(callback, RemoteUploaderDownloader) and callback.backend_kwargs['bucket'] == "mosaicml-internal-doremi")
-            ] # Ugly but oh well for now, change later
+                if (isinstance(callback, RemoteUploaderDownloader) and callback.
+                    backend_kwargs['bucket'] == "mosaicml-internal-doremi")
+            ]  # Ugly but oh well for now, change later
             assert len(
                 remote_uploader) == 1, "Only one remote uploader is supported"
             remote_uploader = remote_uploader[0]
 
-            if (
-                    int(state.timestamp.batch_in_epoch) + 1
-            ) % self.log_domain_weights_freq != 0 and int(state.timestamp.batch) != 0 and not final:
+            if (int(state.timestamp.batch_in_epoch) +
+                    1) % self.log_domain_weights_freq != 0 and int(
+                        state.timestamp.batch) != 0 and not final:
                 return
 
             if final:
                 prefix = "final"
             else:
-                prefix = f"epoch-{state.timestamp.epoch}-ba-{state.timestamp.batch_in_epoch}"
+                prefix = f"ba-{state.timestamp.batch}"
             domain_weights_path = os.path.join(prefix, "domain_weights.npy")
             average_domain_weights_path = os.path.join(
                 prefix, "average_domain_weights.npy")
 
             self._upload_data(self.domain_weights.cpu().numpy(),
-                            path=domain_weights_path,
-                            uploader=remote_uploader,
-                            state=state)
+                              path=domain_weights_path,
+                              uploader=remote_uploader,
+                              state=state)
             average_domain_weights = self.trajectory_domain_weights / (
                 int(state.timestamp.batch) + 1)
             self._upload_data(average_domain_weights.cpu().numpy(),
-                            path=average_domain_weights_path,
-                            uploader=remote_uploader,
-                            state=state)
+                              path=average_domain_weights_path,
+                              uploader=remote_uploader,
+                              state=state)
 
     @torch.no_grad()
     def apply(self, event: Event, state: State, logger: Logger) -> None:
         device = state.batch["input_ids"].device
         self.domain_weights = self.domain_weights.to(device)
-        self.trajectory_domain_weights = self.trajectory_domain_weights.to(device)
-        state.batch_set_item(key="domain_weights",
-                                value=self.domain_weights)
-        
+        self.trajectory_domain_weights = self.trajectory_domain_weights.to(
+            device)
+        state.batch_set_item(key="domain_weights", value=self.domain_weights)
+
         if event == Event.BEFORE_TRAIN_BATCH:
             if int(state.timestamp.batch) != 0:
                 return
             device = state.batch["input_ids"].device
             self.domain_weights = self.domain_weights.to(device)
-            self.trajectory_domain_weights = self.trajectory_domain_weights.to(device)
+            self.trajectory_domain_weights = self.trajectory_domain_weights.to(
+                device)
             state.batch_set_item(key="domain_weights",
                                  value=self.domain_weights)
-            
+
             self._log_domain_weights(state)
         elif event == Event.FIT_END:
             self._log_domain_weights(state, final=True)
@@ -115,11 +119,9 @@ class DomainWeightSetter(Algorithm):
                 state.batch,
                 self.domain_weights,
                 non_zero_excess=True)
-            
 
             dist.all_reduce(domain_excess_loss, "sum")
-            dist.all_reduce(seq_len_normalization,
-                                                    "sum")
+            dist.all_reduce(seq_len_normalization, "sum")
 
             seq_len_normalization = torch.maximum(
                 seq_len_normalization, torch.ones_like(seq_len_normalization)
@@ -144,4 +146,3 @@ class DomainWeightSetter(Algorithm):
             self._log_domain_weights(state)
 
         dist.barrier()
-    

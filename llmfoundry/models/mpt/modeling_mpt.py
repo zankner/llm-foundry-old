@@ -723,7 +723,8 @@ class ComposerMPTProxyLM(ComposerMPTCausalLM):
                 from flash_attn.losses.cross_entropy import CrossEntropyLoss as FusedCrossEntropyLoss  # type: ignore # isort: skip
                 if hf_config.verbose > 1:
                     warnings.warn('Using Fused Cross Entropy Loss.')
-                self.ref_loss_fn = FusedCrossEntropyLoss(ignore_index=-100, reduction="none")
+                self.ref_loss_fn = FusedCrossEntropyLoss(ignore_index=-100,
+                                                         reduction="none")
             except:
                 raise ValueError(
                     'Fused Cross Entropy is not installed. Either (1) have a CUDA-compatible GPU '
@@ -731,7 +732,8 @@ class ComposerMPTProxyLM(ComposerMPTCausalLM):
                     'if installing from pypi, or (2) set your config model.loss_fn=torch_crossentropy.'
                 )
         elif loss_fn_config == 'torch_crossentropy':
-            self.ref_loss_fn = nn.CrossEntropyLoss(ignore_index=-100, reduction="none")
+            self.ref_loss_fn = nn.CrossEntropyLoss(ignore_index=-100,
+                                                   reduction="none")
         else:
             raise ValueError(
                 f'Specified loss_fn={self.ref_loss_fn} not recognized. `loss_fn` must be one of [`fused_crossentropy`, `torch_crossentropy`].'
@@ -766,19 +768,19 @@ class ComposerMPTProxyLM(ComposerMPTCausalLM):
         excess_loss = torch.sum(excess_loss, dim=-1)
 
         # Compute domain wise loss and normalization
-        domain_excess_loss = torch.scatter_reduce(
-            torch.zeros_like(domain_weights, device=device, dtype=excess_loss.dtype),
-            0,
-            batch["domain_idx"],
-            excess_loss,
-            reduce="sum")
+        domain_excess_loss = torch.scatter_reduce(torch.zeros_like(
+            domain_weights, device=device, dtype=excess_loss.dtype),
+                                                  0,
+                                                  batch["domain_idx"],
+                                                  excess_loss,
+                                                  reduce="sum")
         # print(num_tokens, "num tokens")
-        seq_len_normalization = torch.scatter_reduce(
-            torch.zeros_like(domain_weights, device=device, dtype=batch["domain_idx"].dtype),
-            0,
-            batch["domain_idx"],
-            num_tokens,
-            reduce="sum")
+        seq_len_normalization = torch.scatter_reduce(torch.zeros_like(
+            domain_weights, device=device, dtype=batch["domain_idx"].dtype),
+                                                     0,
+                                                     batch["domain_idx"],
+                                                     num_tokens,
+                                                     reduce="sum")
 
         return domain_excess_loss, seq_len_normalization
 

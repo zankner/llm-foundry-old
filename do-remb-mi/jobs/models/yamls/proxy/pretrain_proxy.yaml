@@ -67,8 +67,8 @@ parameters:
   # System
   seed: ${global_seed}
   precision: amp_bf16
-  device_train_microbatch_size: 16
-  device_eval_batch_size: 16
+  device_train_microbatch_size: 32
+  device_eval_batch_size: 32
 
   # FSDP
   fsdp_config:

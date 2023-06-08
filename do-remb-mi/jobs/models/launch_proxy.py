@@ -7,6 +7,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--cluster", type=str, default="r8z6")
     parser.add_argument("--ngpus", type=int, default=16)
+    parser.add_argument("--device-batch-size", type=int, default=32)
     parser.add_argument("--model-size", type=str, default="125M")
     parser.add_argument("--step-size", type=float, default=1.0)
     parser.add_argument("--smoothing", type=float, default=1e-4)
@@ -62,9 +63,9 @@ if __name__ == "__main__":
         ]
 
         # No microbatching allowed for proxy run
-        assert 512 % args.ngpus == 0, "Must have no microbatching for proxy run"
-        base_run.parameters["device_train_microbatch_size"] = 512 / args.ngpus
-        base_run.parameters["device_eval_batch_size"] = 512 / args.ngpus
+        base_run.parameters[
+            "device_train_microbatch_size"] = args.device_batch_size
+        base_run.parameters["device_eval_batch_size"] = args.device_batch_size
 
         base_run.parameters["train_loader"]["dataset"][
             "streams"] = domain_streams
@@ -84,6 +85,5 @@ if __name__ == "__main__":
         base_run.parameters["algorithms"]["doremi"][
             "init_dist"] = args.init_dist
 
-        print(type(base_run))
-        # run = create_run(base_run)
-        # print(f"Launched proxy training for seed {seed} with in {run.name}")
+        run = create_run(base_run)
+        print(f"Launched proxy training for seed {seed} with in {run.name}")
