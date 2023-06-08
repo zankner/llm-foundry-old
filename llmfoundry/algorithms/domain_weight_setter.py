@@ -1,4 +1,3 @@
-llmfoundry / algorithms / domain_weight_setter.py
 # Copyright 2022 MosaicML LLM Foundry authors
 # SPDX-License-Identifier: Apache-2.0
 
