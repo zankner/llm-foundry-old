@@ -75,9 +75,9 @@ class DomainWeightSetter(Algorithm):
             if final:
                 prefix = "final"
             elif int(state.timestamp.batch) == 0:
-                prefix = f"ba-{state.timestamp.batch}"
+                prefix = f"ba-{int(state.timestamp.batch)}"
             else:
-                prefix = f"ba-{state.timestamp.batch + 1}"
+                prefix = f"ba-{int(state.timestamp.batch) + 1}"
             domain_weights_path = os.path.join(prefix, "domain_weights.npy")
             average_domain_weights_path = os.path.join(
                 prefix, "average_domain_weights.npy")
