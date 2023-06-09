@@ -100,6 +100,7 @@ class DomainWeightSetter(Algorithm):
     @torch.no_grad()
     def apply(self, event: Event, state: State, logger: Logger) -> None:
         device = state.batch["input_ids"].device
+        self.smoothing_dist = self.smoothing_dist.to(device)
         self.domain_weights = self.domain_weights.to(device)
         self.trajectory_domain_weights = self.trajectory_domain_weights.to(
             device)
