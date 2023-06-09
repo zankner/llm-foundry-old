@@ -37,6 +37,8 @@ class DomainWeightSetter(Algorithm):
 
         self.trajectory_domain_weights = self.domain_weights
 
+        self.smoothing_dist = torch.ones(num_domains) / num_domains
+
         self.save_dir = save_dir
         self.log_domain_weights_freq = log_domain_weights_freq
 
@@ -136,9 +138,12 @@ class DomainWeightSetter(Algorithm):
             domain_weights_prime = domain_weights_prime / torch.sum(
                 domain_weights_prime)  # Normalizing domain weight update
 
+            # domain_weights = (1 - self.smoothing) * (
+            #     domain_weights_prime / torch.sum(domain_weights_prime)
+            # ) + self.smoothing * self.domain_weights  # Compute EMA of domain weights
             domain_weights = (1 - self.smoothing) * (
                 domain_weights_prime / torch.sum(domain_weights_prime)
-            ) + self.smoothing * self.domain_weights  # Compute EMA of domain weights
+            ) + self.smoothing * self.smoothing_dist  # Compute EMA of domain weights
 
             self.domain_weights = domain_weights
             self.trajectory_domain_weights += domain_weights
