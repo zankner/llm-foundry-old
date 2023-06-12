@@ -12,6 +12,13 @@ from composer import Algorithm, Event, State
 from composer.utils import dist
 from composer.loggers import Logger, RemoteUploaderDownloader
 
+PILE_DATA_SOURCES = [
+    "Pile-CC", "PubMed Central", "Books3", "OpenWebText2", "ArXiv", "Github",
+    "FreeLaw", "StackExchange", "USPTO Backgrounds", "PubMed Abstracts",
+    "Gutenberg (PG-19)", "OpenSubtitles", "Wikipedia (en)", "DM Mathematics",
+    "Ubuntu IRC", "BookCorpus2", "EuroParl", "HackerNews", "YoutubeSubtitles",
+    "PhilPapers", "NIH ExPorter", "Enron Emails"
+]
 
 class DomainWeightSetter(Algorithm):
 
@@ -23,6 +30,7 @@ class DomainWeightSetter(Algorithm):
         smoothing=1e-4,
         init_dist="uniform",
         log_domain_weights_freq=100,
+        log_excess_loss=False
     ):
 
         self.step_size = step_size
@@ -41,6 +49,7 @@ class DomainWeightSetter(Algorithm):
 
         self.save_dir = save_dir
         self.log_domain_weights_freq = log_domain_weights_freq
+        self.log_excess_loss = log_excess_loss
 
     def match(self, event: Event, state: State) -> bool:
         return (event == Event.BEFORE_TRAIN_BATCH or
@@ -85,7 +94,6 @@ class DomainWeightSetter(Algorithm):
             domain_weights_path = os.path.join(prefix, "domain_weights.npy")
             average_domain_weights_path = os.path.join(
                 prefix, "average_domain_weights.npy")
-
             self._upload_data(self.domain_weights.cpu().numpy(),
                               path=domain_weights_path,
                               uploader=remote_uploader,
@@ -120,12 +128,13 @@ class DomainWeightSetter(Algorithm):
         elif event == Event.FIT_END:
             self._log_domain_weights(state, final=True)
         elif event == Event.AFTER_FORWARD:
-            domain_excess_loss, seq_len_normalization = state.model.compute_domain_wise_excess_loss(
+            domain_excess_loss, ref_loss, proxy_loss, seq_len_normalization = state.model.compute_domain_wise_excess_loss(
                 state.outputs,
                 state.batch,
                 self.domain_weights,
                 non_zero_excess=True)
 
+            dist.all_reduce(ref_loss, "sum")
             dist.all_reduce(domain_excess_loss, "sum")
             dist.all_reduce(seq_len_normalization, "sum")
 
@@ -133,18 +142,25 @@ class DomainWeightSetter(Algorithm):
                 seq_len_normalization, torch.ones_like(seq_len_normalization)
             )  # Avoid changing unused domain weights
 
+            if self.log_excess_loss:
+                to_log = {}
+                for domain_idx, (excess_loss, ref_loss, proxy_loss) in enumerate(zip(domain_excess_loss / seq_len_normalization, ref_loss / seq_len_normalization, proxy_loss / seq_len_normalization)):
+                    excess_loss = excess_loss.cpu().item()
+                    ref_loss = ref_loss.cpu().item()
+                    proxy_loss = proxy_loss.cpu().item()
+                    if excess_loss > 0:
+                        to_log[f"Excess-loss/domain-{PILE_DATA_SOURCES[domain_idx]}"] = excess_loss
+                        to_log[f"Ref-loss/domain-{PILE_DATA_SOURCES[domain_idx]}"] = ref_loss
+                        to_log[f"Proxy-loss/domain-{PILE_DATA_SOURCES[domain_idx]}"] = proxy_loss
+                logger.log_metrics(to_log)
+
             lambdas = domain_excess_loss / seq_len_normalization
             domain_weights_prime = self.domain_weights * torch.exp(
                 self.step_size * lambdas)
             domain_weights_prime = domain_weights_prime / torch.sum(
                 domain_weights_prime)  # Normalizing domain weight update
-
-            # domain_weights = (1 - self.smoothing) * (
-            #     domain_weights_prime / torch.sum(domain_weights_prime)
-            # ) + self.smoothing * self.domain_weights  # Compute EMA of domain weights
-            domain_weights = (1 - self.smoothing) * (
-                domain_weights_prime / torch.sum(domain_weights_prime)
-            ) + self.smoothing * self.smoothing_dist  # Compute EMA of domain weights
+            
+            domain_weights = (1 - self.smoothing) * domain_weights_prime  + self.smoothing * self.smoothing_dist  # Compute EMA of domain weights
 
             self.domain_weights = domain_weights
             self.trajectory_domain_weights += domain_weights

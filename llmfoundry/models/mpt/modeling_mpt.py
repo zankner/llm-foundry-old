@@ -748,7 +748,6 @@ class ComposerMPTProxyLM(ComposerMPTCausalLM):
         proxy_logits = outputs.logits
         b, seq_len, _ = proxy_logits.shape
         device = proxy_logits.device
-
         # Compute the excess loss for the given inputs
         num_tokens = torch.sum(
             batch["input_ids"] != -100, dim=-1
@@ -765,7 +764,25 @@ class ComposerMPTProxyLM(ComposerMPTCausalLM):
             excess_loss = torch.maximum(
                 excess_loss, torch.zeros_like(proxy_loss))  # DRO gauruntees
 
+        proxy_loss = torch.sum(proxy_loss, dim=-1)
+        ref_loss = torch.sum(ref_loss, dim=-1)
         excess_loss = torch.sum(excess_loss, dim=-1)
+
+        # Compute domain wise loss and normalization
+        ref_loss = torch.scatter_reduce(torch.zeros_like(
+            domain_weights, device=device, dtype=ref_loss.dtype),
+                                                  0,
+                                                  batch["domain_idx"],
+                                                  ref_loss,
+                                                  reduce="sum")
+        
+        # Compute domain wise loss and normalization
+        proxy_loss = torch.scatter_reduce(torch.zeros_like(
+            domain_weights, device=device, dtype=proxy_loss.dtype),
+                                                  0,
+                                                  batch["domain_idx"],
+                                                  proxy_loss,
+                                                  reduce="sum")
 
         # Compute domain wise loss and normalization
         domain_excess_loss = torch.scatter_reduce(torch.zeros_like(
@@ -782,10 +799,10 @@ class ComposerMPTProxyLM(ComposerMPTCausalLM):
                                                      num_tokens,
                                                      reduce="sum")
 
-        return domain_excess_loss, seq_len_normalization
+        return domain_excess_loss, ref_loss, proxy_loss, seq_len_normalization
 
     def loss(self, outputs, batch):
-        domain_excess_loss, seq_len_normalization = self.compute_domain_wise_excess_loss(
+        domain_excess_loss, _, _, seq_len_normalization = self.compute_domain_wise_excess_loss(
             outputs, batch, batch["domain_weights"], non_zero_excess=False)
 
         seq_len_normalization = torch.maximum(
