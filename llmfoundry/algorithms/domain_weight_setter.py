@@ -142,9 +142,9 @@ class DomainWeightSetter(Algorithm):
             # domain_weights = (1 - self.smoothing) * (
             #     domain_weights_prime / torch.sum(domain_weights_prime)
             # ) + self.smoothing * self.domain_weights  # Compute EMA of domain weights
-            domain_weights = (1 - self.smoothing) * (
-                domain_weights_prime / torch.sum(domain_weights_prime)
-            ) + self.smoothing * self.smoothing_dist  # Compute EMA of domain weights
+            domain_weights = (
+                1 - self.smoothing
+            ) * domain_weights_prime + self.smoothing * self.smoothing_dist  # Compute EMA of domain weights
 
             self.domain_weights = domain_weights
             self.trajectory_domain_weights += domain_weights
