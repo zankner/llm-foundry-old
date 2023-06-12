@@ -22,8 +22,7 @@ for i in tqdm(range(22)):
     loss = 0
     for batch in tqdm(ds):
         for sample in batch["ref_losses"]:
-            loss += np.frombuffer(sample['ref_losses'],
-                                  dtype=np.float16)[:2048].copy().sum()
+            loss += np.frombuffer(sample, dtype=np.float16)[:2048].copy().sum()
     loss = loss / (n_samples * 2048)
     losses.append(loss)
 
