@@ -97,6 +97,35 @@ def build_model(model_size, tokenizer, max_seq_len):
             "verbose": False
         })
         return ComposerMPTCausalLM(model_cfg, tokenizer), fsdp_cfg
+    elif model_size == "1B":
+        model_cfg = OmegaConf.create({
+            "name": "mpt_causal_lm",
+            "init_device": "meta",
+            "d_model": 2048,
+            "n_heads": 16,
+            "n_layers": 24,
+            "expansion_ratio": 4,
+            "max_seq_len": 2048,
+            "vocab_size": 50432,  # update for hero run with custom tokenizer
+            "no_bias": True,
+            "attn_config": {
+                "alibi": True,
+                "attn_impl": "triton",
+                "clip_qkv": 6,
+                "attn_uses_sequence_id": True
+            }
+        })
+        fsdp_cfg = OmegaConf.create({
+            "activation_checkpointing": False,
+            "activation_checkpointing_reentrant": False,
+            "activation_cpu_offload": False,
+            "limit_all_gathers": True,
+            "mixed_precision": "PURE",
+            "sharding_strategy": "FULL_SHARD",
+            "state_dict_type": "full",
+            "verbose": False
+        })
+        return ComposerMPTCausalLM(model_cfg, tokenizer), fsdp_cfg
     else:
         raise ValueError(f"Unkown model size: {model_size}")
 
@@ -159,9 +188,11 @@ def main(args):
             loggers = []
             if not args.no_wandb:
                 loggers = [
-                    WandBLogger(project="doremi-preprocess",
-                                entity="mosaic-ml",
-                                name=f"ref-loss-domain-{domain_id}")
+                    WandBLogger(
+                        project="doremi-preprocess",
+                        entity="mosaic-ml",
+                        name=f"{args.ref_model_size}-ref-loss-domain-{domain_id}"
+                    )
                 ]
 
             trainer = Trainer(model=model,
@@ -183,7 +214,7 @@ if __name__ == "__main__":
     parser.add_argument("--subset-domains", nargs="+", type=int, default=None)
     parser.add_argument("--ref-model-size",
                         type=str,
-                        choices=["125M"],
+                        choices=["125M", "1B"],
                         required=True)
     parser.add_argument("--ref-model-ckpt", type=str, required=True)
     parser.add_argument("--tokenizer",
