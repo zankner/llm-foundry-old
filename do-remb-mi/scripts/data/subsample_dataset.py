@@ -65,9 +65,11 @@ def generate_samples(
                 return
             domain_idx = batch["domain_idx"][idx].item()
             n_samples += 1
-            yield {**{
-                k: v[idx] for k, v in batch.items() if k != "domain_idx"
-            }, "domain_idx": domain_idx}, domain_idx
+            yield {
+                **{
+                    k: v[idx] for k, v in batch.items() if k != "domain_idx"
+                }, "domain_idx": domain_idx
+            }, domain_idx
 
 
 if __name__ == "__main__":
@@ -81,10 +83,7 @@ if __name__ == "__main__":
                         choices=["100K"])
     parser.add_argument("--batch-size", type=int, default=512)
     parser.add_argument("--num-domains", type=int, required=True)
-    parser.add_argument("--splits",
-                        type=str,
-                        nargs="+",
-                        default=["train", "val", "test"])
+    parser.add_argument("--splits", type=str, nargs="+", default=["train"])
     parser.add_argument("--sample-dist",
                         type=str,
                         required=True,
