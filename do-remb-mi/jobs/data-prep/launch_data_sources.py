@@ -121,7 +121,7 @@ for subset in subsets:
     base_run.name = f"pile-{subset}"
     base_run.run_name = f"pile-{subset}"
 
-    run_command = f"python scripts/data_prep/build_subsets.py --subset {subset}"
+    run_command = f"python scripts/data_prep/build_data_sources.py --subset {subset}"
     upload_command = f"oci os object bulk-upload -bn mosaicml-internal-doremi --src-dir /tmp/{subset} --prefix data-sources/{subset}/pre-concat/gpt-neox-20b-seq-len-2048"
 
     base_run.command += run_command + "\n" + upload_command
