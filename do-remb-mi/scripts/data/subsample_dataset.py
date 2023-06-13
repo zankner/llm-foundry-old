@@ -65,15 +65,15 @@ def generate_samples(
                 return
             domain_idx = batch["domain_idx"][idx].item()
             n_samples += 1
-            yield {
+            yield {**{
                 k: v[idx] for k, v in batch.items() if k != "domain_idx"
-            }, domain_idx
+            }, "domain_idx": domain_idx}, domain_idx
 
 
 if __name__ == "__main__":
 
     parser = ArgumentParser()
-    parser.add_argument("--remote-base", type=str, default="/tmp/domain-local")
+    parser.add_argument("--remote-base", type=str, required=True)
     parser.add_argument("--local-base", type=str, default="/tmp/domain-local")
     parser.add_argument("--num-samples",
                         type=str,
