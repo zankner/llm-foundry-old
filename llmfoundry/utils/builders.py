@@ -23,8 +23,9 @@ from transformers import (AutoTokenizer, PreTrainedTokenizer,
                           PreTrainedTokenizerFast)
 
 from llmfoundry.algorithms import DomainWeightSetter
-from llmfoundry.callbacks import (FDiffMetrics, Generate, GlobalLRScaling,
-                                  LayerFreezing, MonolithicCheckpointSaver,
+from llmfoundry.callbacks import (FDiffMetrics, Generate, LogDomainLoss,
+                                  GlobalLRScaling, LayerFreezing,
+                                  MonolithicCheckpointSaver,
                                   ScheduledGarbageCollector)
 from llmfoundry.optim import (DecoupledAdaLRLion, DecoupledClipLion,
                               DecoupledLionW)
@@ -43,6 +44,8 @@ def build_callback(name, kwargs):
                                 'gpu_flops_available', None))
     elif name == 'fdiff':
         return FDiffMetrics(**kwargs)
+    elif name == 'log_domain_loss':
+        return LogDomainLoss(**kwargs)
     elif name == 'runtime_estimator':
         return RuntimeEstimator()
     elif name == 'optimizer_monitor':

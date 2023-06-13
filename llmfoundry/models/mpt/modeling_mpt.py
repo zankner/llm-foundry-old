@@ -655,6 +655,8 @@ class ComposerMPTCausalLM(HuggingFaceModel):
                 if hf_config.verbose > 1:
                     warnings.warn('Using Fused Cross Entropy Loss.')
                 self.loss_fn = FusedCrossEntropyLoss(ignore_index=-100)
+                self.proxy_loss_fn = FusedCrossEntropyLoss(ignore_index=-100,
+                                                           reduction="none")
             except:
                 raise ValueError(
                     'Fused Cross Entropy is not installed. Either (1) have a CUDA-compatible GPU '
@@ -663,6 +665,8 @@ class ComposerMPTCausalLM(HuggingFaceModel):
                 )
         elif loss_fn_config == 'torch_crossentropy':
             self.loss_fn = nn.CrossEntropyLoss(ignore_index=-100)
+            self.proxy_loss_fn = nn.CrossEntropyLoss(ignore_index=-100,
+                                                     reduction="none")
         else:
             raise ValueError(
                 f'Specified loss_fn={self.loss_fn} not recognized. `loss_fn` must be one of [`fused_crossentropy`, `torch_crossentropy`].'
@@ -705,40 +709,6 @@ class ComposerMPTCausalLM(HuggingFaceModel):
 
 class ComposerMPTProxyLM(ComposerMPTCausalLM):
 
-    def __init__(
-        self,
-        om_model_config: DictConfig,
-        tokenizer: Optional[Tokenizer] = None,
-    ):
-        # TODO: Init is redundant with mpt causal init but need this loss fn as well
-        resolved_om_model_config = om.to_container(om_model_config,
-                                                   resolve=True)
-        hf_config = MPTConfig.from_dict(resolved_om_model_config)
-
-        super().__init__(om_model_config=om_model_config, tokenizer=tokenizer)
-
-        loss_fn_config = om_model_config.get('loss_fn', 'fused_crossentropy')
-        if loss_fn_config == 'fused_crossentropy':
-            try:
-                from flash_attn.losses.cross_entropy import CrossEntropyLoss as FusedCrossEntropyLoss  # type: ignore # isort: skip
-                if hf_config.verbose > 1:
-                    warnings.warn('Using Fused Cross Entropy Loss.')
-                self.ref_loss_fn = FusedCrossEntropyLoss(ignore_index=-100,
-                                                         reduction="none")
-            except:
-                raise ValueError(
-                    'Fused Cross Entropy is not installed. Either (1) have a CUDA-compatible GPU '
-                    'and `pip install .[gpu]` if installing from source or `pip install xentropy-cuda-lib@git+https://github.com/HazyResearch/flash-attention.git@v0.2.8#subdirectory=csrc/xentropy` '
-                    'if installing from pypi, or (2) set your config model.loss_fn=torch_crossentropy.'
-                )
-        elif loss_fn_config == 'torch_crossentropy':
-            self.ref_loss_fn = nn.CrossEntropyLoss(ignore_index=-100,
-                                                   reduction="none")
-        else:
-            raise ValueError(
-                f'Specified loss_fn={self.ref_loss_fn} not recognized. `loss_fn` must be one of [`fused_crossentropy`, `torch_crossentropy`].'
-            )
-
     def compute_domain_wise_excess_loss(self,
                                         outputs,
                                         batch,
@@ -754,7 +724,7 @@ class ComposerMPTProxyLM(ComposerMPTCausalLM):
         )  # Might not have attention mask, prob just get ignore toke (-100)
         targets = self.get_targets(batch)
 
-        proxy_loss = self.ref_loss_fn(
+        proxy_loss = self.proxy_loss_fn(
             proxy_logits.view(-1, proxy_logits.size(-1)),
             targets.view(-1)).view(b, seq_len)
         ref_loss = batch["ref_losses"]
@@ -769,20 +739,21 @@ class ComposerMPTProxyLM(ComposerMPTCausalLM):
         excess_loss = torch.sum(excess_loss, dim=-1)
 
         # Compute domain wise loss and normalization
-        ref_loss = torch.scatter_reduce(torch.zeros_like(
-            domain_weights, device=device, dtype=ref_loss.dtype),
-                                                  0,
-                                                  batch["domain_idx"],
-                                                  ref_loss,
-                                                  reduce="sum")
-        
+        ref_loss = torch.scatter_reduce(torch.zeros_like(domain_weights,
+                                                         device=device,
+                                                         dtype=ref_loss.dtype),
+                                        0,
+                                        batch["domain_idx"],
+                                        ref_loss,
+                                        reduce="sum")
+
         # Compute domain wise loss and normalization
         proxy_loss = torch.scatter_reduce(torch.zeros_like(
             domain_weights, device=device, dtype=proxy_loss.dtype),
-                                                  0,
-                                                  batch["domain_idx"],
-                                                  proxy_loss,
-                                                  reduce="sum")
+                                          0,
+                                          batch["domain_idx"],
+                                          proxy_loss,
+                                          reduce="sum")
 
         # Compute domain wise loss and normalization
         domain_excess_loss = torch.scatter_reduce(torch.zeros_like(

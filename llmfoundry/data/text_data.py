@@ -150,8 +150,7 @@ class StreamingTextDataset(StreamingDataset):
 
     def _read_binary_reference_losses(self, sample):
         losses = np.frombuffer(sample['ref_losses'],
-                          dtype=np.float16)[:self.max_seq_len].copy()
-        losses = np.full_like(losses, 2.50)
+                               dtype=np.float16)[:self.max_seq_len].copy()
         return torch.from_numpy(losses)
 
     # How to process a sample
@@ -203,7 +202,8 @@ class ConcatenatedSequenceCollatorWrapper:
 
     def __call__(self, examples: List[Any]) -> Dict[str, torch.Tensor]:
         if isinstance(examples[0], Mapping):
-            batch = self.base_collator([example["tokens"] for example in examples])
+            batch = self.base_collator(
+                [example["tokens"] for example in examples])
         else:
             batch = self.base_collator(examples)
         batch['sequence_id'] = self.get_sequence_id_from_batch(batch)
@@ -212,7 +212,8 @@ class ConcatenatedSequenceCollatorWrapper:
                 [example["ref_losses"] for example in examples])
             batch["domain_idx"] = torch.tensor(
                 [example["domain_idx"] for example in examples])
-            batch["domain_weights"] = torch.zeros_like( batch["domain_idx"]) # Filler because of batch_set_key reqs.
+            batch["domain_weights"] = torch.zeros_like(
+                batch["domain_idx"])  # Filler because of batch_set_key reqs.
         return batch
 
     def get_sequence_id_from_batch(
