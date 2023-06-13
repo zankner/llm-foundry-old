@@ -20,18 +20,17 @@ PILE_DATA_SOURCES = [
     "PhilPapers", "NIH ExPorter", "Enron Emails"
 ]
 
+
 class DomainWeightSetter(Algorithm):
 
-    def __init__(
-        self,
-        num_domains,
-        save_dir,
-        step_size=1.0,
-        smoothing=1e-4,
-        init_dist="uniform",
-        log_domain_weights_freq=100,
-        log_excess_loss=False
-    ):
+    def __init__(self,
+                 num_domains,
+                 save_dir,
+                 step_size=1.0,
+                 smoothing=1e-4,
+                 init_dist="uniform",
+                 log_domain_weights_freq=100,
+                 log_excess_loss=False):
 
         self.step_size = step_size
         self.smoothing = smoothing
@@ -112,7 +111,6 @@ class DomainWeightSetter(Algorithm):
         self.domain_weights = self.domain_weights.to(device)
         self.trajectory_domain_weights = self.trajectory_domain_weights.to(
             device)
-        state.batch_set_item(key="domain_weights", value=self.domain_weights)
 
         if event == Event.BEFORE_TRAIN_BATCH:
             if int(state.timestamp.batch) != 0:
@@ -144,14 +142,23 @@ class DomainWeightSetter(Algorithm):
 
             if self.log_excess_loss:
                 to_log = {}
-                for domain_idx, (excess_loss, ref_loss, proxy_loss) in enumerate(zip(domain_excess_loss / seq_len_normalization, ref_loss / seq_len_normalization, proxy_loss / seq_len_normalization)):
+                for domain_idx, (excess_loss, ref_loss,
+                                 proxy_loss) in enumerate(
+                                     zip(
+                                         domain_excess_loss /
+                                         seq_len_normalization,
+                                         ref_loss / seq_len_normalization,
+                                         proxy_loss / seq_len_normalization)):
                     excess_loss = excess_loss.cpu().item()
                     ref_loss = ref_loss.cpu().item()
                     proxy_loss = proxy_loss.cpu().item()
                     if excess_loss > 0:
-                        to_log[f"Excess-loss/domain-{PILE_DATA_SOURCES[domain_idx]}"] = excess_loss
-                        to_log[f"Ref-loss/domain-{PILE_DATA_SOURCES[domain_idx]}"] = ref_loss
-                        to_log[f"Proxy-loss/domain-{PILE_DATA_SOURCES[domain_idx]}"] = proxy_loss
+                        to_log[
+                            f"Excess-loss/domain-{PILE_DATA_SOURCES[domain_idx]}"] = excess_loss
+                        to_log[
+                            f"Ref-loss/domain-{PILE_DATA_SOURCES[domain_idx]}"] = ref_loss
+                        to_log[
+                            f"Proxy-loss/domain-{PILE_DATA_SOURCES[domain_idx]}"] = proxy_loss
                 logger.log_metrics(to_log)
 
             lambdas = domain_excess_loss / seq_len_normalization
@@ -159,8 +166,10 @@ class DomainWeightSetter(Algorithm):
                 self.step_size * lambdas)
             domain_weights_prime = domain_weights_prime / torch.sum(
                 domain_weights_prime)  # Normalizing domain weight update
-            
-            domain_weights = (1 - self.smoothing) * domain_weights_prime  + self.smoothing * self.smoothing_dist  # Compute EMA of domain weights
+
+            domain_weights = (
+                1 - self.smoothing
+            ) * domain_weights_prime + self.smoothing * self.smoothing_dist  # Compute EMA of domain weights
 
             self.domain_weights = domain_weights
             self.trajectory_domain_weights += domain_weights
