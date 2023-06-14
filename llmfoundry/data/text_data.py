@@ -151,7 +151,7 @@ class StreamingTextDataset(StreamingDataset):
     def _read_binary_reference_losses(self, sample):
         losses = np.frombuffer(sample['ref_losses'],
                                dtype=np.float16)[:self.max_seq_len].copy()
-        return torch.from_numpy(losses)
+        return torch.from_numpy(losses).type(torch.float32)
 
     # How to process a sample
     def __getitem__(self, idx: int):
