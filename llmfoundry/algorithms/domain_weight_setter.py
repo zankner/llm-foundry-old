@@ -97,8 +97,8 @@ class DomainWeightSetter(Algorithm):
                               path=domain_weights_path,
                               uploader=remote_uploader,
                               state=state)
-            average_domain_weights = self.trajectory_domain_weights / (
-                int(state.timestamp.batch) + 1 - self.warmup_steps)
+            num_steps = max(1, int(state.timestamp.batch) + 1 - self.warmup_steps)
+            average_domain_weights = self.trajectory_domain_weights / num_steps
             self._upload_data(average_domain_weights.cpu().numpy(),
                               path=average_domain_weights_path,
                               uploader=remote_uploader,
