@@ -219,7 +219,8 @@ class ConcatenatedSequenceCollatorWrapper:
                 batch["ref_losses"] = torch.vstack(
                     [example["ref_losses"] for example in examples])
                 batch["domain_weights"] = torch.zeros_like(
-                    batch["domain_idx"])  # Filler because of batch_set_key reqs.
+                    batch["domain_idx"]
+                )  # Filler because of batch_set_key reqs.
         return batch
 
     def get_sequence_id_from_batch(

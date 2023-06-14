@@ -136,7 +136,7 @@ class DomainWeightSetter(Algorithm):
             dist.all_reduce(proxy_loss, "sum")
             dist.all_reduce(domain_excess_loss, "sum")
             dist.all_reduce(seq_len_normalization, "sum")
-            
+            print(ref_loss, "ref loss reduced")
             dist.barrier()
 
             seq_len_normalization = torch.maximum(
