@@ -133,14 +133,17 @@ class DomainWeightSetter(Algorithm):
                 non_zero_excess=True)
 
             dist.all_reduce(ref_loss, "sum")
+            dist.all_reduce(proxy_loss, "sum")
             dist.all_reduce(domain_excess_loss, "sum")
             dist.all_reduce(seq_len_normalization, "sum")
+            
+            dist.barrier()
 
             seq_len_normalization = torch.maximum(
                 seq_len_normalization, torch.ones_like(seq_len_normalization)
             )  # Avoid changing unused domain weights
 
-            if self.log_excess_loss:
+            if self.log_excess_loss and dist.get_global_rank() == 0:
                 to_log = {}
                 for domain_idx, (excess_loss, ref_loss,
                                  proxy_loss) in enumerate(
