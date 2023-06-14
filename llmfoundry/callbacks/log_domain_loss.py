@@ -34,6 +34,7 @@ class LogDomainLoss(Callback):
             state.batch["input_ids"] != -100, dim=-1
         )  # Might not have attention mask, prob just get ignore toke (-100)
         targets = state.model.get_targets(state.batch)
+        print(targets.shape)
         print(targets.view(-1).shape)
         loss = state.model.proxy_loss_fn(logits.view(-1, logits.size(-1)),
                                          targets.view(-1)).view(b, seq_len)
