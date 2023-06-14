@@ -164,6 +164,7 @@ class DomainWeightSetter(Algorithm):
                 logger.log_metrics(to_log)
 
             if int(state.timestamp.batch) < self.warmup_steps:
+                self._log_domain_weights(state)
                 return
 
             lambdas = domain_excess_loss / seq_len_normalization
