@@ -36,6 +36,7 @@ class LogDomainLoss(Callback):
         targets = state.model.get_targets(state.batch)
         print(targets.shape)
         print(targets.view(-1).shape)
+        print(logits.shape)
         loss = state.model.proxy_loss_fn(logits.view(-1, logits.size(-1)),
                                          targets.view(-1)).view(b, seq_len)
         loss = torch.sum(loss, dim=-1) / num_tokens
