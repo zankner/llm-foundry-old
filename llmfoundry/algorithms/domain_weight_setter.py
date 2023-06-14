@@ -126,9 +126,6 @@ class DomainWeightSetter(Algorithm):
         elif event == Event.FIT_END:
             self._log_domain_weights(state, final=True)
         elif event == Event.AFTER_FORWARD:
-            if int(state.timestamp.batch) < self.warmup_steps:
-                return
-
             domain_excess_loss, ref_loss, proxy_loss, seq_len_normalization = state.model.compute_domain_wise_excess_loss(
                 state.outputs,
                 state.batch,
@@ -165,6 +162,9 @@ class DomainWeightSetter(Algorithm):
                         to_log[
                             f"Proxy-loss/domain-{PILE_DATA_SOURCES[domain_idx]}"] = proxy_loss
                 logger.log_metrics(to_log)
+
+            if int(state.timestamp.batch) < self.warmup_steps:
+                return
 
             lambdas = domain_excess_loss / seq_len_normalization
             domain_weights_prime = self.domain_weights * torch.exp(
