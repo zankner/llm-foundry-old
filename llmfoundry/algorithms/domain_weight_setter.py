@@ -29,6 +29,7 @@ class DomainWeightSetter(Algorithm):
                  step_size=1.0,
                  smoothing=1e-4,
                  init_dist="uniform",
+                 warmup_steps=0,
                  log_domain_weights_freq=100,
                  log_excess_loss=False):
 
@@ -43,8 +44,9 @@ class DomainWeightSetter(Algorithm):
                 "Only uniform initialization is supported")
 
         self.trajectory_domain_weights = self.domain_weights
-
         self.smoothing_dist = torch.ones(num_domains) / num_domains
+
+        self.warmup_steps = warmup_steps
 
         self.save_dir = save_dir
         self.log_domain_weights_freq = log_domain_weights_freq
@@ -96,7 +98,7 @@ class DomainWeightSetter(Algorithm):
                               uploader=remote_uploader,
                               state=state)
             average_domain_weights = self.trajectory_domain_weights / (
-                int(state.timestamp.batch) + 1)
+                int(state.timestamp.batch) + 1 - self.warmup_steps)
             self._upload_data(average_domain_weights.cpu().numpy(),
                               path=average_domain_weights_path,
                               uploader=remote_uploader,
@@ -124,6 +126,9 @@ class DomainWeightSetter(Algorithm):
         elif event == Event.FIT_END:
             self._log_domain_weights(state, final=True)
         elif event == Event.AFTER_FORWARD:
+            if int(state.timestamp.batch) < self.warmup_steps:
+                return
+
             domain_excess_loss, ref_loss, proxy_loss, seq_len_normalization = state.model.compute_domain_wise_excess_loss(
                 state.outputs,
                 state.batch,
