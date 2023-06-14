@@ -11,6 +11,8 @@ from transformers import AutoTokenizer, PreTrainedTokenizerBase
 import wandb
 import numpy as np
 
+GLOBAL_SEED = 42
+
 PILE_DATA_SOURCES = [
     "Pile-CC", "PubMed Central", "Books3", "OpenWebText2", "ArXiv", "Github",
     "FreeLaw", "StackExchange", "USPTO Backgrounds", "PubMed Abstracts",
@@ -119,9 +121,10 @@ if __name__ == "__main__":
                        split=split,
                        proportion=proportion))
         # Might change shuffling later if doing multiple seeds
-        streaming_data = StreamingDataset(shuffle=False,
-                                          streams=streams,
-                                          samples_per_epoch=int_num_samples)
+        streaming_data = StreamingDataset(shuffle=True,
+                                          shuffle_seed=GLOBAL_SEED,
+                                          shuffle_algo="py1b",
+                                          streams=streams)
 
         loader = build_dataloader(streaming_data, batch_size=512)
         samples = generate_samples(loader, truncate_num_samples=None)
@@ -138,6 +141,9 @@ if __name__ == "__main__":
         ]
         for step, (sample, domain_idx) in enumerate(
                 tqdm(samples, desc=split, total=denominator, leave=True)):
+
+            if step >= int_num_samples:
+                break
 
             writers[domain_idx].write(sample)
 
