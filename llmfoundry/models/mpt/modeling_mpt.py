@@ -747,7 +747,7 @@ class ComposerMPTProxyLM(ComposerMPTCausalLM):
                                         batch["domain_idx"],
                                         ref_loss,
                                         reduce="sum")
-
+        print(ref_loss, "ref loss scattered")
         # Compute domain wise loss and normalization
         proxy_loss = torch.scatter_reduce(torch.zeros_like(
             domain_weights, device=device, dtype=proxy_loss.dtype),
