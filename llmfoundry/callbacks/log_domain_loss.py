@@ -26,7 +26,7 @@ class LogDomainLoss(Callback):
 
     # Function assumes `domain_idx` key for each batch
     # Also will only compute for last device_batch
-    def batch_end(self, state: State, logger: Logger):
+    def after_forward(self, state: State, logger: Logger):
         logits = state.outputs.logits
         b, seq_len, _ = logits.shape
 
@@ -34,15 +34,13 @@ class LogDomainLoss(Callback):
             state.batch["input_ids"] != -100, dim=-1
         )  # Might not have attention mask, prob just get ignore toke (-100)
         targets = state.model.get_targets(state.batch)
-        print(targets.shape)
-        print(targets.view(-1).shape)
-        print(logits.shape)
+
         loss = state.model.proxy_loss_fn(logits.view(-1, logits.size(-1)),
                                          targets.view(-1)).view(b, seq_len)
         loss = torch.sum(loss, dim=-1) / num_tokens
 
         loss = torch.scatter_reduce(torch.zeros(self.num_domains,
-                                                devicex=loss.device,
+                                                device=loss.device,
                                                 dtype=loss.dtype),
                                     0,
                                     state.batch["domain_idx"],
