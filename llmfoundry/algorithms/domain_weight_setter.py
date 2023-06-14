@@ -53,7 +53,7 @@ class DomainWeightSetter(Algorithm):
         self.log_excess_loss = log_excess_loss
 
     def match(self, event: Event, state: State) -> bool:
-        return (event == Event.BEFORE_TRAIN_BATCH or
+        return (event == Event.BEFORE_FORWARD or
                 event == Event.AFTER_FORWARD or event == Event.FIT_END or
                 event == Event.AFTER_TRAIN_BATCH)
 
@@ -112,7 +112,7 @@ class DomainWeightSetter(Algorithm):
         self.trajectory_domain_weights = self.trajectory_domain_weights.to(
             device)
 
-        if event == Event.BEFORE_TRAIN_BATCH:
+        if event == Event.BEFORE_FORWARD:
             if int(state.timestamp.batch) != 0:
                 return
             device = state.batch["input_ids"].device
@@ -164,6 +164,8 @@ class DomainWeightSetter(Algorithm):
                 logger.log_metrics(to_log)
 
             if int(state.timestamp.batch) < self.warmup_steps:
+                state.batch_set_item(key="domain_weights",
+                                 value=self.domain_weights)
                 self._log_domain_weights(state)
                 return
 
