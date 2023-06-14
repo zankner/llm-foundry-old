@@ -729,7 +729,7 @@ class ComposerMPTProxyLM(ComposerMPTCausalLM):
             targets.view(-1)).view(b, seq_len)
         ref_loss = batch["ref_losses"]
         excess_loss = proxy_loss - ref_loss
-        print(ref_loss, "ref losss")
+
         if non_zero_excess:
             excess_loss = torch.maximum(
                 excess_loss, torch.zeros_like(proxy_loss))  # DRO gauruntees
@@ -737,7 +737,6 @@ class ComposerMPTProxyLM(ComposerMPTCausalLM):
         proxy_loss = torch.sum(proxy_loss, dim=-1)
         ref_loss = torch.sum(ref_loss, dim=-1)
         excess_loss = torch.sum(excess_loss, dim=-1)
-        print(ref_loss, "ref loss summed")
 
         # Compute domain wise loss and normalization
         ref_loss = torch.scatter_reduce(torch.zeros_like(domain_weights,
@@ -747,7 +746,6 @@ class ComposerMPTProxyLM(ComposerMPTCausalLM):
                                         batch["domain_idx"],
                                         ref_loss,
                                         reduce="sum")
-        print(ref_loss, "ref loss scattered")
         # Compute domain wise loss and normalization
         proxy_loss = torch.scatter_reduce(torch.zeros_like(
             domain_weights, device=device, dtype=proxy_loss.dtype),
@@ -763,7 +761,6 @@ class ComposerMPTProxyLM(ComposerMPTCausalLM):
                                                   batch["domain_idx"],
                                                   excess_loss,
                                                   reduce="sum")
-        # print(num_tokens, "num tokens")
         seq_len_normalization = torch.scatter_reduce(torch.zeros_like(
             domain_weights, device=device, dtype=batch["domain_idx"].dtype),
                                                      0,

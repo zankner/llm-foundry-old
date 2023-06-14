@@ -57,10 +57,8 @@ class DomainWeightSetter(Algorithm):
 
     def _upload_data(self, data, path: str, uploader: RemoteUploaderDownloader,
                      state: State):
-        #print(data)
         with tempfile.NamedTemporaryFile() as tmp_file:
             np.save(tmp_file.name + ".npy", data)
-            #print(np.load(tmp_file.name + ".npy"))
             uploader.upload_file(
                 state=state,
                 remote_file_name=os.path.join(self.save_dir, path),
@@ -136,7 +134,6 @@ class DomainWeightSetter(Algorithm):
             dist.all_reduce(proxy_loss, "sum")
             dist.all_reduce(domain_excess_loss, "sum")
             dist.all_reduce(seq_len_normalization, "sum")
-            print(ref_loss, "ref loss reduced")
             dist.barrier()
 
             seq_len_normalization = torch.maximum(
