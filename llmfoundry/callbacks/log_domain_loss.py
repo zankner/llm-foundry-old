@@ -7,6 +7,7 @@ from __future__ import annotations
 import torch
 from composer.core import Callback, State
 from composer.loggers import Logger
+from composer.utils import dist
 
 PILE_DATA_SOURCES = [
     "Pile-CC", "PubMed Central", "Books3", "OpenWebText2", "ArXiv", "Github",
@@ -21,12 +22,16 @@ class LogDomainLoss(Callback):
     """Loss on each data-domain.
     """
 
-    def __init__(self, num_domains: int):
+    def __init__(self, num_domains: int, log_freq: int = 5):
         self.num_domains = num_domains
+        self.log_freq = log_freq
 
     # Function assumes `domain_idx` key for each batch
     # Also will only compute for last device_batch
     def after_forward(self, state: State, logger: Logger):
+        if int(state.timestamp.batch) % self.log_freq != 0:
+            return
+        
         logits = state.outputs.logits
         b, seq_len, _ = logits.shape
 
@@ -37,7 +42,7 @@ class LogDomainLoss(Callback):
 
         loss = state.model.proxy_loss_fn(logits.view(-1, logits.size(-1)),
                                          targets.view(-1)).view(b, seq_len)
-        loss = torch.sum(loss, dim=-1) / num_tokens
+        loss = torch.sum(loss, dim=-1)
 
         loss = torch.scatter_reduce(torch.zeros(self.num_domains,
                                                 device=loss.device,
@@ -52,6 +57,9 @@ class LogDomainLoss(Callback):
                                                      state.batch["domain_idx"],
                                                      num_tokens,
                                                      reduce="sum")
+
+        dist.all_reduce(loss, "sum")
+        dist.all_reduce(seq_len_normalization, "sum")
 
         to_log = {}
         for domain_idx, loss in enumerate(loss / seq_len_normalization):
