@@ -87,7 +87,7 @@ if __name__ == "__main__":
     parser.add_argument("--sample-dist",
                         type=str,
                         required=True,
-                        choices=["uniform"])
+                        choices=["uniform", "original"])
     parser.add_argument("--no-wandb", action="store_true")
     parser.add_argument("--wandb-name", type=str, default=None)
     args = parser.parse_args()
@@ -109,6 +109,8 @@ if __name__ == "__main__":
         for domain_idx in range(args.num_domains):
             if args.sample_dist == "uniform":
                 proportion = 1 / args.num_domains
+            if args.sample_dist == "original":
+                proportion = None
             streams.append(
                 Stream(remote=os.path.join(args.remote_base,
                                            f"domain-{domain_idx}"),
