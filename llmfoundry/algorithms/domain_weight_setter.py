@@ -45,6 +45,7 @@ class DomainWeightSetter(Algorithm):
 
         self.trajectory_domain_weights = self.domain_weights
         self.smoothing_dist = torch.ones(num_domains) / num_domains
+        self.lambdas = torch.zeros(num_domains)
 
         self.warmup_steps = warmup_steps
 
@@ -109,6 +110,7 @@ class DomainWeightSetter(Algorithm):
         device = state.batch["input_ids"].device
         self.smoothing_dist = self.smoothing_dist.to(device)
         self.domain_weights = self.domain_weights.to(device)
+        self.lambdas = self.lambdas.to(device)
         self.trajectory_domain_weights = self.trajectory_domain_weights.to(
             device)
 
@@ -170,6 +172,9 @@ class DomainWeightSetter(Algorithm):
                 return
 
             lambdas = domain_excess_loss / seq_len_normalization
+            lambdas[(lambdas == 0.0)] = self.lambdas[(lambdas == 0.0)]
+            self.lambdas = lambdas
+
             domain_weights_prime = self.domain_weights * torch.exp(
                 self.step_size * lambdas)
             domain_weights_prime = domain_weights_prime / torch.sum(
