@@ -44,6 +44,7 @@ class DomainWeightSetter(Algorithm):
                 "Only uniform initialization is supported")
 
         self.trajectory_domain_weights = self.domain_weights
+        self.num_updates = 1
         self.smoothing_dist = torch.ones(num_domains) / num_domains
         self.lambdas = torch.zeros(num_domains)
 
@@ -98,7 +99,7 @@ class DomainWeightSetter(Algorithm):
                               path=domain_weights_path,
                               uploader=remote_uploader,
                               state=state)
-            num_steps = max(1, int(state.timestamp.batch) + 1 - self.warmup_steps)
+            num_steps = max(1, self.num_updates + 1 - self.warmup_steps)
             average_domain_weights = self.trajectory_domain_weights / num_steps
             self._upload_data(average_domain_weights.cpu().numpy(),
                               path=average_domain_weights_path,
@@ -186,6 +187,7 @@ class DomainWeightSetter(Algorithm):
 
             self.domain_weights = domain_weights
             self.trajectory_domain_weights += domain_weights
+            self.num_updates += 1
 
             state.batch_set_item(key="domain_weights",
                                  value=self.domain_weights)
