@@ -49,7 +49,7 @@ parameters:
 
   # Optimization
   global_train_batch_size: 512 # ~1M tokens, update for hero run, must be divisible by gpu_num
-  max_duration: # Set by launch script
+  max_duration: 100000ba
 
   optimizer:
     name: decoupled_lionw
@@ -101,6 +101,7 @@ parameters:
   # Checkpointing
   autoresume: # Set by launch script
   save_filename: ep{epoch}-ba{batch}/rank{rank}.pt
+  save_overwrite: true
   save_folder: oci://mosaicml-internal-checkpoints/zack/DoReMi/pile/proxy/${run_name}-seed-${global_seed} # update for hero run
   save_interval: 1000ba # update for hero run, e.g. 2000ba
   save_num_checkpoints_to_keep: 1
@@ -113,7 +114,9 @@ parameters:
       step_size: # Set by launch script
       smoothing: # Set by launch script
       init_dist: # Set by launch script
+      warmup_steps: # Set by launch script
       log_domain_weights_freq: 100 # Will be interpreted as batches, for prod. code make official Timestamp obj.
+      log_excess_loss: True
     gradient_clipping:
       clipping_threshold: 1
       clipping_type: norm
@@ -152,16 +155,16 @@ parameters:
       split: val
 
   # In-context-learning tasks
-  icl_tasks:
-    - label: piqa
-      dataset_uri: eval/local_data/piqa.jsonl
-      num_fewshot: [0, 1, 5]
-      icl_task_type: multiple_choice
-      continuation_delimiter: "Answer: "
-    - label: lambada
-      dataset_uri: eval/local_data/lambada_openai.jsonl
-      num_fewshot: [0]
-      icl_task_type: language_modeling
+  # icl_tasks:
+  #   - label: piqa
+  #     dataset_uri: eval/local_data/piqa.jsonl
+  #     num_fewshot: [0, 1, 5]
+  #     icl_task_type: multiple_choice
+  #     continuation_delimiter: "Answer: "
+  #   - label: lambada
+  #     dataset_uri: eval/local_data/lambada_openai.jsonl
+  #     num_fewshot: [0]
+  #     icl_task_type: language_modeling
 
   # Train loader
   train_loader:

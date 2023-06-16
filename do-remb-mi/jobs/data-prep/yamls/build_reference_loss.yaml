@@ -1,8 +1,8 @@
 run_name: pile-ref-build
-platform: r1z1
-gpu_type: a100_80gb
+platform: r4z4
+gpu_type: a100_40gb
 gpu_num: 8
-image: mosaicml/pytorch:1.13.1_cu117-python3.10-ubuntu20.04
+image: mosaicml/llm-foundry:1.13.1_cu117-latest
 integrations:
   - integration_type: git_repo
     git_repo: zankner/llm-foundry
@@ -13,8 +13,9 @@ integrations:
   - integration_type: pip_packages
     packages:
       - oci-cli
+#
 command: |
   pip install oci-cli
   cd llm-foundry
-  composer -n 8 do-remb-mi/scripts/data/build_reference_loss.py --batch-size 256 --num-domains {NUM_DOMAINS} --subset-domains {SUBSET_DOMAINS} --ref-model-size 125M --ref-model-ckpt oci://mosaicml-internal-checkpoints/zack/DoReMi/pile/reference/ref-125M-param-step-100K-seed-17/ep0-ba100000/rank0.pt
-  oci os object bulk-upload -bn mosaicml-internal-doremi --src-dir /tmp/domains --prefix pile/token-ref-loss/gpt-neox-20b-seqlen-2048/data-sources/ > /dev/null
+  composer -n 8 do-remb-mi/scripts/data/build_reference_loss.py --batch-size 128 --num-domains {NUM_DOMAINS} --subset-domains {SUBSET_DOMAINS} --splits {SPLIT} --ref-model-size {MODEL_SIZE} --ref-model-ckpt {REF_MODEL_CKPT} --remote-base {REMOTE_BASE}
+  oci os object bulk-upload -bn mosaicml-internal-doremi --src-dir /tmp/domains --prefix {UPLOAD_DIR}/ > /dev/null

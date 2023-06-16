@@ -1,5 +1,10 @@
 import argparse
+import tempfile
+import os
+
 from mcli import RunConfig, create_run
+from composer.utils import get_file
+import numpy as np
 
 from utils import build_domain_streams
 
@@ -13,14 +18,26 @@ replicate_proportions = [
     0.0018, 0.0093, 0.0061, 0.0062, 0.0134, 0.0502, 0.0274, 0.0063, 0.0070
 ]  # Weights from DoReMI paper for 280M ref model
 
+WEIGHTS_BASE = "oci://mosaicml-internal-doremi/pile/proxy-weights"
+
+
+def load_weights(weight_file: str):
+    with tempfile.NamedTemporaryFile() as tmp_file:
+        get_file(weight_file, tmp_file.name, overwrite=True)
+        weights = np.load(tmp_file.name)
+    return weights
+
 
 def get_proportions(domain_source: str):
-    if args.domain_source == "baseline":
+    if domain_source == "baseline":
         return baseline_proportions
-    if args.domain_source == "replicate":
+    if domain_source == "replicate":
         return replicate_proportions
     else:
-        raise ValueError(f"Unknown domain source {domain_source}")
+        return [
+            float(weight) for weight in list(
+                load_weights(os.path.join(WEIGHTS_BASE, domain_source)))
+        ]
 
 
 if __name__ == "__main__":
@@ -32,6 +49,7 @@ if __name__ == "__main__":
     parser.add_argument("--num-domains", type=int, default=22)
     parser.add_argument("--not-embed", action="store_true")
     parser.add_argument("--domain-source", type=str, required=True)
+    parser.add_argument("--proxy", type=str, required=True)
     parser.add_argument("--autoresume", action="store_true")
     parser.add_argument("--preemptible", action="store_true")
     parser.add_argument("--num-steps",
@@ -42,8 +60,7 @@ if __name__ == "__main__":
                         default=[17])  # Add more later
     args = parser.parse_args()
 
-    embed = not args.not_embed
-    if embed:
+    if args.not_embed:
         data_remote_dir = "data-sources"
     else:
         data_remote_dir = f"{args.num_domains}-clusters"
@@ -61,7 +78,7 @@ if __name__ == "__main__":
         base_run.name = f"zack-final-{args.model_size}-step-{args.num_steps}-sd-{seed}".lower(
         )
         base_run.parameters[
-            "run_name"] = f"final-{args.model_size}-param-step-{args.num_steps}-ds-{args.domain_source}"
+            "run_name"] = f"final-{args.model_size}-param-step-{args.num_steps}-ds-{args.proxy}"
 
         base_run.cluster = args.cluster
         base_run.gpu_num = args.ngpus
@@ -76,8 +93,9 @@ if __name__ == "__main__":
         base_run.parameters["global_seed"] = seed
 
         base_run.parameters["loggers"]["wandb"]["tags"] += [
-            args.model_size, f"steps-{args.num_steps}",
-            f"ds-{args.domain_source}"
+            args.model_size,
+            f"steps-{args.num_steps}",
+            # f"ds-{args.domain_source}"
         ]
 
         base_run.parameters[
