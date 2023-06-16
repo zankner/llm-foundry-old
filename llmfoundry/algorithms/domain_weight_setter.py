@@ -33,6 +33,7 @@ class DomainWeightSetter(Algorithm):
                  log_domain_weights_freq=100,
                  log_excess_loss=False):
 
+        self.num_domains = num_domains
         self.step_size = step_size
         self.smoothing = smoothing
 
@@ -47,6 +48,7 @@ class DomainWeightSetter(Algorithm):
         self.num_updates = 1
         self.smoothing_dist = torch.ones(num_domains) / num_domains
         self.lambdas = torch.zeros(num_domains)
+        self.perdomain_scores = torch.zeros(num_domains)
 
         self.warmup_steps = warmup_steps
 
@@ -55,9 +57,8 @@ class DomainWeightSetter(Algorithm):
         self.log_excess_loss = log_excess_loss
 
     def match(self, event: Event, state: State) -> bool:
-        return (event == Event.BEFORE_FORWARD or
-                event == Event.AFTER_FORWARD or event == Event.FIT_END or
-                event == Event.AFTER_TRAIN_BATCH)
+        return (event == Event.BEFORE_FORWARD or event == Event.AFTER_FORWARD or
+                event == Event.FIT_END or event == Event.AFTER_TRAIN_BATCH)
 
     def _upload_data(self, data, path: str, uploader: RemoteUploaderDownloader,
                      state: State):
@@ -129,64 +130,68 @@ class DomainWeightSetter(Algorithm):
         elif event == Event.FIT_END:
             self._log_domain_weights(state, final=True)
         elif event == Event.AFTER_FORWARD:
-            domain_excess_loss, ref_loss, proxy_loss, seq_len_normalization = state.model.compute_domain_wise_excess_loss(
+            pertoken_loss, reference_loss = state.model.compute_domain_wise_excess_loss(
                 state.outputs,
                 state.batch,
                 self.domain_weights,
                 non_zero_excess=True)
 
-            dist.all_reduce(ref_loss, "sum")
-            dist.all_reduce(proxy_loss, "sum")
-            dist.all_reduce(domain_excess_loss, "sum")
-            dist.all_reduce(seq_len_normalization, "sum")
+            scores = pertoken_loss - reference_loss
+
+            # dist.all_reduce(ref_loss, "sum")
+            # dist.all_reduce(proxy_loss, "sum")
+            scores = dist.all_gather(scores)
+            domain_ids = dist.all_gather(state.batch["domain_idx"])
+            # dist.all_reduce(seq_len_normalization, "sum")
             dist.barrier()
 
-            seq_len_normalization = torch.maximum(
-                seq_len_normalization, torch.ones_like(seq_len_normalization)
-            )  # Avoid changing unused domain weights
+            scores = scores.detach()
+            domain_ids = domain_ids.detach()
+            domain_ids = domain_ids.expand_as(scores)
+            scores_mask = torch.ones_like(scores, dtype=torch.bool)
+
+            perdomain_scores = []
+            for domain_id in range(self.num_domains):
+                domain_mask = (domain_ids == domain_id)
+                perdomain_scores_mask = scores_mask[domain_mask]
+                if domain_mask.sum() > 0:
+                    curr_domain_scores = torch.clip(
+                        scores[domain_mask][perdomain_scores_mask],
+                        min=0).mean()
+                else:
+                    curr_domain_scores = self.perdomain_scores[domain_id]
+                perdomain_scores.append(curr_domain_scores)
+            self.perdomain_scores[:] = torch.tensor(perdomain_scores)
+            log_new_train_domain_weights = torch.log(
+                train_domain_weights) + self.step_size * self.perdomain_scores
+            new_train_domain_weights = torch.nn.functional.softmax(
+                log_new_train_domain_weights, dim=0)
+            train_domain_weights = (
+                1 - self.smoothing
+            ) * new_train_domain_weights + self.smoothing / len(
+                new_train_domain_weights)
 
             if self.log_excess_loss and dist.get_global_rank() == 0:
                 to_log = {}
-                for domain_idx, (excess_loss, ref_loss,
-                                 proxy_loss) in enumerate(
-                                     zip(
-                                         domain_excess_loss /
-                                         seq_len_normalization,
-                                         ref_loss / seq_len_normalization,
-                                         proxy_loss / seq_len_normalization)):
-                    excess_loss = excess_loss.cpu().item()
-                    ref_loss = ref_loss.cpu().item()
-                    proxy_loss = proxy_loss.cpu().item()
-                    if excess_loss > 0:
+                for domain_idx in range(self.num_domains):
+                    el = scores[(domain_ids == domain_idx)].sum().cpu().item()
+                    if el > 0:
                         to_log[
-                            f"Excess-loss/domain-{PILE_DATA_SOURCES[domain_idx]}"] = excess_loss
-                        to_log[
-                            f"Ref-loss/domain-{PILE_DATA_SOURCES[domain_idx]}"] = ref_loss
-                        to_log[
-                            f"Proxy-loss/domain-{PILE_DATA_SOURCES[domain_idx]}"] = proxy_loss
+                            f"Excess-loss/domain-{PILE_DATA_SOURCES[domain_idx]}"] = el
+                        # to_log[
+                        #     f"Ref-loss/domain-{PILE_DATA_SOURCES[domain_idx]}"] = ref_loss
+                        # to_log[
+                        #     f"Proxy-loss/domain-{PILE_DATA_SOURCES[domain_idx]}"] = proxy_loss
                 logger.log_metrics(to_log)
 
             if int(state.timestamp.batch) < self.warmup_steps:
                 state.batch_set_item(key="domain_weights",
-                                 value=self.domain_weights)
+                                     value=self.domain_weights)
                 self._log_domain_weights(state)
                 return
 
-            lambdas = domain_excess_loss / seq_len_normalization
-            lambdas[(lambdas == 0.0)] = self.lambdas[(lambdas == 0.0)]
-            self.lambdas = lambdas
-
-            domain_weights_prime = self.domain_weights * torch.exp(
-                self.step_size * lambdas)
-            domain_weights_prime = domain_weights_prime / torch.sum(
-                domain_weights_prime)  # Normalizing domain weight update
-
-            domain_weights = (
-                1 - self.smoothing
-            ) * domain_weights_prime + self.smoothing * self.smoothing_dist  # Compute EMA of domain weights
-
-            self.domain_weights = domain_weights
-            self.trajectory_domain_weights += domain_weights
+            self.domain_weights = train_domain_weights
+            self.trajectory_domain_weights += train_domain_weights
             self.num_updates += 1
 
             state.batch_set_item(key="domain_weights",
