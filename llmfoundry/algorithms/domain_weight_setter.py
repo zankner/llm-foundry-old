@@ -113,6 +113,7 @@ class DomainWeightSetter(Algorithm):
         self.smoothing_dist = self.smoothing_dist.to(device)
         self.domain_weights = self.domain_weights.to(device)
         self.lambdas = self.lambdas.to(device)
+        self.perdomain_scores = self.perdomain_scores.to(device)
         self.trajectory_domain_weights = self.trajectory_domain_weights.to(
             device)
 
@@ -130,6 +131,7 @@ class DomainWeightSetter(Algorithm):
         elif event == Event.FIT_END:
             self._log_domain_weights(state, final=True)
         elif event == Event.AFTER_FORWARD:
+            train_domain_weights = self.domain_weights.clone()
             pertoken_loss, reference_loss = state.model.compute_domain_wise_excess_loss(
                 state.outputs,
                 state.batch,
@@ -140,14 +142,14 @@ class DomainWeightSetter(Algorithm):
 
             # dist.all_reduce(ref_loss, "sum")
             # dist.all_reduce(proxy_loss, "sum")
-            scores = dist.all_gather(scores)
-            domain_ids = dist.all_gather(state.batch["domain_idx"])
+            scores = torch.cat(dist.all_gather(scores), dim=0)
+            domain_ids = torch.cat(dist.all_gather(state.batch["domain_idx"]), dim=0)
             # dist.all_reduce(seq_len_normalization, "sum")
             dist.barrier()
 
             scores = scores.detach()
             domain_ids = domain_ids.detach()
-            domain_ids = domain_ids.expand_as(scores)
+            domain_ids = torch.unsqueeze(domain_ids, 1).expand_as(scores)
             scores_mask = torch.ones_like(scores, dtype=torch.bool)
 
             perdomain_scores = []
