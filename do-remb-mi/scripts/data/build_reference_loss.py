@@ -1,4 +1,5 @@
 import argparse
+import os
 
 from omegaconf import OmegaConf
 import torch
@@ -33,8 +34,8 @@ class ReferenceLossCallback(Callback):
                                          out=writer_path,
                                          compression="zstd")
         self.streaming_writer = streaming_writer
-        self.ref_loss_fn = nn.CrossEntropyLoss(ignore_index=-100,
-                                               reduction="none")
+        self.proxy_loss_fn = nn.CrossEntropyLoss(ignore_index=-100,
+                                                 reduction="none")
 
     def eval_after_forward(self, state: State, logger: Logger) -> None:
         ref_logits = state.outputs.logits
@@ -44,8 +45,8 @@ class ReferenceLossCallback(Callback):
 
         state.model.labels = targets  # So we can compute metrics
 
-        losses = self.ref_loss_fn(ref_logits.view(-1, vocab_size),
-                                  targets.view(-1))
+        losses = self.proxy_loss_fn(ref_logits.view(-1, vocab_size),
+                                    targets.view(-1))
         losses = losses.view(b, n_tokens)
 
         all_losses = torch.vstack(dist.all_gather(losses))
@@ -147,8 +148,9 @@ def main(args):
             dataset = StreamingTextDataset(
                 tokenizer=tokenizer,
                 max_seq_len=args.max_seq_len,
-                remote=
-                f"oci://mosaicml-internal-doremi/pile/pre-concat/gpt-neox-20b-seqlen-2048/data-sources/domain-{domain_id}",  # TODO: SHOULD BE A PASSED ARG
+                remote=os.path.join(
+                    args.remote_base,
+                    f"domain-{domain_id}"),  # TODO: SHOULD BE A PASSED ARG
                 local=f"/tmp/streaming/domain-{domain_id}",
                 split=split,
                 batch_size=device_batch_size,
@@ -209,6 +211,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch-size", type=int, default=256)
+    parser.add_argument("--remote-base", type=str, required=True)
     parser.add_argument("--splits", nargs="+", type=str, default=["train"])
     parser.add_argument("--num-domains", type=int, required=True)
     parser.add_argument("--subset-domains", nargs="+", type=int, default=None)
