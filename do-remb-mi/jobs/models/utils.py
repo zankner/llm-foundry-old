@@ -1,4 +1,5 @@
 import os
+import copy
 from typing import List, Optional
 
 
@@ -7,7 +8,9 @@ def build_ref_name(args, domain_types):
 
 
 def build_proxy_name(args, domain_types):
-    return f"proxy-ss-{args.step_size}-sm-{args.smoothing}-ws-{args.warmup_steps}-{build_ref_name(args, domain_types)}"
+    ref_args = copy.deepcopy(args)
+    ref_args.subsample_dist = args.ref_subsample_dist
+    return f"proxy-ss-{args.step_size}-sm-{args.smoothing}-ws-{args.warmup_steps}-{build_ref_name(ref_args, domain_types)}"
 
 
 def build_data_path(args, mode):
@@ -20,7 +23,7 @@ def build_data_path(args, mode):
     else:
         domain_dir = f"{args.num_domains}-clusters"
 
-    subsample_dir = f"baseline-{args.num_samples}-samples"
+    subsample_dir = f"{args.subsample_dist}-{args.num_samples}-samples"
 
     remote_base = os.path.join(data_prefix, domain_dir, subsample_dir)
     return remote_base, domain_dir

@@ -1,4 +1,5 @@
 import argparse
+import copy
 
 from mcli import RunConfig, create_run
 from omegaconf import OmegaConf
@@ -36,7 +37,8 @@ if __name__ == "__main__":
     parser.add_argument("--subsample-dist",
                         type=str,
                         required=True,
-                        choices=["baseline", "uniform"])
+                        choices=["uniform"])
+    parser.add_argument("--ref-subsample-dist", type=str, default="baseline")
     parser.add_argument("--num-samples",
                         type=str,
                         required=True,
@@ -44,12 +46,11 @@ if __name__ == "__main__":
     parser.add_argument("--not-embed", action="store_true")
     args = parser.parse_args()
 
-    # For now assumes that proxy model config same as ref
-    remote_base, domain_types = build_data_path(args, mode="token-ref-loss")
+    ref_args = copy.deepcopy(args)
+    ref_args.subsample_dist = args.ref_subsample_dist
+    remote_base, domain_types = build_data_path(ref_args, mode="token-ref-loss")
     if args.subsample_dist == "uniform":
         proportions = [1 / args.num_domains] * args.num_domains
-    else:
-        proportions = None
     domain_streams = build_domain_streams(args.num_domains,
                                           remote_base,
                                           proportions=proportions)
@@ -80,6 +81,7 @@ if __name__ == "__main__":
             f"smoothing-{args.smoothing}",
             f"dataset-{args.dataset}",
             f"domain-{domain_types}",
+            f"ref-subsample-dist-{args.ref_subsample_dist}",
             f"subsample-dist-{args.subsample_dist}",
             f"samples-{args.num_samples}",
             f"warmup-steps-{args.warmup_steps}",

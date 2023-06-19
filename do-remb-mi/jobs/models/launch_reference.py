@@ -40,13 +40,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     remote_base, domain_types = build_data_path(args, mode="pre-concat")
-    if args.subsample_dist == "uniform":
-        proportions = [1 / args.num_domains] * args.num_domains
-    else:
-        proportions = None
-    domain_streams = build_domain_streams(args.num_domains,
-                                          remote_base,
-                                          proportions=proportions)
+    domain_streams = build_domain_streams(
+        args.num_domains, remote_base,
+        proportions=None)  # Set since all sampling should be pre-processed
 
     for seed in args.seeds:
         base_run = RunConfig.from_file(

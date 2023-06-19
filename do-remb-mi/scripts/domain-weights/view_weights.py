@@ -40,7 +40,7 @@ def get_all_weights(weights_dir: str,
     return weights
 
 
-def ema(weights, decay=0.8):
+def ema(weights, decay=0.99):
     ema_weights = []
     for weight in weights:
         if len(ema_weights) == 0:
