@@ -1,5 +1,6 @@
 import argparse
 import os
+import copy
 import platform
 from typing import Dict, Iterable, Optional
 
@@ -55,8 +56,10 @@ def generate_samples(
             if truncate_num_samples is not None and n_samples == truncate_num_samples:
                 return
             n_samples += 1
-            sample = {k: v[idx] for k, v in batch.items() if k != "uid"}
-            sample["uid"] = batch["uid"][idx].item()
+            sample = {
+                k: copy.deepcopy(v[idx]) for k, v in batch.items() if k != "uid"
+            }
+            sample["uid"] = copy.deepcopy(batch["uid"][idx].item())
             yield sample
 
 
@@ -88,18 +91,21 @@ class EmbedTokensDataset(IterableDataset):
         self,
         dataset: StreamingDataset,
         tokenizer: PreTrainedTokenizerBase,
+        prefix: str,
         max_length: int,
     ):
         self.dataset = dataset
         self.tokenizer = tokenizer
         os.environ['TOKENIZERS_PARALLELISM'] = 'false'
+        self.prefix = prefix
         self.max_length = max_length
 
     def __iter__(self) -> Iterable[Dict[str, bytes]]:
 
         for sample in self.dataset:
             uid = sample['uid']
-            encoded = tokenizer(sample["text"],
+            text = self.prefix + sample["text"]
+            encoded = tokenizer(text,
                                 truncation=True,
                                 max_length=self.max_length,
                                 return_overflowing_tokens=True,
@@ -119,17 +125,21 @@ class EmbedTokensDataset(IterableDataset):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--remote", type=str, required=True)
-    parser.add_argument("--local", type=str, default="/tmp/domain-local")
+    parser.add_argument("--local",
+                        type=str,
+                        default="/tmp/tokenize-for-embedding")
     parser.add_argument("--splits", type=str, nargs="+", default=["train"])
     parser.add_argument("--max-length", type=int, default=512)
     parser.add_argument("--tokenizer", type=str, default="intfloat/e5-large")
+    parser.add_argument("--prefix", type=str, default="query: ")
     parser.add_argument("--no-wandb", action="store_true")
     parser.add_argument("--wandb-name", type=str, default="tokenize-for-embed")
     args = parser.parse_args()
 
-    wandb.init(name=args.wandb_name,
-               project="doremi-preprocess",
-               entity="mosaic-ml")
+    if not args.no_wandb:
+        wandb.init(name=args.wandb_name,
+                   project="doremi-preprocess",
+                   entity="mosaic-ml")
 
     tokenizer = AutoTokenizer.from_pretrained("intfloat/e5-base")
     tokenizer.model_max_length = int(1e30)
@@ -137,12 +147,15 @@ if __name__ == "__main__":
     for split in args.splits:
         print(f"Converting split {split}")
         data = StreamingDataset(remote=args.remote,
-                                local=args.local,
+                                local=os.path.join(args.local, "streaming"),
                                 split=split,
                                 shuffle=False)
         n_samples = data.index.total_samples
         denominator = n_samples * 6212 // (512 * 4)
-        data = EmbedTokensDataset(data, tokenizer, max_length=args.max_length)
+        data = EmbedTokensDataset(data,
+                                  tokenizer,
+                                  prefix=args.prefix,
+                                  max_length=args.max_length)
         loader = build_dataloader(data, batch_size=args.max_length)
         samples = generate_samples(loader, truncate_num_samples=None)
 
@@ -154,11 +167,12 @@ if __name__ == "__main__":
         }
 
         with MDSWriter(columns=columns,
-                       out=os.path.join("/tmp", "embedding-tokenized", split),
+                       out=os.path.join(os.path.join(args.local, "processed"),
+                                        split),
                        compression="zstd") as out:
             for step, sample in enumerate(
                     tqdm(samples, desc=split, total=denominator, leave=True)):
                 out.write(sample)
 
-                if step % 1_000 == 0:
+                if step % 1_000 == 0 and not args.no_wandb:
                     wandb.log(({'step': step, 'progress': step / denominator}))
