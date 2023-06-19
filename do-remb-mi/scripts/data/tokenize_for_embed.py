@@ -1,3 +1,4 @@
+import argparse
 import os
 import platform
 from typing import Dict, Iterable, Optional
@@ -8,8 +9,6 @@ from tqdm import tqdm
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 import wandb
 import numpy as np
-
-from llmfoundry.data import NoConcatDataset
 
 
 def build_dataloader(dataset, batch_size) -> DataLoader:
@@ -100,7 +99,6 @@ class EmbedTokensDataset(IterableDataset):
 
         for sample in self.dataset:
             uid = sample['uid']
-            # print(sample)
             encoded = tokenizer(sample["text"],
                                 truncation=True,
                                 max_length=self.max_length,
@@ -119,28 +117,33 @@ class EmbedTokensDataset(IterableDataset):
 
 
 if __name__ == "__main__":
-    wandb.init(name="tokenize-for-embed",
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--remote", type=str, required=True)
+    parser.add_argument("--local", type=str, default="/tmp/domain-local")
+    parser.add_argument("--splits", type=str, nargs="+", default=["train"])
+    parser.add_argument("--max-length", type=int, default=512)
+    parser.add_argument("--tokenizer", type=str, default="intfloat/e5-large")
+    parser.add_argument("--no-wandb", action="store_true")
+    parser.add_argument("--wandb-name", type=str, default="tokenize-for-embed")
+    args = parser.parse_args()
+
+    wandb.init(name=args.wandb_name,
                project="doremi-preprocess",
                entity="mosaic-ml")
-
-    remote = "oci://mosaicml-internal-dataset-pile/base"
-    local = "/tmp/streaming/pile"
 
     tokenizer = AutoTokenizer.from_pretrained("intfloat/e5-base")
     tokenizer.model_max_length = int(1e30)
 
-    splits = ["train"]
-
-    for split in splits:
+    for split in args.splits:
         print(f"Converting split {split}")
-        data = StreamingDataset(remote=remote,
-                                local=local,
+        data = StreamingDataset(remote=args.remote,
+                                local=args.local,
                                 split=split,
                                 shuffle=False)
         n_samples = data.index.total_samples
         denominator = n_samples * 6212 // (512 * 4)
-        data = EmbedTokensDataset(data, tokenizer, max_length=512)
-        loader = build_dataloader(data, batch_size=512)
+        data = EmbedTokensDataset(data, tokenizer, max_length=args.max_length)
+        loader = build_dataloader(data, batch_size=args.max_length)
         samples = generate_samples(loader, truncate_num_samples=None)
 
         columns = {
@@ -151,7 +154,7 @@ if __name__ == "__main__":
         }
 
         with MDSWriter(columns=columns,
-                       out=os.path.join("/tmp", "tokenize-embedding", split),
+                       out=os.path.join("/tmp", "embedding-tokenized", split),
                        compression="zstd") as out:
             for step, sample in enumerate(
                     tqdm(samples, desc=split, total=denominator, leave=True)):
