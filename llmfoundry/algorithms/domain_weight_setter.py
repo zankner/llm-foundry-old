@@ -55,9 +55,8 @@ class DomainWeightSetter(Algorithm):
         self.log_excess_loss = log_excess_loss
 
     def match(self, event: Event, state: State) -> bool:
-        return (event == Event.BEFORE_FORWARD or
-                event == Event.AFTER_FORWARD or event == Event.FIT_END or
-                event == Event.AFTER_TRAIN_BATCH)
+        return (event == Event.BEFORE_FORWARD or event == Event.AFTER_FORWARD or
+                event == Event.FIT_END or event == Event.AFTER_TRAIN_BATCH)
 
     def _upload_data(self, data, path: str, uploader: RemoteUploaderDownloader,
                      state: State):
@@ -168,7 +167,7 @@ class DomainWeightSetter(Algorithm):
 
             if int(state.timestamp.batch) < self.warmup_steps:
                 state.batch_set_item(key="domain_weights",
-                                 value=self.domain_weights)
+                                     value=self.domain_weights)
                 self._log_domain_weights(state)
                 return
 

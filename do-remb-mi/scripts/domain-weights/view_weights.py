@@ -14,6 +14,10 @@ PILE_DATA_SOURCES = [
     "Ubuntu IRC", "BookCorpus2", "EuroParl", "HackerNews", "YoutubeSubtitles",
     "PhilPapers", "NIH ExPorter", "Enron Emails"
 ]
+BASELINE_PROPORTIONS = [
+    0.16, 0.127, 0.114, 0.09, 0.102, 0.098, 0.055, 0.056, 0.029, 0.024, 0.021,
+    0.017, 0.037, 0.021, 0.012, 0.007, 0.009, 0.006, 0.008, 0.004, 0.002, 0.001
+]
 WEIGHTS_BASE = "oci://mosaicml-internal-doremi/pile/proxy-weights"
 
 
@@ -57,9 +61,9 @@ def main(args):
                               max_steps=args.max_steps,
                               start_step=args.start_step,
                               log_freq=args.log_freq,
-                              average=not args.no_average)
+                              average=not args.ema)
     if args.ema:
-        weights = {k: ema(v) for k, v in weights.items()}
+        weights = {k: ema(v, args.ema) for k, v in weights.items()}
         sums = [
             sum([weights[weight][i]
                  for weight in weights])
@@ -69,6 +73,10 @@ def main(args):
             k: [v[i] / sums[i] for i in range(len(v))]
             for k, v in weights.items()
         }
+
+    green = "\033[92m"
+    red = "\033[91m"
+    reset = "\033[0m"
 
     # Sort the weights
     weights = sorted(weights.items(), key=lambda x: x[1][-1], reverse=True)
@@ -82,7 +90,12 @@ def main(args):
             display_domain_name = PILE_DATA_SOURCES[int(
                 domain_name.split("-")[-1])]
         plt.plot(steps, weight_trajectory, label=display_domain_name)
-        print(f"{display_domain_name}: {weight_trajectory[-1]}")
+
+        delta = weight_trajectory[-1] - BASELINE_PROPORTIONS[int(
+            domain_name.split('-')[-1])]
+        print(
+            f"{display_domain_name}: {weight_trajectory[-1]} ---- Delta: {green if delta >=0 else red}{delta:.3f}{reset}"
+        )
 
     # Create the legend outside the plot
     plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
@@ -102,8 +115,7 @@ if __name__ == "__main__":
     parser.add_argument("--start-step", type=int, default=0)
     parser.add_argument("--max-steps", type=int, required=True)
     parser.add_argument("--data-source", action="store_true")
-    parser.add_argument("--no-average", action="store_true")
-    parser.add_argument("--ema", action="store_true")
+    parser.add_argument("--ema", type=float, default=None)
     args = parser.parse_args()
 
     main(args)

@@ -13,6 +13,14 @@ def build_proxy_name(args, domain_types):
     return f"proxy-ss-{args.step_size}-sm-{args.smoothing}-ws-{args.warmup_steps}-{build_ref_name(ref_args, domain_types)}"
 
 
+def build_final_name(args, domain_types):
+    if args.domain_source == "doremi":
+        proxy_args = copy.deepcopy(args)
+        proxy_args.model_size = args.proxy_model_size
+        return f"final-{args.model_size}-{build_proxy_name(proxy_args, domain_types)}"
+    return f"final-{args.model_size}-{args.domain_source}"
+
+
 def build_data_path(args, mode):
     data_prefix = os.path.join("oci://mosaicml-internal-doremi", args.dataset,
                                mode, args.tokenizer)
@@ -23,7 +31,7 @@ def build_data_path(args, mode):
     else:
         domain_dir = f"{args.num_domains}-clusters"
 
-    subsample_dir = f"{args.subsample_dist}-{args.num_samples}-samples"
+    subsample_dir = f"baseline-{args.num_samples}-samples"
 
     remote_base = os.path.join(data_prefix, domain_dir, subsample_dir)
     return remote_base, domain_dir
