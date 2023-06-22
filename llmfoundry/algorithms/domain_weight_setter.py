@@ -60,7 +60,7 @@ class DomainWeightSetter(Algorithm):
 
     def match(self, event: Event, state: State) -> bool:
         return (event == Event.BEFORE_FORWARD or event == Event.AFTER_FORWARD or
-                event == Event.FIT_END or event == Event.AFTER_TRAIN_BATCH)
+                event == Event.FIT_END or event == Event.BATCH_END)
 
     def _upload_data(self, data, path: str, uploader: RemoteUploaderDownloader,
                      state: State):
@@ -116,6 +116,8 @@ class DomainWeightSetter(Algorithm):
         self.lambdas = self.lambdas.to(device)
         self.trajectory_domain_weights = self.trajectory_domain_weights.to(
             device)
+        self.domain_excess_loss = self.domain_excess_loss.to(device)
+        self.seq_len_normalization = self.seq_len_normalization.to(device)
 
         # Can probably change to be a batch event but think it might get wiped from the state
         if event == Event.BEFORE_FORWARD:
@@ -147,11 +149,14 @@ class DomainWeightSetter(Algorithm):
             self.domain_excess_loss += domain_excess_loss.detach()
             self.seq_len_normalization += seq_len_normalization.detach()
 
+            state.batch_set_item(key="domain_weights",
+                                 value=self.domain_weights)
+
         elif event == Event.BATCH_END:
             domain_excess_loss = self.domain_excess_loss
             seq_len_normalization = torch.maximum(
                 self.seq_len_normalization,
-                torch.ones_like(seq_len_normalization
+                torch.ones_like(self.seq_len_normalization
                                ))  # Avoid changing unused domain weights
 
             lambdas = domain_excess_loss / seq_len_normalization
@@ -187,8 +192,6 @@ class DomainWeightSetter(Algorithm):
             self.num_updates += 1
 
             # Broadcasting domain weight information
-            state.batch_set_item(key="domain_weights",
-                                 value=self.domain_weights)
             self._log_domain_weights(state)
 
             # Resetting trackers (self.lambdas set to be same above)
