@@ -180,7 +180,7 @@ class DomainWeightSetter(Algorithm):
 
             domain_weights = (
                 1 - self.smoothing
-            ) * domain_weights_prime + self.smoothing * self.smoothing_dist  # Compute EMA of domain weights
+            ) * domain_weights_prime + self.smoothing * self.smoothing_dist  # Smooth w/ uniform domain dist
 
             self.domain_weights = domain_weights
             self.trajectory_domain_weights += domain_weights
@@ -194,5 +194,6 @@ class DomainWeightSetter(Algorithm):
             # Resetting trackers (self.lambdas set to be same above)
             self.seq_len_normalization = torch.zeros_like(
                 self.seq_len_normalization)
+            self.domain_excess_loss = torch.zeros_like(self.domain_excess_loss)
 
         dist.barrier()
