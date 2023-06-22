@@ -2,7 +2,7 @@ import argparse
 import os
 import copy
 import platform
-from typing import Dict, Iterable, Optional
+from typing import Dict, Iterable, Optional, List
 
 from streaming import MDSWriter, StreamingDataset
 from torch.utils.data import DataLoader, IterableDataset
@@ -91,14 +91,19 @@ class EmbedTokensDataset(IterableDataset):
         self,
         dataset: StreamingDataset,
         tokenizer: PreTrainedTokenizerBase,
-        prefix: str,
+        tokenized_prefix: str,
         max_length: int,
     ):
         self.dataset = dataset
         self.tokenizer = tokenizer
         os.environ['TOKENIZERS_PARALLELISM'] = 'false'
-        self.prefix = prefix
+        self.prefix_input_ids = tokenized_prefix["input_ids"]
+        self.prefix_token_type_ids = tokenized_prefix["token_type_ids"]
+        self.prefix_attention_mask = tokenized_prefix["attention_mask"]
         self.max_length = max_length
+
+    def _concat_prefix(self, inputs, prefix):
+        return inputs[:1] + prefix + inputs[1:]
 
     def __iter__(self) -> Iterable[Dict[str, bytes]]:
 
@@ -112,13 +117,27 @@ class EmbedTokensDataset(IterableDataset):
                                 padding=True)
             for input_ids, token_type_ids, attention_mask in zip(
                     encoded["input_ids"], encoded["token_type_ids"],
-                    encoded["attention_mask"]):
+                    encoded["attention_mask"]
+            ):  # Hard setting to these tokenized props
                 yield {
                     # convert to bytes to store in MDS binary format
-                    'tokens': np.asarray(input_ids).tobytes(),
-                    'token_type_ids': np.asarray(token_type_ids).tobytes(),
-                    'attention_mask': np.asarray(attention_mask).tobytes(),
-                    'uid': uid
+                    'tokens':
+                        np.asarray(
+                            self._concat_prefix(input_ids,
+                                                self.prefix_input_ids)
+                        ).tobytes(),
+                    'token_type_ids':
+                        np.asarray(
+                            self._concat_prefix(token_type_ids,
+                                                self.prefix_token_type_ids)
+                        ).tobytes(),
+                    'attention_mask':
+                        np.asarray(
+                            self._concat_prefix(attention_mask,
+                                                self.prefix_attention_mask)
+                        ).tobytes(),
+                    'uid':
+                        uid
                 }
 
 
@@ -144,6 +163,11 @@ if __name__ == "__main__":
     tokenizer = AutoTokenizer.from_pretrained("intfloat/e5-base")
     tokenizer.model_max_length = int(1e30)
 
+    tokenized_prefix = tokenizer(args.prefix,
+                                 truncation=False,
+                                 max_length=False)
+    max_length = args.max_length - tokenized_prefix["input_ids"].shape[1]
+
     for split in args.splits:
         print(f"Converting split {split}")
         data = StreamingDataset(remote=args.remote,
@@ -154,7 +178,7 @@ if __name__ == "__main__":
         denominator = n_samples * 6212 // (512 * 4)
         data = EmbedTokensDataset(data,
                                   tokenizer,
-                                  prefix=args.prefix,
+                                  tokenized_prefix=tokenized_prefix,
                                   max_length=args.max_length)
         loader = build_dataloader(data, batch_size=args.max_length)
         samples = generate_samples(loader, truncate_num_samples=None)
