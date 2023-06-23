@@ -18,7 +18,7 @@ def build_final_name(args, domain_types):
         proxy_args = copy.deepcopy(args)
         proxy_args.model_size = args.proxy_model_size
         return f"final-{args.model_size}-{build_proxy_name(proxy_args, domain_types)}"
-    return f"final-{args.model_size}-{args.domain_source}"
+    return f"final-{args.model_size}-{args.domain_source}-{args.dataset}-{args.num_samples}"
 
 
 def build_data_path(args, mode):

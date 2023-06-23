@@ -71,6 +71,7 @@ if __name__ == "__main__":
     # Final args
     parser.add_argument("--domain-source",
                         type=str,
+                        required=True,
                         choices=["baseline", "replicate", "doremi"])
     parser.add_argument("--proxy-step", type=int, default=100000)
 
@@ -80,10 +81,7 @@ if __name__ == "__main__":
                         type=str,
                         default="gpt-neox-20b-seqlen-2048")
     parser.add_argument("--num-domains", type=int, required=True)
-    parser.add_argument("--subsample-dist",
-                        type=str,
-                        required=True,
-                        choices=["uniform"])
+    parser.add_argument("--subsample-dist", type=str, choices=["uniform"])
     parser.add_argument("--ref-subsample-dist", type=str, default="baseline")
     parser.add_argument("--num-samples",
                         type=str,
