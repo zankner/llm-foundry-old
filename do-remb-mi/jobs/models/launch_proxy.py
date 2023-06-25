@@ -27,6 +27,7 @@ if __name__ == "__main__":
     parser.add_argument("--smoothing", type=float, default=1e-4)
     parser.add_argument("--init-dist", type=str, default="uniform")
     parser.add_argument("--warmup-steps", type=int, default=0)
+    parser.add_argument("--iter", type=int, default=1)
 
     # Data args
     parser.add_argument("--dataset", type=str, default="pile")
@@ -106,6 +107,7 @@ if __name__ == "__main__":
             "init_dist"] = args.init_dist
         base_run.parameters["algorithms"]["doremi"][
             "warmup_steps"] = args.warmup_steps
+        base_run.parameters["algorithms"]["doremi"]["doremi_iter"] = args.iter
 
         if args.local_debug:
             with open("debug-proxy.yaml", "w") as f:

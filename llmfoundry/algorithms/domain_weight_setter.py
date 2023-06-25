@@ -5,11 +5,12 @@
 from __future__ import annotations
 import tempfile
 import os
+import re
 
 import torch
 import numpy as np
 from composer import Algorithm, Event, State
-from composer.utils import dist
+from composer.utils import dist, get_file
 from composer.loggers import Logger, RemoteUploaderDownloader
 
 PILE_DATA_SOURCES = [
@@ -28,20 +29,21 @@ class DomainWeightSetter(Algorithm):
                  save_dir,
                  step_size=1.0,
                  smoothing=1e-4,
-                 init_dist="uniform",
                  warmup_steps=0,
+                 doremi_iter=1,
                  log_domain_weights_freq=100,
                  log_excess_loss=False):
 
+        self.save_dir = save_dir
         self.step_size = step_size
         self.smoothing = smoothing
 
-        if init_dist == "uniform":
+        if doremi_iter == 1:
             self.domain_weights = torch.ones(num_domains) / num_domains
+        elif doremi_iter > 1:
+            self.domain_weights = self._load_domain_weights(doremi_iter)
         else:
-            # self.domain_weights = init_dist
-            raise NotImplementedError(
-                "Only uniform initialization is supported")
+            raise ValueError("DoReMi iteration must be >= 1")
 
         self.trajectory_domain_weights = self.domain_weights
         self.num_updates = 1
@@ -54,13 +56,22 @@ class DomainWeightSetter(Algorithm):
 
         self.warmup_steps = warmup_steps
 
-        self.save_dir = save_dir
         self.log_domain_weights_freq = log_domain_weights_freq
         self.log_excess_loss = log_excess_loss
 
     def match(self, event: Event, state: State) -> bool:
         return (event == Event.BEFORE_FORWARD or event == Event.AFTER_FORWARD or
                 event == Event.FIT_END or event == Event.BATCH_END)
+
+    def _load_domain_weights(self, doremi_iter: int) -> torch.Tensor:
+        load_dir = re.sub(r"iter-(\d+)", f"iter-{doremi_iter - 1}",
+                          self.save_dir)
+        weights_path = os.path.join("oci://mosaicml-internal-doremi", load_dir,
+                                    "final", "average_domain_weights.npy")
+        with tempfile.NamedTemporaryFile() as tmp_file:
+            get_file(weights_path, tmp_file.name)
+            domain_weights = torch.from_numpy(np.load(tmp_file.name))
+        return domain_weights
 
     def _upload_data(self, data, path: str, uploader: RemoteUploaderDownloader,
                      state: State):

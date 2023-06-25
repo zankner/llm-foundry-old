@@ -91,10 +91,10 @@ def main(args):
                 domain_name.split("-")[-1])]
         plt.plot(steps, weight_trajectory, label=display_domain_name)
 
-        delta = weight_trajectory[-1] - BASELINE_PROPORTIONS[int(
-            domain_name.split('-')[-1])]
+        og_proportion = BASELINE_PROPORTIONS[int(domain_name.split('-')[-1])]
+        delta = weight_trajectory[-1] - og_proportion
         print(
-            f"{display_domain_name}: {weight_trajectory[-1]} ---- Delta: {green if delta >=0 else red}{delta:.3f}{reset}"
+            f"{display_domain_name}: {weight_trajectory[-1]} ---- Delta: {green if delta >=0 else red}{delta:.3f}  ({(delta / og_proportion)*100:.2f}%){reset}"
         )
 
     # Create the legend outside the plot

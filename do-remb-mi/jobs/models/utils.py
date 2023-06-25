@@ -10,7 +10,7 @@ def build_ref_name(args, domain_types):
 def build_proxy_name(args, domain_types):
     ref_args = copy.deepcopy(args)
     ref_args.subsample_dist = args.ref_subsample_dist
-    return f"proxy-ss-{args.step_size}-sm-{args.smoothing}-ws-{args.warmup_steps}-{build_ref_name(ref_args, domain_types)}"
+    return f"proxy-ss-{args.step_size}-sm-{args.smoothing}-ws-{args.warmup_steps}-iter-{args.iter}-{build_ref_name(ref_args, domain_types)}"
 
 
 def build_final_name(args, domain_types):
