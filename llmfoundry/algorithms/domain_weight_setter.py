@@ -42,6 +42,7 @@ class DomainWeightSetter(Algorithm):
             self.domain_weights = torch.ones(num_domains) / num_domains
         elif doremi_iter > 1:
             self.domain_weights = self._load_domain_weights(doremi_iter)
+            print(self.domain_weights)
         else:
             raise ValueError("DoReMi iteration must be >= 1")
 
@@ -69,7 +70,7 @@ class DomainWeightSetter(Algorithm):
         weights_path = os.path.join("oci://mosaicml-internal-doremi", load_dir,
                                     "final", "average_domain_weights.npy")
         with tempfile.NamedTemporaryFile() as tmp_file:
-            get_file(weights_path, tmp_file.name)
+            get_file(weights_path, tmp_file.name, overwrite=True)
             domain_weights = torch.from_numpy(np.load(tmp_file.name))
         return domain_weights
 
