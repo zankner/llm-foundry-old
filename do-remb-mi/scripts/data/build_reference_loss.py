@@ -98,6 +98,34 @@ def build_model(model_size, tokenizer, max_seq_len):
             "verbose": False
         })
         return ComposerMPTCausalLM(model_cfg, tokenizer), fsdp_cfg
+    elif model_size == "250M":
+        model_cfg = OmegaConf.create({
+            "name": "mpt_causal_lm",
+            "init_device": "meta",
+            "d_model": 1024,
+            "n_heads": 16,
+            "n_layers": 16,
+            "expansion_ratio": 4,
+            "max_seq_len": max_seq_len,
+            "vocab_size": 50432,
+            "no_bias": True,
+            "attn_config": {
+                "alibi": True,
+                "attn_impl": "triton",
+                "clip_qkv": 6,
+                "attn_uses_sequence_id": True
+            }
+        })
+        fsdp_cfg = OmegaConf.create({
+            "activation_checkpointing": False,
+            "activation_checkpointing_reentrant": False,
+            "activation_cpu_offload": False,
+            "limit_all_gathers": True,
+            "mixed_precision": "PURE",
+            "sharding_strategy": "FULL_SHARD",
+            "state_dict_type": "full",
+            "verbose": False
+        })
     elif model_size == "1B":
         model_cfg = OmegaConf.create({
             "name": "mpt_causal_lm",
