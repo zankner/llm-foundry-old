@@ -3,7 +3,8 @@ import argparse
 from omegaconf import OmegaConf
 from mcli import RunConfig, create_run
 
-from utils import build_domain_streams, build_data_path, build_ref_name
+from utils import (build_domain_streams, build_data_path, build_ref_name,
+                   build_model_cfg)
 # revert -n 1 and eval_first=False
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -63,6 +64,11 @@ if __name__ == "__main__":
             base_run.parameters["autoresume"] = args.autoresume
 
         base_run.parameters["global_seed"] = seed
+
+        model_cfg = build_model_cfg(args.model_size)
+        base_run.parameters["model"]["d_model"] = model_cfg["d_model"]
+        base_run.parameters["model"]["n_heads"] = model_cfg["n_heads"]
+        base_run.parameters["model"]["n_layers"] = model_cfg["n_layers"]
 
         base_run.parameters["loggers"]["wandb"]["tags"] += [
             args.model_size,

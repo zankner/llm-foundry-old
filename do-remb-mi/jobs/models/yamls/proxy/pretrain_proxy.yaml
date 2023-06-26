@@ -114,7 +114,6 @@ parameters:
       save_dir: pile/proxy-weights/${run_name}-seed-${global_seed} # Update based on end save
       step_size: # Set by launch script
       smoothing: # Set by launch script
-      init_dist: # Set by launch script
       warmup_steps: # Set by launch script
       doremi_iter: # Set by launch script
       log_domain_weights_freq: 100 # Will be interpreted as batches, for prod. code make official Timestamp obj.

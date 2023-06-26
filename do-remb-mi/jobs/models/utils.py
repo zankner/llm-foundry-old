@@ -3,6 +3,16 @@ import copy
 from typing import List, Optional
 
 
+def build_model_cfg(model_size):
+    if model_size == "125M":
+        model_cfg = {"d_model": 768, "n_heads": 12, "n_layers": 12}
+    elif model_size == "250M":
+        model_cfg = {"d_model": 1024, "n_heads": 16, "n_layers": 16}
+    else:
+        raise ValueError(f"Unknown model size {model_size}")
+    return model_cfg
+
+
 def build_ref_name(args, domain_types):
     return f"ref-{args.model_size}-{args.dataset}-{domain_types}-{args.subsample_dist}-{args.num_samples}"
 

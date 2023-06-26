@@ -17,5 +17,5 @@ integrations:
 command: |
   pip install oci-cli
   cd llm-foundry
-  composer -n 8 do-remb-mi/scripts/data/build_reference_loss.py --batch-size 128 --num-domains {NUM_DOMAINS} --subset-domains {SUBSET_DOMAINS} --splits {SPLIT} --ref-model-size {MODEL_SIZE} --ref-model-ckpt {REF_MODEL_CKPT} --remote-base {REMOTE_BASE}
+  composer do-remb-mi/scripts/data/build_reference_loss.py --batch-size 128 --num-domains {NUM_DOMAINS} --subset-domains {SUBSET_DOMAINS} --splits {SPLIT} --ref-model-size {MODEL_SIZE} --ref-model-ckpt {REF_MODEL_CKPT} --remote-base {REMOTE_BASE}
   oci os object bulk-upload -bn mosaicml-internal-doremi --src-dir /tmp/domains --prefix {UPLOAD_DIR}/ > /dev/null

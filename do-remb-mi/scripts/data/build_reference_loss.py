@@ -217,7 +217,7 @@ if __name__ == "__main__":
     parser.add_argument("--subset-domains", nargs="+", type=int, default=None)
     parser.add_argument("--ref-model-size",
                         type=str,
-                        choices=["125M", "1B"],
+                        choices=["125M", "250M", "1B"],
                         required=True)
     parser.add_argument("--ref-model-ckpt", type=str, required=True)
     parser.add_argument("--tokenizer",
