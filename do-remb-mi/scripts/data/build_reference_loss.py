@@ -126,6 +126,7 @@ def build_model(model_size, tokenizer, max_seq_len):
             "state_dict_type": "full",
             "verbose": False
         })
+        return ComposerMPTCausalLM(model_cfg, tokenizer), fsdp_cfg
     elif model_size == "1B":
         model_cfg = OmegaConf.create({
             "name": "mpt_causal_lm",
