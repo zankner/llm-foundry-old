@@ -62,14 +62,14 @@ class DomainWeightSetter(Algorithm):
         self.log_excess_loss = log_excess_loss
 
     def state_dict(self) -> Dict[str, Any]:
-        return {
-            "domain_weights": self.domain_weights,
-            "trajectory_domain_weights": self.trajectory_domain_weights,
-            "num_updates": self.num_updates,
-            "lambdas": self.lambdas,
-            "domain_excess_loss": self.domain_excess_loss,
-            "seq_len_normalization": self.seq_len_normalization,
-        }
+        state_dict = super().state_dict()
+        state_dict["domain_weights"] = self.domain_weights
+        state_dict["trajectory_domain_weights"] = self.trajectory_domain_weights
+        state_dict["num_updates"] = self.num_updates
+        state_dict["lambdas"] = self.lambdas
+        state_dict["domain_excess_loss"] = self.domain_excess_loss
+        state_dict["seq_len_normalization"] = self.seq_len_normalization
+        return state_dict
 
     def load_state_dict(self, state: Dict[str, Any]) -> None:
         self.domain_weights = state["domain_weights"]
