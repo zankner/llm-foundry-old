@@ -65,8 +65,7 @@ if __name__ == "__main__":
 
         base_run.name = f"zack-proxy-{args.model_size}-{args.subsample_dist}-{args.num_samples}-sd-{seed}".lower(
         )
-        base_run.parameters["run_name"] = "debug-" + build_proxy_name(
-            args, domain_types)
+        base_run.parameters["run_name"] = build_proxy_name(args, domain_types)
 
         base_run.cluster = args.cluster
         base_run.gpu_num = args.ngpus

@@ -15,6 +15,12 @@ replicate_proportions = [
     0.6057, 0.0046, 0.0224, 0.1019, 0.0036, 0.0113, 0.0072, 0.0047, 0.0699,
     0.0018, 0.0093, 0.0061, 0.0062, 0.0134, 0.0502, 0.0274, 0.0063, 0.0070
 ]  # Weights from DoReMI paper for 280M ref model
+official_replicate_proportions = [
+    5.5173e-01, 1.4658e-04, 2.4181e-04, 3.9293e-01, 1.2222e-04, 3.5907e-02,
+    1.3796e-04, 8.0860e-05, 5.5295e-05, 6.3074e-05, 6.1735e-05, 3.2748e-05,
+    9.2133e-03, 3.6737e-05, 3.2115e-05, 5.4644e-05, 9.0030e-03, 3.9982e-05,
+    3.9829e-05, 4.2305e-05, 3.5293e-05, 2.5043e-05
+]
 
 WEIGHTS_BASE = "oci://mosaicml-internal-doremi/pile/proxy-weights"
 
@@ -31,6 +37,8 @@ def get_proportions(args, seed):
         return [None] * args.num_domains
     if args.domain_source == "replicate":
         return replicate_proportions
+    if args.domain_source == "official-replicate":
+        return official_replicate_proportions
     else:
         remote_base = os.path.join("oci://mosaicml-internal-doremi",
                                    args.dataset, "proxy-weights")
