@@ -41,7 +41,10 @@ def build_data_path(args, mode):
     else:
         domain_dir = f"{args.num_domains}-clusters"
 
-    subsample_dir = f"baseline-{args.num_samples}-samples"
+    if mode == "token-ref-loss":
+        subsample_dir = f"{args.model_size}-baseline-{args.num_samples}-samples"
+    else:
+        subsample_dir = f"baseline-{args.num_samples}-samples"
 
     remote_base = os.path.join(data_prefix, domain_dir, subsample_dir)
     return remote_base, domain_dir

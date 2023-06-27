@@ -6,6 +6,7 @@ from __future__ import annotations
 import tempfile
 import os
 import re
+from typing import Any, Dict
 
 import torch
 import numpy as np
@@ -59,6 +60,24 @@ class DomainWeightSetter(Algorithm):
 
         self.log_domain_weights_freq = log_domain_weights_freq
         self.log_excess_loss = log_excess_loss
+
+    def state_dict(self) -> Dict[str, Any]:
+        return {
+            "domain_weights": self.domain_weights,
+            "trajectory_domain_weights": self.trajectory_domain_weights,
+            "num_updates": self.num_updates,
+            "lambdas": self.lambdas,
+            "domain_excess_loss": self.domain_excess_loss,
+            "seq_len_normalization": self.seq_len_normalization,
+        }
+
+    def load_state_dict(self, state: Dict[str, Any]) -> None:
+        self.domain_weights = state["domain_weights"]
+        self.trajectory_domain_weights = state["trajectory_domain_weights"]
+        self.num_updates = state["num_updates"]
+        self.lambdas = state["lambdas"]
+        self.domain_excess_loss = state["domain_excess_loss"]
+        self.seq_len_normalization = state["seq_len_normalization"]
 
     def match(self, event: Event, state: State) -> bool:
         return (event == Event.BEFORE_FORWARD or event == Event.AFTER_FORWARD or

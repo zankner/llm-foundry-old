@@ -4,7 +4,8 @@ import copy
 from mcli import RunConfig, create_run
 from omegaconf import OmegaConf
 
-from utils import build_domain_streams, build_data_path, build_proxy_name
+from utils import (build_domain_streams, build_data_path, build_proxy_name,
+                   build_model_cfg)
 
 # CHANGE BACK THE SAMPLING DIR TO UNIFORM INSTEAD OF BASELINE
 if __name__ == "__main__":
@@ -20,7 +21,10 @@ if __name__ == "__main__":
 
     # Model args
     parser.add_argument("--device-batch-size", type=int, default=32)
-    parser.add_argument("--model-size", type=str, default="125M")
+    parser.add_argument("--model-size",
+                        type=str,
+                        default="125M",
+                        choices=["125M", "250M"])
 
     # DoReMi args
     parser.add_argument("--step-size", type=float, default=1.0)
@@ -74,6 +78,11 @@ if __name__ == "__main__":
             base_run.parameters["autoresume"] = args.autoresume
 
         base_run.parameters["global_seed"] = seed
+
+        model_cfg = build_model_cfg(args.model_size)
+        base_run.parameters["model"]["d_model"] = model_cfg["d_model"]
+        base_run.parameters["model"]["n_heads"] = model_cfg["n_heads"]
+        base_run.parameters["model"]["n_layers"] = model_cfg["n_layers"]
 
         base_run.parameters["loggers"]["wandb"]["tags"] += [
             args.model_size,
