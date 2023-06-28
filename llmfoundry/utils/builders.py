@@ -23,8 +23,8 @@ from transformers import (AutoTokenizer, PreTrainedTokenizer,
                           PreTrainedTokenizerFast)
 
 from llmfoundry.algorithms import DomainWeightSetter
-from llmfoundry.callbacks import (FDiffMetrics, Generate, LogDomainLoss,
-                                  GlobalLRScaling, LayerFreezing,
+from llmfoundry.callbacks import (FDiffMetrics, Generate, AverageICLLogger,
+                                  LogDomainLoss, GlobalLRScaling, LayerFreezing,
                                   MonolithicCheckpointSaver,
                                   ScheduledGarbageCollector)
 from llmfoundry.optim import (DecoupledAdaLRLion, DecoupledClipLion,
@@ -36,6 +36,8 @@ Tokenizer = Union[PreTrainedTokenizer, PreTrainedTokenizerFast]
 def build_callback(name, kwargs):
     if name == 'lr_monitor':
         return LRMonitor()
+    elif name == 'average_icl_logger':
+        return AverageICLLogger()
     elif name == 'memory_monitor':
         return MemoryMonitor()
     elif name == 'speed_monitor':
