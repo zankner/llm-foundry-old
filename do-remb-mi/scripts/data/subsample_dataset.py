@@ -110,6 +110,8 @@ if __name__ == "__main__":
         int_num_samples = 5_000 * args.batch_size
     elif args.num_samples == "10K":
         int_num_samples = 10_000 * args.batch_size
+    elif args.num_samples == "25K":
+        int_num_samples = 25_000 * args.batch_size
 
     for split in args.splits:
         print(f"Subsampling split {split}")
