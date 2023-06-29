@@ -82,7 +82,7 @@ if __name__ == "__main__":
     parser.add_argument("--num-samples",
                         type=str,
                         required=True,
-                        choices=["1K", "5K", "10K", "100K"])
+                        choices=["1K", "5K", "10K", "25K", "100K"])
     parser.add_argument("--batch-size", type=int, default=512)
     parser.add_argument("--num-domains", type=int, required=True)
     parser.add_argument("--splits", type=str, nargs="+", default=["train"])
