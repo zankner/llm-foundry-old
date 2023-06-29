@@ -16,5 +16,5 @@ integrations:
 command: |
   pip install oci-cli
   cd llm-foundry
-  python do-remb-mi/scripts/data/subsample_dataset.py --remote-base oci://mosaicml-internal-doremi/pile/pre-concat/gpt-neox-20b-seqlen-2048/data-sources/all-samples --num-samples 100K  --num-domains 22 --sample-dist original --splits train --wandb-name pile-subsample
+  python do-remb-mi/scripts/data/subsample_dataset.py --remote-base oci://mosaicml-internal-doremi/pile/pre-concat/gpt-neox-20b-seqlen-2048/data-sources/all-samples --num-samples 1K  --num-domains 22 --sample-dist original --splits train --wandb-name pile-subsample
   oci os object bulk-upload -bn mosaicml-internal-doremi --src-dir /tmp/domains --prefix pile/pre-concat/gpt-neox-20b-seqlen-2048/data-sources/original-100K-samples/ > /dev/null
