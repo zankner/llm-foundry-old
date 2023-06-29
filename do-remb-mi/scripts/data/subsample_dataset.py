@@ -82,7 +82,7 @@ if __name__ == "__main__":
     parser.add_argument("--num-samples",
                         type=str,
                         required=True,
-                        choices=["100K"])
+                        choices=["1K", "100K"])
     parser.add_argument("--batch-size", type=int, default=512)
     parser.add_argument("--num-domains", type=int, required=True)
     parser.add_argument("--splits", type=str, nargs="+", default=["train"])
@@ -104,6 +104,8 @@ if __name__ == "__main__":
 
     if args.num_samples == "100K":
         int_num_samples = 100_000 * args.batch_size
+    elif args.num_samples == "1K":
+        int_num_samples = 1_000 * args.batch_size
 
     for split in args.splits:
         print(f"Subsampling split {split}")
