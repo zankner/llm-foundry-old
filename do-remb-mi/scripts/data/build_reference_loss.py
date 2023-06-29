@@ -164,6 +164,7 @@ def main(args):
     device_batch_size = int(args.batch_size / dist.get_world_size())
     assert args.batch_size % device_batch_size == 0, "Batch size must be divisible by the number of devices"
 
+    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
     model, fsdp_cfg = build_model(
         args.ref_model_size, tokenizer=tokenizer, max_seq_len=args.max_seq_len
     )  # Probably want to move model building and all other building outside of loop
@@ -196,7 +197,6 @@ def main(args):
 
             streaming_writer_path = f"/tmp/domains/domain-{domain_id}/{split}"
 
-            tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
             dataset = StreamingTextDataset(
                 tokenizer=tokenizer,
                 max_seq_len=args.max_seq_len,
