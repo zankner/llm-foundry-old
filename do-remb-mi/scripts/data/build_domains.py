@@ -1,10 +1,13 @@
 import os
+import tempfile
 import warnings
+import pickle
 import platform
 from argparse import ArgumentParser
 from typing import Dict, Optional, Iterable
 
 from streaming import MDSWriter, StreamingDataset
+from composer.utils import get_file
 from torch.utils.data import DataLoader, IterableDataset
 from tqdm import tqdm
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
@@ -95,17 +98,16 @@ class ConcatDomainsTokensDataset(IterableDataset):
     ```
     """
 
-    def __init__(
-        self,
-        dataset: StreamingDataset,
-        tokenizer: PreTrainedTokenizerBase,
-        num_domains: int,
-        cluster_method: str,
-        max_length: int,
-        bos_text: str,
-        eos_text: str,
-        no_wrap: bool,
-    ):
+    def __init__(self,
+                 dataset: StreamingDataset,
+                 tokenizer: PreTrainedTokenizerBase,
+                 num_domains: int,
+                 cluster_method: str,
+                 max_length: int,
+                 bos_text: str,
+                 eos_text: str,
+                 no_wrap: bool,
+                 uid_to_domain_path: str = None):
         self.dataset = dataset
         self.tokenizer = tokenizer
         self.num_domains = num_domains
@@ -115,6 +117,20 @@ class ConcatDomainsTokensDataset(IterableDataset):
         self.bos_text = bos_text
         self.eos_text = eos_text
         self.should_wrap = not no_wrap
+
+        # Building uid to domain mapping
+        if self.cluster_method == "data-source":
+            self.uid_to_domain = PILE_DATA_SOURCES
+        elif self.cluster_method == "clusters":
+            assert uid_to_domain_path is not None, "uid_to_domain_path must be provided when using clusters"
+            with tempfile.NamedTemporaryFile() as tmp_file:
+                get_file(uid_to_domain_path,
+                         tmp_file.name,
+                         overwrite=True,
+                         progress_bar=True)
+
+                with open(tmp_file.name, "rb") as f:  # Feels hacky but oh well
+                    self.uid_to_domain = pickle.load(f)
 
         self.bos_tokens = self.tokenizer(self.bos_text,
                                          truncation=False,
@@ -148,7 +164,9 @@ class ConcatDomainsTokensDataset(IterableDataset):
 
     def _get_domain(self, uid: int, pile_set_name: str) -> int:
         if self.cluster_method == "data-source":
-            return PILE_DATA_SOURCES.index(pile_set_name)
+            return self.uid_to_domain.index(pile_set_name)
+        elif self.cluster_method == "clusters":
+            return self.uid_to_domain[uid]
         else:
             raise ValueError(
                 f"Unsupported cluster method: {self.cluster_method}")
@@ -181,21 +199,29 @@ class ConcatDomainsTokensDataset(IterableDataset):
 if __name__ == "__main__":
 
     parser = ArgumentParser()
+    # Dataset args
     parser.add_argument("--remote", type=str, required=True)
     parser.add_argument("--local", type=str, default="/tmp/domain-local")
     parser.add_argument("--splits",
                         type=str,
                         nargs="+",
                         default=["train", "val", "test"])
+
+    # Domain args
     parser.add_argument("--num-domains", type=int, required=True)
     parser.add_argument("--cluster-method", type=str, required=True)
+    parser.add_argument("--uid-to-domain-path", type=str, default=None)
     parser.add_argument("--max-length", type=int, default=2048)
+
+    # Tokenization args
     parser.add_argument("--tokenizer",
                         type=str,
                         default="EleutherAI/gpt-neox-20b")
     parser.add_argument("--eos-text", type=str, default="<|endoftext|>")
     parser.add_argument("--bos-text", type=str, default=None)
-    parser.add_argument('--no-wrap', default=False, action='store_true')
+    parser.add_argument("--no-wrap", default=False, action='store_true')
+
+    # Misc
     parser.add_argument("--no-wandb", action="store_true")
     parser.add_argument("--wandb-name", type=str, default=None)
     args = parser.parse_args()
@@ -228,6 +254,7 @@ if __name__ == "__main__":
             tokenizer=tokenizer,
             num_domains=args.num_domains,
             cluster_method=args.cluster_method,
+            uid_to_domain_path=args.uid_to_domain_path,
             max_length=args.max_length,
             bos_text=args.bos_text,
             eos_text=args.eos_text,
