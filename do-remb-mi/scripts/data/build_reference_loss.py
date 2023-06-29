@@ -164,6 +164,29 @@ def main(args):
     device_batch_size = int(args.batch_size / dist.get_world_size())
     assert args.batch_size % device_batch_size == 0, "Batch size must be divisible by the number of devices"
 
+    model, fsdp_cfg = build_model(
+        args.ref_model_size, tokenizer=tokenizer, max_seq_len=args.max_seq_len
+    )  # Probably want to move model building and all other building outside of loop
+    model.use_logits = False  # So that full ModellingOutputs passed to callback
+    model.val_metrics = {
+        LanguageCrossEntropy.__name__: LanguageCrossEntropy()
+    }  # Only metric we care about
+
+    loggers = []
+    if not args.no_wandb:
+        loggers = [
+            WandBLogger(
+                project="doremi-preprocess",
+                entity="mosaic-ml",
+                name=f"{args.ref_model_size}-ref-loss-domain-{domain_id}")
+        ]
+
+    trainer = Trainer(model=model,
+                      progress_bar=True,
+                      load_path=args.ref_model_ckpt,
+                      fsdp_config=fsdp_cfg,
+                      loggers=loggers)
+
     for split in args.splits:
         for domain_id in range(args.num_domains):
             if domain_id not in args.subset_domains:
@@ -202,39 +225,25 @@ def main(args):
                 persistent_workers=True,
             )
 
-            model, fsdp_cfg = build_model(
-                args.ref_model_size,
-                tokenizer=tokenizer,
-                max_seq_len=args.max_seq_len
-            )  # Probably want to move model building and all other building outside of loop
-            model.use_logits = False  # So that full ModellingOutputs passed to callback
-            model.val_metrics = {
-                LanguageCrossEntropy.__name__: LanguageCrossEntropy()
-            }  # Only metric we care about
+            existing_ref_loss_callbacks = [
+                callback for callback in trainer.state.callbacks
+                if isinstance(callback, ReferenceLossCallback)
+            ]
+            if len(existing_ref_loss_callbacks) > 1:
+                raise ValueError(
+                    "Multiple reference loss callbacks found in trainer state. This should not happen."
+                )
+            if len(existing_ref_loss_callbacks) == 0:
+                print("Warning: no existing reference loss callbacks found")
+            del existing_ref_loss_callbacks[0]
 
-            ref_loss_callback = ReferenceLossCallback(
-                domain_idx=domain_id, writer_path=streaming_writer_path)
-            callbacks = [ref_loss_callback]
+            trainer.state.callbacks.append(
+                ReferenceLossCallback(domain_idx=domain_id,
+                                      writer_path=streaming_writer_path))
 
-            loggers = []
-            if not args.no_wandb:
-                loggers = [
-                    WandBLogger(
-                        project="doremi-preprocess",
-                        entity="mosaic-ml",
-                        name=f"{args.ref_model_size}-ref-loss-domain-{domain_id}"
-                    )
-                ]
+            dist.barrier()  # For safety
 
-            trainer = Trainer(model=model,
-                              eval_dataloader=dataloader,
-                              progress_bar=True,
-                              load_path=args.ref_model_ckpt,
-                              fsdp_config=fsdp_cfg,
-                              callbacks=callbacks,
-                              loggers=loggers)
-            trainer.eval()
-            trainer.close()
+            trainer.eval(dataloader)
 
 
 if __name__ == "__main__":
