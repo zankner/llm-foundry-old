@@ -176,10 +176,9 @@ def main(args):
     loggers = []
     if not args.no_wandb:
         loggers = [
-            WandBLogger(
-                project="doremi-preprocess",
-                entity="mosaic-ml",
-                name=f"{args.ref_model_size}-ref-loss-domain-{domain_id}")
+            WandBLogger(project="doremi-preprocess",
+                        entity="mosaic-ml",
+                        name=f"{args.ref_model_size}-ref-loss")
         ]
 
     trainer = Trainer(model=model,
