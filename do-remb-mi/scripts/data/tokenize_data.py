@@ -4,15 +4,17 @@ import platform
 from argparse import ArgumentParser 
 from typing import Dict, Iterable, Optional
 
+import torch
+import wandb
+import numpy as np
 from streaming import MDSWriter, StreamingDataset
 from torch.utils.data import DataLoader, IterableDataset
 from tqdm import tqdm
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
-import wandb
-import numpy as np
 
 from utils import get_sample_with_uid
 
+torch.multiprocessing.set_sharing_strategy('file_system')
 
 def build_dataloader(dataset, batch_size) -> DataLoader:
     # Multiple workers is only supported on linux machines
