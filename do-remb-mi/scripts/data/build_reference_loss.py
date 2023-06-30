@@ -232,9 +232,10 @@ def main(args):
                 raise ValueError(
                     "Multiple reference loss callbacks found in trainer state. This should not happen."
                 )
-            if len(existing_ref_loss_callbacks) == 0:
+            elif len(existing_ref_loss_callbacks) == 0:
                 print("Warning: no existing reference loss callbacks found")
-            del existing_ref_loss_callbacks[0]
+            else:
+                del existing_ref_loss_callbacks[0]
 
             trainer.state.callbacks.append(
                 ReferenceLossCallback(domain_idx=domain_id,
