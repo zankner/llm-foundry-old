@@ -5,6 +5,7 @@ import platform
 from argparse import ArgumentParser
 from typing import Dict, Optional, Iterable
 
+import torch
 import wandb
 import numpy as np
 from streaming import MDSWriter, StreamingDataset
@@ -13,6 +14,8 @@ from torch.utils.data import DataLoader, IterableDataset
 from tqdm import tqdm
 
 from utils import get_sample_int_keys
+
+torch.multiprocessing.set_sharing_strategy('file_system')
 
 PILE_DATA_SOURCES = [
     "Pile-CC", "PubMed Central", "Books3", "OpenWebText2", "ArXiv", "Github",
@@ -204,8 +207,8 @@ if __name__ == "__main__":
 
         writers = [
             MDSWriter(columns=columns,
-                      out=os.path.join(args.upload_remote, f"domain-{domain_idx}",
-                                       split),
+                      out=os.path.join(args.upload_remote,
+                                       f"domain-{domain_idx}", split),
                       compression="zstd")
             for domain_idx in range(args.num_domains)
         ]

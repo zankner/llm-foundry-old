@@ -1,7 +1,7 @@
 import os
 import warnings
 import platform
-from argparse import ArgumentParser 
+from argparse import ArgumentParser
 from typing import Dict, Iterable, Optional
 
 import torch
@@ -12,9 +12,10 @@ from torch.utils.data import DataLoader, IterableDataset
 from tqdm import tqdm
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
-from utils import get_sample_with_uid
+from utils import get_sample_int_keys
 
 torch.multiprocessing.set_sharing_strategy('file_system')
+
 
 def build_dataloader(dataset, batch_size) -> DataLoader:
     # Multiple workers is only supported on linux machines
@@ -60,7 +61,10 @@ def generate_samples(
             if truncate_num_samples is not None and n_samples == truncate_num_samples:
                 return
             n_samples += 1
-            yield get_sample_with_uid({k: v[idx] for k, v in batch.items()})
+            yield get_sample_int_keys({
+                k: v[idx] for k, v in batch.items()
+            },
+                                      int_keys=["domain_idx"])
 
 
 class TokensDataset(IterableDataset):
@@ -90,8 +94,7 @@ class TokensDataset(IterableDataset):
                                          padding=False,
                                          add_special_tokens=False)['input_ids']
         if len(self.bos_tokens) > 1:
-            warnings.warn(
-                f'Your BOS text is not tokenizing to one token\
+            warnings.warn(f'Your BOS text is not tokenizing to one token\
                 , instead we got {self.bos_tokens}. Quit if this was in error.')
 
         self.eos_tokens = self.tokenizer(self.eos_text,
@@ -99,8 +102,7 @@ class TokensDataset(IterableDataset):
                                          padding=False,
                                          add_special_tokens=False)['input_ids']
         if len(self.eos_tokens) > 1:
-            warnings.warn(
-                f'Your EOS text is not tokenizing to one token\
+            warnings.warn(f'Your EOS text is not tokenizing to one token\
                 , instead we got {self.eos_tokens}. Quit if this was in error.')
 
         eos_text_provided = self.eos_text != ''
@@ -122,10 +124,14 @@ class TokensDataset(IterableDataset):
                                      padding=False)
             iids = encoded['input_ids']
             iids = self.bos_tokens + iids + self.eos_tokens
-            yield {
+            to_yield = {
                 "tokens": np.asarray(iids).tobytes(),
                 "uid": sample["uid"]
             }
+            if "pile_set_name" in sample:
+                to_yield["pile_set_name"] = sample["pile_set_name"]
+
+            yield to_yield
 
 
 if __name__ == "__main__":
@@ -171,9 +177,10 @@ if __name__ == "__main__":
     for split in args.splits:
         print(f"Converting split {split}")
         raw_data = StreamingDataset(remote=args.download_remote,
-                                   local=os.path.join(args.local, "downloaded"),
-                                   split=split,
-                                   shuffle=False)
+                                    local=os.path.join(args.local,
+                                                       "downloaded"),
+                                    split=split,
+                                    shuffle=False)
 
         tokenizer = tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
         tokenizer.model_max_length = int(1e30)
