@@ -75,7 +75,6 @@ class TokensDataset(IterableDataset):
         max_length: int,
         bos_text: str,
         eos_text: str,
-        no_wrap: bool,
     ):
         self.dataset = dataset
         self.tokenizer = tokenizer
@@ -83,7 +82,6 @@ class TokensDataset(IterableDataset):
         self.max_length = max_length
         self.bos_text = bos_text
         self.eos_text = eos_text
-        self.should_wrap = not no_wrap
 
         self.bos_tokens = self.tokenizer(self.bos_text,
                                          truncation=False,
@@ -184,7 +182,6 @@ if __name__ == "__main__":
             max_length=args.max_length,
             bos_text=args.bos_text,
             eos_text=args.eos_text,
-            no_wrap=args.no_wrap,
         )
         loader = build_dataloader(data, batch_size=512)
         samples = generate_samples(loader, truncate_num_samples=None)
@@ -199,5 +196,5 @@ if __name__ == "__main__":
                     tqdm(samples, desc=split, total=denominator, leave=True)):
                 out.write(sample)
 
-                if step % 1_000 == 0:
+                if use_wandb and step % 1_000 == 0:
                     wandb.log(({'step': step, 'progress': step / denominator}))
