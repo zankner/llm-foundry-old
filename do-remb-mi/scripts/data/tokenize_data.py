@@ -64,7 +64,7 @@ def generate_samples(
             yield get_sample_int_keys({
                 k: v[idx] for k, v in batch.items()
             },
-                                      int_keys=["domain_idx"])
+                                      int_keys=["uid"])
 
 
 class TokensDataset(IterableDataset):
