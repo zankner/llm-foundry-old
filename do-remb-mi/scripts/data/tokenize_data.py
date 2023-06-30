@@ -188,7 +188,7 @@ if __name__ == "__main__":
         loader = build_dataloader(data, batch_size=512)
         samples = generate_samples(loader, truncate_num_samples=None)
 
-        columns = {'tokens': 'bytes', 'uid': 'int'}
+        columns = {'tokens': 'bytes', 'uid': 'int', 'pile_set_name': 'str'}
         denominator = raw_data.size
 
         with MDSWriter(columns=columns,

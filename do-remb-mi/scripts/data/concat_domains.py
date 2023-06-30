@@ -91,7 +91,6 @@ class ConcatDomainsTokensDataset(IterableDataset):
         self.dataset = dataset
         self.num_domains = num_domains
         self.domain_source = domain_source
-        os.environ['TOKENIZERS_PARALLELISM'] = 'false'
         self.max_length = max_length
         self.should_wrap = not no_wrap
 
@@ -109,7 +108,7 @@ class ConcatDomainsTokensDataset(IterableDataset):
                 with open(tmp_file.name, "rb") as f:  # Feels hacky but oh well
                     self.uid_to_domain = pickle.load(f)
 
-    def _get_domain(self) -> int:
+    def _get_domain(self, sample) -> int:
         if self.domain_source == "data-source":
             return self.uid_to_domain.index(sample["pile_set_name"])
         elif self.domain_source == "clusters":
@@ -157,12 +156,7 @@ if __name__ == "__main__":
     parser.add_argument("--uid-to-domain-path", type=str, default=None)
 
     # Tokenization args
-    parser.add_argument("--tokenizer",
-                        type=str,
-                        default="EleutherAI/gpt-neox-20b")
     parser.add_argument("--max-length", type=int, default=2048)
-    parser.add_argument("--eos-text", type=str, default="<|endoftext|>")
-    parser.add_argument("--bos-text", type=str, default=None)
     parser.add_argument("--no-wrap", default=False, action='store_true')
 
     # Upload args
@@ -175,7 +169,7 @@ if __name__ == "__main__":
 
     use_wandb = not args.no_wandb
     if use_wandb:
-        assert args.wandb_name is not None
+        assert args.wandb_name is not None, "Wandb name necessary if using for logging"
 
         wandb.init(name=args.wandb_name,
                    project="doremi-preprocess",
@@ -210,7 +204,7 @@ if __name__ == "__main__":
 
         writers = [
             MDSWriter(columns=columns,
-                      out=os.path.join(args.remote, f"domain-{domain_idx}",
+                      out=os.path.join(args.upload_remote, f"domain-{domain_idx}",
                                        split),
                       compression="zstd")
             for domain_idx in range(args.num_domains)
