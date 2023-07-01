@@ -86,8 +86,9 @@ class DomainWeightSetter(Algorithm):
     def _load_domain_weights(self, doremi_iter: int) -> torch.Tensor:
         load_dir = re.sub(r"iter-(\d+)", f"iter-{doremi_iter - 1}",
                           self.save_dir)
-        weights_path = os.path.join("oci://mosaicml-internal-doremi", load_dir,
-                                    "final", "average_domain_weights.npy")
+        weights_path = os.path.join(
+            "oci://mosaicml-internal-doremi", load_dir, "final",
+            "average_domain_weights.npy")  # Hard fixed for now change later
         with tempfile.NamedTemporaryFile() as tmp_file:
             get_file(weights_path, tmp_file.name, overwrite=True)
             domain_weights = torch.from_numpy(np.load(tmp_file.name))
@@ -108,8 +109,7 @@ class DomainWeightSetter(Algorithm):
         if dist.get_global_rank() == 0:
             remote_uploader = [
                 callback for callback in state.callbacks
-                if (isinstance(callback, RemoteUploaderDownloader) and callback.
-                    backend_kwargs['bucket'] == "mosaicml-internal-doremi")
+                if isinstance(callback, RemoteUploaderDownloader)
             ]  # Ugly but oh well for now, change later
             assert len(
                 remote_uploader) == 1, "Only one remote uploader is supported"

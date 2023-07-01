@@ -108,7 +108,7 @@ parameters:
   algorithms:
     doremi:
       num_domains: # Set by launch script
-      save_dir: zack/DoReMi//proxy/${run_name}-sd-${global_seed}/domain-weights # Hard set for simplicitly
+      save_dir: zack/DoReMi/proxy/${run_name}-sd-${global_seed}/domain-weights # Hard set for simplicitly
       step_size: # Set by launch script
       smoothing: # Set by launch script
       warmup_steps: # Set by launch script
