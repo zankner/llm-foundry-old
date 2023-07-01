@@ -10,7 +10,6 @@ integrations:
     entity: mosaic-ml
     project: DoRembMi
 
-# image: mosaicml/pytorch:2.0.1_cu118-python3.10-ubuntu20.04-aws
 image: mosaicml/llm-foundry:1.13.1_cu117-latest
 cluster: # Set in launch script
 gpu_num: # Set in launch script
@@ -29,9 +28,9 @@ parameters:
   model:
     name: mpt_causal_lm
     init_device: meta
-    d_model: 2048
-    n_heads: 16
-    n_layers: 24
+    d_model: # Set in launch script
+    n_heads: # Set in launch script
+    n_layers: # Set in launch script
     expansion_ratio: 4
     max_seq_len: ${max_seq_len}
     vocab_size: 50432 # update for hero run with custom tokenizer
@@ -50,7 +49,7 @@ parameters:
 
   # Optimization
   global_train_batch_size: 512 # ~1M tokens, update for hero run, must be divisible by gpu_num
-  max_duration: 100000ba # Set by launch script
+  max_duration: 1ep # Set by launch script
 
   optimizer:
     name: decoupled_lionw
@@ -68,8 +67,8 @@ parameters:
   # System
   seed: ${global_seed}
   precision: amp_bf16
-  device_train_microbatch_size: 16
-  device_eval_batch_size: 16
+  device_train_microbatch_size: # Set in launch script
+  device_eval_batch_size: # Set in launch script
 
 
   # FSDP
@@ -101,7 +100,7 @@ parameters:
   # Checkpointing
   autoresume: # Set by launch script
   save_filename: ep{epoch}-ba{batch}/rank{rank}.pt
-  save_folder: oci://mosaicml-internal-checkpoints/zack/DoReMi/pile/final/${run_name}-seed-${global_seed} # update for hero run
+  save_folder: oci://mosaicml-internal-checkpoints/zack/DoReMi/final/${run_name}-seed-${global_seed}/ckpts # update for hero run
   save_interval: 1000ba # update for hero run, e.g. 2000ba
   save_num_checkpoints_to_keep: 1
 
@@ -113,31 +112,13 @@ parameters:
 
   callbacks:
     lr_monitor: {}
+    average_icl_logger: {}
     memory_monitor: {}
-    # mono_ckpt_saver:
-    #   batch_interval: ${save_interval}
-    #   filename: ep{epoch}-ba{batch}/mono.pt
-    #   save_folder: ${save_folder}
     runtime_estimator: {}
     scheduled_gc:
       batch_interval: 2000
     speed_monitor:
       window_size: 1
-    # generate_callback:
-    #   batch_log_interval: 2000 # update for hero run, e.g. 2000
-    #   do_sample: true
-    #   max_new_tokens: 100
-    #   prompts:
-    #     - The quick brown fox jumps over
-    #     - |-
-    #       Vegan Banana Bread
-    #       Instructions:
-    #       1.
-    #     - The other day I was explaining what generative AI is to my five year old.
-    #   temperature: 1
-    #   top_k: 50
-    #   top_p: 0.95
-    #   use_cache: true
 
   # Dataloaders
   eos_token_id: 0 # update for hero run with custom tokenizer
@@ -160,16 +141,7 @@ parameters:
       split: val
 
   # In-context-learning tasks
-  icl_tasks:
-    - label: piqa
-      dataset_uri: eval/local_data/piqa.jsonl
-      num_fewshot: [0, 1, 5]
-      icl_task_type: multiple_choice
-      continuation_delimiter: "Answer: "
-    - label: lambada
-      dataset_uri: eval/local_data/lambada_openai.jsonl
-      num_fewshot: [0]
-      icl_task_type: language_modeling
+  icl_tasks: eval/yamls/doremi_tasks.yaml
 
   # Train loader
   train_loader:

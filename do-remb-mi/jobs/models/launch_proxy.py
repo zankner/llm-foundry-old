@@ -1,11 +1,9 @@
 import argparse
-import copy
 
-from mcli import RunConfig, create_run
-from omegaconf import OmegaConf
+from mcli import RunConfig
 
-from utils import (build_domain_streams, build_data_path, build_proxy_name,
-                   build_model_cfg)
+from utils import (build_domain_streams, get_remote_data_path, build_proxy_name,
+                   launch_run, set_common_args)
 
 # CHANGE BACK THE SAMPLING DIR TO UNIFORM INSTEAD OF BASELINE
 if __name__ == "__main__":
@@ -20,11 +18,11 @@ if __name__ == "__main__":
     parser.add_argument("--local-debug", action="store_true")
 
     # Model args
-    parser.add_argument("--device-batch-size", type=int, default=32)
     parser.add_argument("--model-size",
                         type=str,
                         default="125M",
                         choices=["125M", "250M"])
+    parser.add_argument("--device-batch-size", type=int, default=32)
 
     # DoReMi args
     parser.add_argument("--step-size", type=float, default=1.0)
@@ -38,71 +36,25 @@ if __name__ == "__main__":
                         type=str,
                         default="gpt-neox-20b-seqlen-2048")
     parser.add_argument("--num-domains", type=int, required=True)
-    parser.add_argument("--subsample-dist",
-                        type=str,
-                        required=True,
-                        choices=["uniform"])
-    parser.add_argument("--ref-subsample-dist", type=str, default="baseline")
     parser.add_argument("--num-samples",
                         type=str,
                         required=True,
-                        choices=["100K", "all"])
+                        choices=["1K", "5K", "10K", "25K", "100K", "all"])
     parser.add_argument("--not-embed", action="store_true")
+
     args = parser.parse_args()
 
-    ref_args = copy.deepcopy(args)
-    ref_args.subsample_dist = args.ref_subsample_dist
-    remote_base, domain_types = build_data_path(ref_args, mode="token-ref-loss")
-    if args.subsample_dist == "uniform":
-        proportions = [1 / args.num_domains] * args.num_domains
-    domain_streams = build_domain_streams(args.num_domains,
-                                          remote_base,
-                                          proportions=proportions)
+    run_name = build_proxy_name(args, args.iter, args.model_size,
+                                args.num_samples)
 
     for seed in args.seeds:
         base_run = RunConfig.from_file(
             f"do-remb-mi/jobs/models/yamls/proxy/pretrain_proxy.yaml")
 
-        base_run.name = f"zack-proxy-{args.model_size}-{args.subsample_dist}-{args.num_samples}-sd-{seed}".lower(
-        )
-        base_run.parameters["run_name"] = build_proxy_name(args, domain_types)
-
-        base_run.cluster = args.cluster
-        base_run.gpu_num = args.ngpus
-
-        if args.preemptible:
-            # assert args.autoresume is True, "Preemptible training requires autoresume"
-            base_run.scheduling = {"resumable": True, "priority": "low"}
-            base_run.parameters["autoresume"] = True
-        else:
-            base_run.parameters["autoresume"] = args.autoresume
-
-        base_run.parameters["global_seed"] = seed
-
-        model_cfg = build_model_cfg(args.model_size)
-        base_run.parameters["model"]["d_model"] = model_cfg["d_model"]
-        base_run.parameters["model"]["n_heads"] = model_cfg["n_heads"]
-        base_run.parameters["model"]["n_layers"] = model_cfg["n_layers"]
-
-        base_run.parameters["loggers"]["wandb"]["tags"] += [
-            args.model_size,
-            f"step-size-{args.step_size}",
-            f"smoothing-{args.smoothing}",
-            f"dataset-{args.dataset}",
-            f"domain-{domain_types}",
-            f"ref-subsample-dist-{args.ref_subsample_dist}",
-            f"subsample-dist-{args.subsample_dist}",
-            f"samples-{args.num_samples}",
-            f"warmup-steps-{args.warmup_steps}",
-        ]
-
-        # No microbatching allowed for proxy run
-        base_run.parameters[
-            "device_train_microbatch_size"] = args.device_batch_size
-        base_run.parameters["device_eval_batch_size"] = args.device_batch_size
-
-        base_run.parameters["train_loader"]["dataset"][
-            "streams"] = domain_streams
+        remote_base = get_remote_data_path(args, "ref", seed)
+        proportions = [1 / args.num_domains] * args.num_domains
+        domain_streams = build_domain_streams(args.num_domains, remote_base,
+                                              proportions)
 
         # DomainWeightSetter params
         base_run.parameters["algorithms"]["doremi"][
@@ -115,10 +67,8 @@ if __name__ == "__main__":
             "warmup_steps"] = args.warmup_steps
         base_run.parameters["algorithms"]["doremi"]["doremi_iter"] = args.iter
 
-        if args.local_debug:
-            with open("debug-proxy.yaml", "w") as f:
-                OmegaConf.save(config=OmegaConf.create(base_run.parameters),
-                               f=f)
-        else:
-            run = create_run(base_run)
-            print(f"Launched proxy training for seed {seed} with in {run.name}")
+        base_run = set_common_args(args, base_run, run_name, seed,
+                                   args.model_size, args.num_samples,
+                                   domain_streams)
+
+        launch_run(base_run, local_debug=args.local_debug, seed=seed)

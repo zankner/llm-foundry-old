@@ -1,58 +1,21 @@
 import argparse
-import tempfile
-import os
-import copy
 
-from mcli import RunConfig, create_run
-from composer.utils import get_file
-import numpy as np
-from omegaconf import OmegaConf
+from mcli import RunConfig
 
 from utils import (build_domain_streams, build_final_name, build_proxy_name,
-                   build_data_path)
+                   get_remote_data_path, get_proxy_weights, launch_run,
+                   set_common_args)
 
-replicate_proportions = [
+# These are the weights reported in the paper
+replicate_125M_proportions = [
+    0.1066, 0.0347, 0.0639, 0.2771, 0.0423, 0.0225, 0.0253, 0.0567, 0.0334,
+    0.1504, 0.0231, 0.0024, 0.0948, 0.0017, 0.0059, 0.0035, 0.0111, 0.0079,
+    0.0131, 0.0077, 0.0127, 0.0034
+]
+replicate_250M_proportions = [
     0.6057, 0.0046, 0.0224, 0.1019, 0.0036, 0.0113, 0.0072, 0.0047, 0.0699,
     0.0018, 0.0093, 0.0061, 0.0062, 0.0134, 0.0502, 0.0274, 0.0063, 0.0070
-]  # Weights from DoReMI paper for 280M ref model
-official_replicate_proportions = [
-    5.5173e-01, 1.4658e-04, 2.4181e-04, 3.9293e-01, 1.2222e-04, 3.5907e-02,
-    1.3796e-04, 8.0860e-05, 5.5295e-05, 6.3074e-05, 6.1735e-05, 3.2748e-05,
-    9.2133e-03, 3.6737e-05, 3.2115e-05, 5.4644e-05, 9.0030e-03, 3.9982e-05,
-    3.9829e-05, 4.2305e-05, 3.5293e-05, 2.5043e-05
 ]
-
-WEIGHTS_BASE = "oci://mosaicml-internal-doremi/pile/proxy-weights"
-
-
-def load_weights(weight_file: str):
-    with tempfile.NamedTemporaryFile() as tmp_file:
-        get_file(weight_file, tmp_file.name, overwrite=True)
-        weights = np.load(tmp_file.name)
-    return weights
-
-
-def get_proportions(args, seed):
-    if args.domain_source == "baseline":
-        return [None] * args.num_domains
-    if args.domain_source == "replicate":
-        return replicate_proportions
-    if args.domain_source == "official-replicate":
-        return official_replicate_proportions
-    else:
-        remote_base = os.path.join("oci://mosaicml-internal-doremi",
-                                   args.dataset, "proxy-weights")
-        proxy_args = copy.deepcopy(args)
-        proxy_args.subsample_dist = args.ref_subsample_dist
-        proxy_args.model_size = args.proxy_model_size
-        _, domain_types = build_data_path(proxy_args, mode="token-ref-loss")
-        proxy_name = build_proxy_name(proxy_args,
-                                      domain_types) + f"-seed-{seed}"
-        weights_path = os.path.join(remote_base, proxy_name,
-                                    f"ba-{args.proxy_step}",
-                                    "average_domain_weights.npy")
-        return [float(weight) for weight in list(load_weights(weights_path))]
-
 
 if __name__ == "__main__":
     # System args
@@ -66,22 +29,21 @@ if __name__ == "__main__":
     parser.add_argument("--local-debug", action="store_true")
 
     # Model args
+    parser.add_argument("--model-size", type=str, default="1B", choices=["1B"])
     parser.add_argument("--device-batch-size", type=int, default=32)
-    parser.add_argument("--model-size", type=str, default="1B")
 
     # DoReMi args
     parser.add_argument("--step-size", type=float, default=1.0)
     parser.add_argument("--smoothing", type=float, default=1e-4)
-    parser.add_argument("--init-dist", type=str, default="uniform")
+    parser.add_argument("--iter", type=int, default=1)
     parser.add_argument("--warmup-steps", type=int, default=0)
-    parser.add_argument("--proxy-model-size", type=str, default="125M")
-
-    # Final args
-    parser.add_argument("--domain-source",
+    parser.add_argument("--proxy-model-size",
                         type=str,
-                        required=True,
-                        choices=["baseline", "replicate", "doremi"])
-    parser.add_argument("--proxy-step", type=int, default=100000)
+                        default="125M",
+                        choices=["125M", "250M"])
+    parser.add_argument("--proxy-num-samples",
+                        type=str,
+                        choices=["10K", "25K", "100K", "all"])
 
     # Data args
     parser.add_argument("--dataset", type=str, default="pile")
@@ -89,71 +51,43 @@ if __name__ == "__main__":
                         type=str,
                         default="gpt-neox-20b-seqlen-2048")
     parser.add_argument("--num-domains", type=int, required=True)
-    parser.add_argument("--subsample-dist", type=str, choices=["uniform"])
-    parser.add_argument("--ref-subsample-dist", type=str, default="baseline")
+    parser.add_argument(
+        "--domain-weight-source",
+        type=str,
+        required=True,
+        choices=["baseline", "125M-replicate", "250M-replicate", "proxy"])
     parser.add_argument("--num-samples",
                         type=str,
                         required=True,
-                        choices=["100K", "all"])
+                        choices=["25K", "100K", "all"])
     parser.add_argument("--not-embed", action="store_true")
+
     args = parser.parse_args()
 
-    if args.not_embed:
-        data_remote_dir = "data-sources"
-    else:
-        data_remote_dir = f"{args.num_domains}-clusters"
-
-    remote_base, domain_types = build_data_path(args, mode="pre-concat")
+    run_name = build_final_name(args)
 
     for seed in args.seeds:
         base_run = RunConfig.from_file(
             f"do-remb-mi/jobs/models/yamls/final/pretrain_final.yaml")
 
-        proportions = get_proportions(args, seed)
+        remote_base = get_remote_data_path(args, "ref", seed)
+        if args.domain_weight_source == "baseline":
+            proportions = [None] * args.num_domains
+        elif args.domain_weight_source == "125M-replicate":
+            proportions = replicate_125M_proportions
+        elif args.domain_weight_source == "250M-replicate":
+            proportions = replicate_250M_proportions
+        elif args.domain_weight_source == "proxy":
+            proxy_run_name = build_proxy_name(
+                args, args.iter, args.proxy_model_size,
+                args.proxy_num_samples) + f"-sd-{seed}"
+            proportions = get_proxy_weights(proxy_run_name, args.dataset)
         domain_streams = build_domain_streams(args.num_domains,
                                               remote_base,
                                               proportions=proportions)
 
-        base_run.name = f"zack-final-{args.model_size}-step-{args.num_samples}-sd-{seed}".lower(
-        )
-        base_run.parameters["run_name"] = build_final_name(args, domain_types)
+        base_run = set_common_args(args, base_run, run_name, seed,
+                                   args.proxy_model_size,
+                                   args.proxy_num_samples, domain_streams)
 
-        base_run.cluster = args.cluster
-        base_run.gpu_num = args.ngpus
-
-        if args.preemptible:
-            assert args.autoresume is True, "Preemptible training requires autoresume"
-            base_run.scheduling = {"resumable": True, "priority": "low"}
-            base_run.parameters["autoresume"] = True
-        else:
-            base_run.parameters["autoresume"] = args.autoresume
-
-        base_run.parameters["global_seed"] = seed
-
-        base_run.parameters["loggers"]["wandb"]["tags"] += [
-            args.model_size,
-            f"step-size-{args.step_size}",
-            f"smoothing-{args.smoothing}",
-            f"dataset-{args.dataset}",
-            f"domain-{domain_types}",
-            f"ref-subsample-dist-{args.ref_subsample_dist}",
-            f"subsample-dist-{args.subsample_dist}",
-            f"samples-{args.num_samples}",
-            f"warmup-steps-{args.warmup_steps}",
-            f"domain-source-{args.domain_source}",
-        ]
-
-        base_run.parameters[
-            "device_train_microbatch_size"] = args.device_batch_size
-        base_run.parameters["device_eval_batch_size"] = args.device_batch_size
-
-        base_run.parameters["train_loader"]["dataset"][
-            "streams"] = domain_streams
-
-        if args.local_debug:
-            with open("debug-final.yaml", "w") as f:
-                OmegaConf.save(config=OmegaConf.create(base_run.parameters),
-                               f=f)
-        else:
-            run = create_run(base_run)
-            print(f"Launched final training for seed {seed} with in {run.name}")
+        launch_run(base_run, local_debug=args.local_debug, seed=seed)
