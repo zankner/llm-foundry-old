@@ -3,6 +3,7 @@ import re
 from mcli import RunConfig, create_run
 
 # Probably want a hybrid mode, ie some sort of number of jobs per parallell process to scale to 40K
+# TODO: Refactor to use formatting as well
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--num-domains", type=int, required=True)
