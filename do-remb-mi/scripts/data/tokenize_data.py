@@ -146,7 +146,6 @@ if __name__ == "__main__":
                         default=["train", "val", "test"])
 
     # Tokenizer args
-    parser.add_argument("--max-length", type=int, default=2048)
     parser.add_argument("--tokenizer",
                         type=str,
                         default="EleutherAI/gpt-neox-20b")
