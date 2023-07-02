@@ -15,6 +15,7 @@ from tqdm import tqdm
 
 from utils import get_sample_int_keys
 
+SHUFFLE_SEED = 17  # Fixing so that domains are properly mixed
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 PILE_DATA_SOURCES = [
@@ -154,6 +155,7 @@ if __name__ == "__main__":
 
     # Domain args
     parser.add_argument("--truncate-num-samples", type=int, default=None)
+    parser.add_argument("--upstream-batch-size", type=int, default=512)
     parser.add_argument("--num-domains", type=int, required=True)
     parser.add_argument("--domain-source", type=str, required=True)
     parser.add_argument("--uid-to-domain-path", type=str, default=None)
@@ -183,7 +185,9 @@ if __name__ == "__main__":
         streaming_data = StreamingDataset(remote=args.download_remote,
                                           local=args.local,
                                           split=split,
-                                          shuffle=False)
+                                          shuffle=True,
+                                          shuffle_seed=SHUFFLE_SEED,
+                                          num_canonical_nodes=128)
 
         data = ConcatDomainsTokensDataset(
             streaming_data,
@@ -199,7 +203,7 @@ if __name__ == "__main__":
 
         columns = {'tokens': 'bytes', 'domain_idx': 'int'}
         if args.truncate_num_samples is not None:
-            denominator = args.truncate_num_samples
+            denominator = args.truncate_num_samples * args.upstream_batch_size
         else:
             denominator = data.size * (
                 6212 //
