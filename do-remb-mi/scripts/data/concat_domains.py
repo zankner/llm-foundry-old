@@ -219,8 +219,9 @@ if __name__ == "__main__":
 
         writers = [
             MDSWriter(columns=columns,
-                      out=os.path.join(args.upload_remote,
-                                       f"domain-{domain_idx}", split),
+                      out=os.path.join(
+                          f"{args.upload_remote}-sd-{SHUFFLE_SEED}",
+                          f"domain-{domain_idx}", split),
                       compression="zstd")
             for domain_idx in range(args.num_domains)
         ]
