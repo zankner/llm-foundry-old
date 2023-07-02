@@ -157,7 +157,10 @@ if __name__ == "__main__":
     parser.add_argument("--truncate-num-samples", type=int, default=None)
     parser.add_argument("--upstream-batch-size", type=int, default=512)
     parser.add_argument("--num-domains", type=int, required=True)
-    parser.add_argument("--domain-source", type=str, required=True)
+    parser.add_argument("--domain-source",
+                        type=str,
+                        required=True,
+                        choices=["data-source", "clusters"])
     parser.add_argument("--uid-to-domain-path", type=str, default=None)
 
     # Tokenization args
@@ -180,6 +183,11 @@ if __name__ == "__main__":
                    project="doremi-preprocess",
                    entity="mosaic-ml")
 
+    if args.truncate_num_samples is not None:
+        truncate_num_samples = args.truncate_num_samples * args.upstream_batch_size
+    else:
+        truncate_num_samples = None
+
     for split in args.splits:
         print(f"Converting split {split}")
         streaming_data = StreamingDataset(remote=args.download_remote,
@@ -198,12 +206,12 @@ if __name__ == "__main__":
             no_wrap=args.no_wrap,
         )
         loader = build_dataloader(data, batch_size=512)
-        samples = generate_samples(
-            loader, truncate_num_samples=args.truncate_num_samples)
+        samples = generate_samples(loader,
+                                   truncate_num_samples=truncate_num_samples)
 
         columns = {'tokens': 'bytes', 'domain_idx': 'int'}
-        if args.truncate_num_samples is not None:
-            denominator = args.truncate_num_samples * args.upstream_batch_size
+        if truncate_num_samples is not None:
+            denominator = truncate_num_samples
         else:
             denominator = data.size * (
                 6212 //
