@@ -235,13 +235,14 @@ def main(args):
                 )
             elif len(existing_ref_loss_callbacks) == 0:
                 print("Warning: no existing reference loss callbacks found")
+                trainer.state.callbacks.append(
+                    ReferenceLossCallback(domain_idx=domain_id,
+                                          writer_path=streaming_writer_path))
             else:
-                callback_idx, callback = existing_ref_loss_callbacks[0]
-                trainer.state.callbacks[callback_idx] = callback
-
-            trainer.state.callbacks.append(
-                ReferenceLossCallback(domain_idx=domain_id,
-                                      writer_path=streaming_writer_path))
+                print("Found existing reference loss callback. Replacing...")
+                callback_idx, _ = existing_ref_loss_callbacks[0]
+                trainer.state.callbacks[callback_idx] = ReferenceLossCallback(
+                    domain_idx=domain_id, writer_path=streaming_writer_path)
 
             dist.barrier()  # For safety
             trainer.eval(dataloader)
