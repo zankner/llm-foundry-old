@@ -56,14 +56,14 @@ class ReferenceLossCallback(Callback):
 
         all_losses = torch.vstack(dist.all_gather(losses))
         all_tokens = torch.vstack(dist.all_gather(tokens))
-        all_domain_ids = torch.vstack(dist.all_gather(domain_ids))
+        all_domain_ids = torch.vstack(dist.all_gather(domain_ids)).view(-1)
         if dist.get_global_rank() == 0:
             for losses, tokens, domain_id in zip(all_losses, all_tokens,
                                                  all_domain_ids):
                 byte_losses = losses.cpu().numpy().tobytes()
                 byte_tokens = tokens.cpu().numpy().tobytes()
-                int_domain_id = domain_id.item()
-                self.streaming_writer.write({
+                int_domain_id = domain_id.cpu().item()
+                self.streaming_writers[int_domain_id].write({
                     "tokens": byte_tokens,
                     "ref_losses": byte_losses,
                     "domain_idx": int_domain_id
@@ -72,7 +72,8 @@ class ReferenceLossCallback(Callback):
 
     def eval_end(self, state: State, logger: Logger) -> None:
         if dist.get_global_rank() == 0:
-            self.streaming_writer.finish()
+            for streaming_writer in self.streaming_writers:
+                streaming_writer.finish()
         dist.barrier()
 
 
@@ -199,7 +200,7 @@ def main(args):
                 remote=os.path.join(
                     args.remote_base,
                     f"domain-{domain_id}"),  # TODO: SHOULD BE A PASSED ARG
-                local=f"/tmp/streaming/domain-{domain_id}",
+                local=f"/tmp/streaming-32/domain-{domain_id}",
                 split=split) for domain_id in args.subset_domains
         ]
         dataset = StreamingTextDataset(
