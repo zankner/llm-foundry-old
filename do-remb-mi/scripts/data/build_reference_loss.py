@@ -72,7 +72,7 @@ class ReferenceLossCallback(Callback):
 
     def eval_end(self, state: State, logger: Logger) -> None:
         if dist.get_global_rank() == 0:
-            for streaming_writer in self.streaming_writers:
+            for _, streaming_writer in self.streaming_writers.items():
                 streaming_writer.finish()
         dist.barrier()
 
