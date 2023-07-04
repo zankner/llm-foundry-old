@@ -1,5 +1,6 @@
 import argparse
 import os
+from typing import Dict
 
 from omegaconf import OmegaConf
 import torch
@@ -9,7 +10,7 @@ from composer import State, Trainer, Callback
 from composer.loggers import Logger, WandBLogger
 from composer.metrics.nlp import LanguageCrossEntropy
 import composer.utils.dist as dist
-from streaming import MDSWriter
+from streaming import MDSWriter, Stream
 import transformers
 from transformers import AutoTokenizer
 
@@ -20,26 +21,30 @@ from llmfoundry.models.mpt import ComposerMPTCausalLM
 
 class ReferenceLossCallback(Callback):
 
-    def __init__(self, domain_idx: int, writer_path: str) -> None:
+    def __init__(self, streaming_writer_paths: Dict[int, str]) -> None:
         super().__init__()
-        self.domain_idx = domain_idx
-        streaming_writer = None
+        streaming_writers = None
         if dist.get_global_rank() == 0:
             columns = {
                 "tokens": "bytes",
                 "ref_losses": "bytes",
                 "domain_idx": "int"
             }
-            streaming_writer = MDSWriter(columns=columns,
-                                         out=writer_path,
-                                         compression="zstd")
-        self.streaming_writer = streaming_writer
+            streaming_writers = {
+                domain_id:
+                    MDSWriter(columns=columns,
+                              out=writer_path,
+                              compression="zstd")
+                for domain_id, writer_path in streaming_writer_paths.items()
+            }
+        self.streaming_writers = streaming_writers
         self.proxy_loss_fn = nn.CrossEntropyLoss(ignore_index=-100,
                                                  reduction="none")
 
     def eval_after_forward(self, state: State, logger: Logger) -> None:
         ref_logits = state.outputs.logits
         tokens = state.batch["input_ids"]
+        domain_ids = state.batch["domain_idx"]
         targets = state.model.get_targets(state.batch)
         b, n_tokens, vocab_size = ref_logits.shape
 
@@ -51,14 +56,17 @@ class ReferenceLossCallback(Callback):
 
         all_losses = torch.vstack(dist.all_gather(losses))
         all_tokens = torch.vstack(dist.all_gather(tokens))
+        all_domain_ids = torch.vstack(dist.all_gather(domain_ids))
         if dist.get_global_rank() == 0:
-            for losses, tokens in zip(all_losses, all_tokens):
+            for losses, tokens, domain_id in zip(all_losses, all_tokens,
+                                                 all_domain_ids):
                 byte_losses = losses.cpu().numpy().tobytes()
                 byte_tokens = tokens.cpu().numpy().tobytes()
+                int_domain_id = domain_id.item()
                 self.streaming_writer.write({
                     "tokens": byte_tokens,
                     "ref_losses": byte_losses,
-                    "domain_idx": self.domain_idx
+                    "domain_idx": int_domain_id
                 })
         dist.barrier()
 
@@ -164,89 +172,77 @@ def main(args):
     device_batch_size = int(args.batch_size / dist.get_world_size())
     assert args.batch_size % device_batch_size == 0, "Batch size must be divisible by the number of devices"
 
-    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
-    model, fsdp_cfg = build_model(
-        args.ref_model_size, tokenizer=tokenizer, max_seq_len=args.max_seq_len
-    )  # Probably want to move model building and all other building outside of loop
-    model.use_logits = False  # So that full ModellingOutputs passed to callback
-    model.val_metrics = {
-        LanguageCrossEntropy.__name__: LanguageCrossEntropy()
-    }  # Only metric we care about
-
-    loggers = []
-    if not args.no_wandb:
-        loggers = [
-            WandBLogger(project="doremi-preprocess",
-                        entity="mosaic-ml",
-                        name=f"{args.ref_model_size}-ref-loss")
-        ]
-
-    trainer = Trainer(model=model,
-                      progress_bar=True,
-                      load_path=args.ref_model_ckpt,
-                      fsdp_config=fsdp_cfg,
-                      loggers=loggers)
-
     for split in args.splits:
-        for domain_id in range(args.num_domains):
-            if domain_id not in args.subset_domains:
-                continue
+        print(f"Starting to build losses for split {split}...")
 
-            print(f"Starting to build losses for domain {domain_id}...")
+        tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
+        model, fsdp_cfg = build_model(
+            args.ref_model_size,
+            tokenizer=tokenizer,
+            max_seq_len=args.max_seq_len
+        )  # Probably want to move model building and all other building outside of loop
+        model.use_logits = False  # So that full ModellingOutputs passed to callback
+        model.val_metrics = {
+            LanguageCrossEntropy.__name__: LanguageCrossEntropy()
+        }  # Only metric we care about
 
-            streaming_writer_path = f"/tmp/domains/domain-{domain_id}/{split}"
+        loggers = []
+        if not args.no_wandb:
+            loggers = [
+                WandBLogger(project="doremi-preprocess",
+                            entity="mosaic-ml",
+                            name=f"{args.ref_model_size}-ref-loss")
+            ]
 
-            dataset = StreamingTextDataset(
-                tokenizer=tokenizer,
-                max_seq_len=args.max_seq_len,
+        streams = [
+            Stream(
                 remote=os.path.join(
                     args.remote_base,
                     f"domain-{domain_id}"),  # TODO: SHOULD BE A PASSED ARG
                 local=f"/tmp/streaming/domain-{domain_id}",
-                split=split,
-                batch_size=device_batch_size,
-                shuffle=False,
-            )
-            lm_collate_fn = transformers.DataCollatorForLanguageModeling(
-                tokenizer=dataset.tokenizer, mlm=False)
-            collate_fn = ConcatenatedSequenceCollatorWrapper(
-                base_collator=lm_collate_fn,
-                eos_token_id=args.eos_token_id,
-                bos_token_id=None)
-            dataloader = DataLoader(
-                dataset,
-                collate_fn=collate_fn,
-                batch_size=device_batch_size,
-                drop_last=False,
-                num_workers=8,
-                pin_memory=True,
-                prefetch_factor=2,
-                persistent_workers=True,
-            )
+                split=split) for domain_id in args.subset_domains
+        ]
+        dataset = StreamingTextDataset(
+            streams=streams,
+            tokenizer=tokenizer,
+            max_seq_len=args.max_seq_len,
+            batch_size=device_batch_size,
+            shuffle=False,
+        )
+        lm_collate_fn = transformers.DataCollatorForLanguageModeling(
+            tokenizer=dataset.tokenizer, mlm=False)
+        collate_fn = ConcatenatedSequenceCollatorWrapper(
+            base_collator=lm_collate_fn,
+            eos_token_id=args.eos_token_id,
+            bos_token_id=None)
+        dataloader = DataLoader(
+            dataset,
+            collate_fn=collate_fn,
+            batch_size=device_batch_size,
+            drop_last=False,
+            num_workers=8,
+            pin_memory=True,
+            prefetch_factor=2,
+            persistent_workers=True,
+        )
 
-            existing_ref_loss_callbacks = [
-                (callback_idx, callback)
-                for callback_idx, callback in enumerate(trainer.state.callbacks)
-                if isinstance(callback, ReferenceLossCallback)
-            ]
-            if len(existing_ref_loss_callbacks) > 1:
-                raise ValueError(
-                    "Multiple reference loss callbacks found in trainer state. This should not happen."
-                )
-            elif len(existing_ref_loss_callbacks) == 0:
-                print("Warning: no existing reference loss callbacks found")
-                trainer.state.callbacks.append(
-                    ReferenceLossCallback(domain_idx=domain_id,
-                                          writer_path=streaming_writer_path))
-            else:
-                print("Found existing reference loss callback. Replacing...")
-                callback_idx, _ = existing_ref_loss_callbacks[0]
-                trainer.state.callbacks[callback_idx] = ReferenceLossCallback(
-                    domain_idx=domain_id, writer_path=streaming_writer_path)
+        streaming_writer_paths = {
+            domain_id: f"/tmp/domains/domain-{domain_id}/{split}"
+            for domain_id in args.subset_domains
+        }
+        reference_loss_writer = ReferenceLossCallback(
+            streaming_writer_paths=streaming_writer_paths)
 
-            dist.barrier()  # For safety
-            trainer.eval(dataloader)
-            dist.barrier()  # For safety
+        trainer = Trainer(model=model,
+                          eval_dataloader=dataloader,
+                          callbacks=reference_loss_writer,
+                          progress_bar=True,
+                          load_path=args.ref_model_ckpt,
+                          fsdp_config=fsdp_cfg,
+                          loggers=loggers)
+
+        trainer.eval()
+        trainer.close()
 
 
 if __name__ == "__main__":
