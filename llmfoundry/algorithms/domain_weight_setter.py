@@ -87,7 +87,7 @@ class DomainWeightSetter(Algorithm):
         load_dir = re.sub(r"iter-(\d+)", f"iter-{doremi_iter - 1}",
                           self.save_dir)
         weights_path = os.path.join(
-            "oci://mosaicml-internal-doremi", load_dir, "final",
+            "oci://mosaicml-internal-checkpoints", load_dir, "final",
             "average_domain_weights.npy")  # Hard fixed for now change later
         with tempfile.NamedTemporaryFile() as tmp_file:
             get_file(weights_path, tmp_file.name, overwrite=True)
