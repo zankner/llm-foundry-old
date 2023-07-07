@@ -11,7 +11,7 @@ from mcli import create_run
 def set_common_args(args, base_run, run_name, seed, proxy_ref_size,
                     proxy_ref_samples, domain_streams):
     # Set run name
-    base_run.name = run_name.lower()
+    base_run.name = run_name.lower()[:56]  # Mcli things
     base_run.parameters["run_name"] = run_name
 
     # Set seed
@@ -20,6 +20,14 @@ def set_common_args(args, base_run, run_name, seed, proxy_ref_size,
     # Set compute
     base_run.cluster = args.cluster
     base_run.gpu_num = args.ngpus
+    # Set rest of cluster params
+    if args.cluster == "r9z1":
+        base_run.image = "mosaicml/llm-foundry:2.0.1_cu118-latest"
+        base_run.gpu_type = "h100_80gb"
+    elif args.cluster in ["r8z6", "r1z1"]:
+        base_run.gpu_type = "a100_80gb"
+    else:
+        base_run.gpu_type = "a100_40gb"
 
     # Set modeling args
     model_cfg = build_model_cfg(args.model_size)
@@ -36,8 +44,8 @@ def set_common_args(args, base_run, run_name, seed, proxy_ref_size,
 
     # Set eval/ckpt freq
     if args.num_samples in ["10K", "25K"]:
-        base_run.parameters["eval_interval"] = "500ba"
-        base_run.parameters["save_interval"] = "250ba"
+        base_run.parameters["eval_interval"] = "1000ba"
+        base_run.parameters["save_interval"] = "500ba"
     elif args.num_samples == "100K":
         base_run.parameters["eval_interval"] = "2000ba"
         base_run.parameters["save_interval"] = "1000ba"
@@ -76,18 +84,19 @@ def launch_run(run, local_debug, seed):
 def get_remote_data_path(args, run_type, seed):
     if run_type == "proxy":
         if args.iter == 1:
-            data_name = os.path.join("token-ref-loss",
-                                     f"{args.num_samples}-samples-baseline")
+            data_name = os.path.join(
+                "token-ref-loss",
+                f"{args.num_samples}-samples-prp-{args.model_size}-baseline")
         else:
             proxy_desc = proxy_descriptor(
-                args.iter,  # Safe to use iter since proxy model
+                args.iter - 1,  # Safe to use iter since proxy model
                 args.step_size,
                 args.smoothing,
                 args.warmup_steps,
             )
             data_name = os.path.join(
                 "token-ref-loss",
-                f"{args.num_samples}-samples-prp-{args.model_size}-{proxy_desc}"
+                f"{args.num_samples}-samples-prp-{args.model_size}-proxy-{proxy_desc}"
             )
     else:
         data_name = os.path.join("base", f"{args.num_samples}-samples-baseline")
@@ -155,11 +164,13 @@ def build_model_cfg(model_size):
 
 
 def get_proxy_weights(proxy_run_name, dataset):
-    weight_file = f"oci://mosaicml-internal-checkpoints/zack/DoReMi/{dataset}/proxy/{proxy_run_name}/domain-weights/final/average.npy"
+    # CHANGE BACK TO HAVING A DATASET PREFIX
+    # ie: f"oci://mosaicml-internal-checkpoints/zack/DoReMi/{dataset}/proxy/{proxy_run_name}/average-domain-weights/final/average.npy"
+    weight_file = f"oci://mosaicml-internal-checkpoints/zack/DoReMi/proxy/{proxy_run_name}/domain-weights/final/average_domain_weights.npy"
     with tempfile.NamedTemporaryFile() as tmp_file:
         get_file(weight_file, tmp_file.name, overwrite=True)
         weights = np.load(tmp_file.name)
-    return weights
+    return [float(weight) for weight in weights]
 
 
 # domain streams handle different remotes for different app

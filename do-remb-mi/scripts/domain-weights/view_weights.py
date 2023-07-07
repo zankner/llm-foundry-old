@@ -1,5 +1,6 @@
 import argparse
 import os
+import re
 import tempfile
 import multiprocessing
 
@@ -18,7 +19,7 @@ BASELINE_PROPORTIONS = [
     0.16, 0.127, 0.114, 0.09, 0.102, 0.098, 0.055, 0.056, 0.029, 0.024, 0.021,
     0.017, 0.037, 0.021, 0.012, 0.007, 0.009, 0.006, 0.008, 0.004, 0.002, 0.001
 ]
-WEIGHTS_BASE = "oci://mosaicml-internal-doremi/pile/proxy-weights"
+WEIGHTS_BASE = "oci://mosaicml-internal-checkpoints/zack/DoReMi/proxy"
 
 
 def load_weights(weight_file: str):
@@ -44,6 +45,14 @@ def get_all_weights(weights_dir: str,
     return weights
 
 
+def get_compare_weights(compare_run_name):
+    compare_weights_path = os.path.join(WEIGHTS_BASE, compare_run_name,
+                                        "domain-weights", "final",
+                                        "average_domain_weights.npy")
+    compare_weights = load_weights(compare_weights_path)
+    return compare_weights
+
+
 def ema(weights, decay=0.99):
     ema_weights = []
     for weight in weights:
@@ -55,13 +64,25 @@ def ema(weights, decay=0.99):
 
 
 def main(args):
-    weights_dir = os.path.join(WEIGHTS_BASE, args.run_name)
+    weights_dir = os.path.join(WEIGHTS_BASE, args.run_name, "domain-weights")
     weights = get_all_weights(weights_dir,
                               num_domains=args.num_domains,
                               max_steps=args.max_steps,
                               start_step=args.start_step,
                               log_freq=args.log_freq,
                               average=not args.ema)
+
+    if args.compare_run_name == "baseline":
+        compare_weights = BASELINE_PROPORTIONS
+    elif args.compare_run_name == "prev-iter":
+        cur_iter = int(re.search(r"iter-(\d+)", args.run_name).group(1))
+        compare_run_name = re.sub(r"iter-(\d+)",
+                                  lambda match: "iter-" + str(cur_iter - 1),
+                                  args.run_name)
+        compare_weights = get_compare_weights(compare_run_name)
+    else:
+        compare_weights = get_compare_weights(args.compare_run_name)
+
     if args.ema:
         weights = {k: ema(v, args.ema) for k, v in weights.items()}
         sums = [
@@ -91,7 +112,7 @@ def main(args):
                 domain_name.split("-")[-1])]
         plt.plot(steps, weight_trajectory, label=display_domain_name)
 
-        og_proportion = BASELINE_PROPORTIONS[int(domain_name.split('-')[-1])]
+        og_proportion = compare_weights[int(domain_name.split('-')[-1])]
         delta = weight_trajectory[-1] - og_proportion
         print(
             f"{display_domain_name}: {weight_trajectory[-1]} ---- Delta: {green if delta >=0 else red}{delta:.3f}  ({(delta / og_proportion)*100:.2f}%){reset}"
@@ -99,9 +120,10 @@ def main(args):
 
     # Create the legend outside the plot
     plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-
     # Adjust the layout to accommodate the legend
     plt.subplots_adjust(right=0.7)  # Increase the right margin
+
+    plt.title(args.title)
 
     # Show the plot
     plt.show()
@@ -110,10 +132,12 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--run-name", type=str, required=True)
+    parser.add_argument("--compare-run-name", type=str, default="baseline")
     parser.add_argument("--num-domains", type=int, required=True)
     parser.add_argument("--log-freq", type=int, default=100)
     parser.add_argument("--start-step", type=int, default=0)
     parser.add_argument("--max-steps", type=int, required=True)
+    parser.add_argument("--title", type=str, default="Domain Weights")
     parser.add_argument("--data-source", action="store_true")
     parser.add_argument("--ema", type=float, default=None)
     args = parser.parse_args()

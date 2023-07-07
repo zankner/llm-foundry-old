@@ -6,6 +6,7 @@ from utils import (build_domain_streams, get_remote_data_path, build_proxy_name,
                    launch_run, set_common_args)
 
 # CHANGE BACK THE SAMPLING DIR TO UNIFORM INSTEAD OF BASELINE
+# change back the remote data base to be iter and not iter - 1
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # System args
@@ -51,7 +52,7 @@ if __name__ == "__main__":
         base_run = RunConfig.from_file(
             f"do-remb-mi/jobs/models/yamls/proxy/pretrain_proxy.yaml")
 
-        remote_base = get_remote_data_path(args, "ref", seed)
+        remote_base = get_remote_data_path(args, "proxy", seed)
         proportions = [1 / args.num_domains] * args.num_domains
         domain_streams = build_domain_streams(args.num_domains, remote_base,
                                               proportions)

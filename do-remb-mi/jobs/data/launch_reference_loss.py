@@ -2,6 +2,8 @@ import argparse
 import re
 from mcli import RunConfig, create_run
 
+#from ..models.utils import build_ref_name
+
 # Probably want a hybrid mode, ie some sort of number of jobs per parallell process to scale to 40K
 # TODO: Refactor to use formatting as well
 if __name__ == "__main__":
@@ -10,6 +12,7 @@ if __name__ == "__main__":
     parser.add_argument("--model-size", type=str, default="125M")
     parser.add_argument("--split", type=str, default="train")
     parser.add_argument("--subset-domains", nargs="+", type=int, default=[])
+    parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--remote-base", type=str, required=True)
     parser.add_argument("--ref-model-ckpt", type=str, required=True)
     parser.add_argument("--upload-dir", type=str, required=True)
@@ -24,11 +27,12 @@ if __name__ == "__main__":
             if domain_id not in args.subset_domains:
                 continue
             base_run = RunConfig.from_file(
-                f"do-remb-mi/jobs/data-prep/yamls/build_reference_loss.yaml")
+                f"do-remb-mi/jobs/data/yamls/build_reference_loss.yaml")
 
             base_run.name = f"ref-loss-domain-{domain_id}"
             base_run.run_name = f"ref-loss-domain-{domain_id}-{args.split}"
-
+            base_run.command = re.sub(r'{BATCH_SIZE}', str(args.batch_size),
+                                      base_run.command)
             base_run.command = re.sub(r'{SUBSET_DOMAINS}', str(domain_id),
                                       base_run.command)
             base_run.command = re.sub(r'{NUM_DOMAINS}', str(args.num_domains),
@@ -53,7 +57,8 @@ if __name__ == "__main__":
 
         base_run.name = "ref-loss-all-domains"
         base_run.run_name = "ref-loss-all-domains"
-
+        base_run.command = re.sub(r'{BATCH_SIZE}', str(args.batch_size),
+                                  base_run.command)
         base_run.command = re.sub(r'--subset-domains {SUBSET_DOMAINS} ', '',
                                   base_run.command)
         base_run.command = re.sub(r'{NUM_DOMAINS}', str(args.num_domains),

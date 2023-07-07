@@ -70,7 +70,7 @@ if __name__ == "__main__":
         base_run = RunConfig.from_file(
             f"do-remb-mi/jobs/models/yamls/final/pretrain_final.yaml")
 
-        remote_base = get_remote_data_path(args, "ref", seed)
+        remote_base = get_remote_data_path(args, "final", seed)
         if args.domain_weight_source == "baseline":
             proportions = [None] * args.num_domains
         elif args.domain_weight_source == "125M-replicate":
