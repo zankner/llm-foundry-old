@@ -9,6 +9,7 @@ import re
 from typing import Any, Dict
 
 import torch
+import torch.nn as nn
 import numpy as np
 from composer import Algorithm, Event, State
 from composer.utils import dist, get_file
@@ -49,12 +50,9 @@ class DomainWeightSetter(Algorithm):
 
         self.trajectory_domain_weights = self.domain_weights
         self.num_updates = 1
-        self.smoothing_dist = torch.ones(num_domains) / num_domains
-        self.lambdas = torch.zeros(num_domains)
 
         # Handling grad accumulation
-        self.domain_excess_loss = torch.zeros(num_domains)
-        self.seq_len_normalization = torch.zeros(num_domains)
+        self.excess_loss = []
 
         self.warmup_steps = warmup_steps
 
@@ -141,93 +139,68 @@ class DomainWeightSetter(Algorithm):
 
     @torch.no_grad()
     def apply(self, event: Event, state: State, logger: Logger) -> None:
-        device = state.batch["input_ids"].device
-        self.smoothing_dist = self.smoothing_dist.to(device)
-        self.domain_weights = self.domain_weights.to(device)
-        self.lambdas = self.lambdas.to(device)
-        self.trajectory_domain_weights = self.trajectory_domain_weights.to(
-            device)
-        self.domain_excess_loss = self.domain_excess_loss.to(device)
-        self.seq_len_normalization = self.seq_len_normalization.to(device)
-
-        # Can probably change to be a batch event but think it might get wiped from the state
         if event == Event.BEFORE_FORWARD:
-            if int(state.timestamp.batch) != 0:
-                return
             device = state.batch["input_ids"].device
             self.domain_weights = self.domain_weights.to(device)
-            self.trajectory_domain_weights = self.trajectory_domain_weights.to(
-                device)
             state.batch_set_item(key="domain_weights",
                                  value=self.domain_weights)
 
-            self._log_domain_weights(state)
+            if int(state.timestamp.batch) != 0:
+                self._log_domain_weights(state)
 
         elif event == Event.FIT_END:
             self._log_domain_weights(state, final=True)
 
         elif event == Event.AFTER_FORWARD:
-            domain_excess_loss, _, _, seq_len_normalization = state.model.compute_domain_wise_excess_loss(
-                state.outputs,
-                state.batch,
-                self.domain_weights,
-                non_zero_excess=True)
 
-            # Can probably reduce on just rank 0 and set weights there
-            dist.all_reduce(domain_excess_loss, "sum")
-            dist.all_reduce(seq_len_normalization, "sum")
+            excess_loss = state.model.compute_excess_loss(
+                state.outputs, state.batch)
 
-            self.domain_excess_loss += domain_excess_loss.detach()
-            self.seq_len_normalization += seq_len_normalization.detach()
-
-            state.batch_set_item(key="domain_weights",
-                                 value=self.domain_weights)
+            self.scores += dist.all_gather(excess_loss)
+            self.domain_ids += dist.all_gather(state.batch["domain_idx"])
 
         elif event == Event.BATCH_END:
-            domain_excess_loss = self.domain_excess_loss
-            seq_len_normalization = torch.maximum(
-                self.seq_len_normalization,
-                torch.ones_like(self.seq_len_normalization
-                               ))  # Avoid changing unused domain weights
 
-            lambdas = domain_excess_loss / seq_len_normalization
-            lambdas[(lambdas == 0.0)] = self.lambdas[(lambdas == 0.0)]
-            self.lambdas = lambdas
+            scores = torch.cat(self.scores, dim=0)
+            domain_ids = torch.cat(self.domain_ids, dim=0)
+
+            perdomain_scores = []
+            for domain_id in range(self.num_domains):
+                domain_mask = (domain_ids == domain_id)
+                if domain_mask.sum() > 0:
+                    curr_domain_scores = torch.clip(scores[domain_mask],
+                                                    min=0).mean()
+                else:
+                    curr_domain_scores = self.perdomain_scores[domain_id]
+                perdomain_scores.append(curr_domain_scores)
 
             if self.log_excess_loss and dist.get_global_rank() == 0:
                 to_log = {}
-                for domain_idx, excess_loss in enumerate(lambdas):
+                for domain_idx, excess_loss in enumerate(perdomain_scores):
                     excess_loss = excess_loss.cpu().item()
                     to_log[
                         f"Excess-loss/domain-{PILE_DATA_SOURCES[domain_idx]}"] = excess_loss
-
                 logger.log_metrics(to_log)
 
-            if int(state.timestamp.batch) < self.warmup_steps:
-                state.batch_set_item(key="domain_weights",
-                                     value=self.domain_weights)
-                self._log_domain_weights(state)
-                return
+            self.perdomain_scores[:] = torch.tensor(perdomain_scores)
+            log_new_train_domain_weights = torch.log(
+                self.domain_weights) + self.reweight_eta * self.perdomain_scores
+            new_train_domain_weights = nn.functional.softmax(
+                log_new_train_domain_weights, dim=0)
+            train_domain_weights = (
+                1 - self.reweight_eps
+            ) * new_train_domain_weights + self.reweight_eps / len(
+                new_train_domain_weights)
 
-            domain_weights_prime = self.domain_weights * torch.exp(
-                self.step_size * lambdas)
-            domain_weights_prime = domain_weights_prime / torch.sum(
-                domain_weights_prime)  # Normalizing domain weight update
-
-            domain_weights = (
-                1 - self.smoothing
-            ) * domain_weights_prime + self.smoothing * self.smoothing_dist  # Smooth w/ uniform domain dist
-
-            self.domain_weights = domain_weights
-            self.trajectory_domain_weights += domain_weights
+            self.domain_weights = train_domain_weights
+            self.trajectory_domain_weights += self.domain_weights
             self.num_updates += 1
 
-            # Broadcasting domain weight information
-            self._log_domain_weights(state)
+            dist.barrier()  # Check if can get rid of later
 
-            # Resetting trackers (self.lambdas set to be same above)
-            self.seq_len_normalization = torch.zeros_like(
-                self.seq_len_normalization)
-            self.domain_excess_loss = torch.zeros_like(self.domain_excess_loss)
+            self.scores = []
+            self.domain_ids = []
+
+            self._log_domain_weights(state)
 
         dist.barrier()
