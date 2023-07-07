@@ -723,7 +723,7 @@ class ComposerMPTProxyLM(ComposerMPTCausalLM):
     def loss(self, outputs, batch):
         pertoken_loss = self.compute_excess_loss(outputs, batch)
 
-        train_domain_weights = self.read_weights().to(pertoken_loss.device)
+        train_domain_weights = batch["domain_weights"].to(pertoken_loss.device)
         curr_domain_weights = train_domain_weights[batch[
             'domain_idx']].unsqueeze(-1).expand_as(pertoken_loss).detach()
         normalizer = curr_domain_weights.sum()
