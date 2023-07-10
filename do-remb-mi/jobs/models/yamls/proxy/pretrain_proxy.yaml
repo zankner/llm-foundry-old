@@ -2,7 +2,7 @@ name: zack-doremi-proxy
 
 integrations:
   - integration_type: git_repo
-    git_branch: zack/do-remb-mi
+    git_branch: official-doremi
     git_repo: zankner/llm-foundry
     pip_install: .[gpu]
     ssh_clone: true
@@ -82,7 +82,7 @@ parameters:
     verbose: false
 
   # Logging
-  eval_first: true
+  eval_first: false
   eval_interval: 2000ba
   log_to_console: true
   console_log_interval: 100ba
