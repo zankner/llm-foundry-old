@@ -213,7 +213,7 @@ if __name__ == "__main__":
         if truncate_num_samples is not None:
             denominator = truncate_num_samples
         else:
-            denominator = data.size * (
+            denominator = streaming_data.size * (
                 6212 //
                 4) // args.max_length  # Estimate tokens / tokens per sample
 
