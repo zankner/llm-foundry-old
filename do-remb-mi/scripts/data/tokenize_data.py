@@ -78,14 +78,12 @@ class TokensDataset(IterableDataset):
         self,
         dataset: StreamingDataset,
         tokenizer: PreTrainedTokenizerBase,
-        max_length: int,
         bos_text: str,
         eos_text: str,
     ):
         self.dataset = dataset
         self.tokenizer = tokenizer
         os.environ['TOKENIZERS_PARALLELISM'] = 'false'
-        self.max_length = max_length
         self.bos_text = bos_text
         self.eos_text = eos_text
 
@@ -187,7 +185,6 @@ if __name__ == "__main__":
         data = TokensDataset(
             raw_data,
             tokenizer=tokenizer,
-            max_length=args.max_length,
             bos_text=args.bos_text,
             eos_text=args.eos_text,
         )
