@@ -45,7 +45,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    run_name = f"replicate-{build_proxy_name(args, args.iter, args.model_size,args.num_samples)}"
+    run_name = f"debug-{build_proxy_name(args, args.iter, args.model_size,args.num_samples)}"
 
     for seed in args.seeds:
         base_run = RunConfig.from_file(
