@@ -117,7 +117,7 @@ class ConcatDomainsTokensDataset(IterableDataset):
         if self.concat_method == "random":
             return 0
         elif self.concat_method == "data-source":
-            return self.uid_to_domain.index(sample["pile_set_name"])
+            return self.uid_to_domain.index(sample["data_source"])
         elif self.concat_method == "clusters":
             return self.uid_to_domain[sample["uid"]]
         else:
