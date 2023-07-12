@@ -19,6 +19,16 @@ BASELINE_PROPORTIONS = [
     0.16, 0.127, 0.114, 0.09, 0.102, 0.098, 0.055, 0.056, 0.029, 0.024, 0.021,
     0.017, 0.037, 0.021, 0.012, 0.007, 0.009, 0.006, 0.008, 0.004, 0.002, 0.001
 ]
+REPLICATE_PROPORTIONS = [
+    0.20163412392139435, 0.10023175925016403, 0.13405060768127441,
+    0.1319042444229126, 0.07527627050876617, 0.09094192832708359,
+    0.05040840804576874, 0.04523293673992157, 0.024078955873847008,
+    0.03058076836168766, 0.019306106492877007, 0.0025820545852184296,
+    0.0365639366209507, 0.002238696441054344, 0.00817348062992096,
+    0.0037490464746952057, 0.016184765845537186, 0.004014396108686924,
+    0.008683200925588608, 0.007775607518851757, 0.004500322509557009,
+    0.0018897337140515447
+]
 WEIGHTS_BASE = "oci://mosaicml-internal-checkpoints/zack/DoReMi/proxy"
 
 
@@ -74,6 +84,8 @@ def main(args):
 
     if args.compare_run_name == "baseline":
         compare_weights = BASELINE_PROPORTIONS
+    elif args.compare_run_name == "replicate":
+        compare_weights = REPLICATE_PROPORTIONS
     elif args.compare_run_name == "prev-iter":
         cur_iter = int(re.search(r"iter-(\d+)", args.run_name).group(1))
         compare_run_name = re.sub(r"iter-(\d+)",
