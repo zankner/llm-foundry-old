@@ -64,7 +64,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    run_name = build_final_name(args)
+    run_name = f"debug-{build_final_name(args)}"
 
     for seed in args.seeds:
         base_run = RunConfig.from_file(
@@ -78,9 +78,7 @@ if __name__ == "__main__":
         elif args.domain_weight_source == "250M-replicate":
             proportions = replicate_250M_proportions
         elif args.domain_weight_source == "proxy":
-            proxy_run_name = build_proxy_name(
-                args, args.iter, args.proxy_model_size,
-                args.proxy_num_samples) + f"-sd-{seed}"
+            proxy_run_name = f"debug-{build_proxy_name(args, args.iter, args.proxy_model_size,args.proxy_num_samples)}-sd-{seed}"
             proportions = get_proxy_weights(proxy_run_name, args.dataset)
         domain_streams = build_domain_streams(args.num_domains,
                                               remote_base,
