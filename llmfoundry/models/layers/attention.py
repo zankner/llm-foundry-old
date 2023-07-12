@@ -125,10 +125,7 @@ def scaled_multihead_dot_product_attention(
     return out, None, past_key_value
 
 
-def check_valid_inputs(*tensors,
-                       valid_dtypes=[
-                           torch.float16, torch.bfloat16, torch.float32
-                       ]):
+def check_valid_inputs(*tensors, valid_dtypes=[torch.float16, torch.bfloat16]):
     for tensor in tensors:
         if tensor.dtype not in valid_dtypes:
             raise TypeError(f'{tensor.dtype=} must be in {valid_dtypes=}.')
