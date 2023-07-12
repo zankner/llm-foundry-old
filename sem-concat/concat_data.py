@@ -161,7 +161,7 @@ if __name__ == "__main__":
     parser.add_argument("--concat-method",
                         type=str,
                         required=True,
-                        choices=["data-source", "clusters"])
+                        choices=["random", "data-source", "clusters"])
     parser.add_argument("--num-clusters", type=int, default=None)
     parser.add_argument("--uid-to-cluster-path", type=str, default=None)
 
@@ -220,11 +220,10 @@ if __name__ == "__main__":
             concat_prefix = f"{args.num_clusters}-clusters"
         else:
             concat_prefix = args.concat_method
-        writer = MDSWriter(
-            columns=columns,
-            out=os.path.join(args.upload_remote,
-                             f"{concat_prefix}-sd-{args.shuffle_seed}", split),
-            compression="zstd")
+        writer = MDSWriter(columns=columns,
+                           out=os.path.join(args.upload_remote,
+                                            f"{concat_prefix}", split),
+                           compression="zstd")
         for step, (sample, domain_idx) in enumerate(
                 tqdm(samples, desc=split, total=denominator, leave=True)):
 
