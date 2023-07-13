@@ -3,6 +3,7 @@
 
 try:
     from llmfoundry.callbacks.fdiff_callback import FDiffMetrics
+    from llmfoundry.callbacks.log_average_icl import AverageICLLogger
     from llmfoundry.callbacks.generate_callback import Generate
     from llmfoundry.callbacks.model_gauntlet_callback import ModelGauntlet
     from llmfoundry.callbacks.monolithic_ckpt_callback import \
@@ -18,6 +19,7 @@ except ImportError as e:
 
 __all__ = [
     'FDiffMetrics',
+    'AverageICLLogger',
     'Generate',
     'MonolithicCheckpointSaver',
     'GlobalLRScaling',

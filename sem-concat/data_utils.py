@@ -9,9 +9,9 @@ def get_samples(remote, split, tokenizer_name, num_samples=1):
     samples = []
     for i in range(num_samples):
         sample = ds[i]
-        samples.append(
-            tokenizer.decode(
-                np.frombuffer(sample['tokens'], dtype=np.int64).copy()))
+        samples.append((tokenizer.decode(
+            np.frombuffer(sample['tokens'],
+                          dtype=np.int64).copy()), sample['domain_idx']))
     return samples
 
 
