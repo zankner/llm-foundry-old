@@ -34,7 +34,7 @@ Tokenizer = Union[PreTrainedTokenizer, PreTrainedTokenizerFast]
 def build_callback(name, kwargs):
     if name == 'lr_monitor':
         return LRMonitor()
-    elif name == 'average_icl':
+    elif name == 'average_icl_logger':
         return AverageICLLogger()
     elif name == 'memory_monitor':
         return MemoryMonitor()
