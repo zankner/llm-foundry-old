@@ -17,7 +17,7 @@ if __name__ == "__main__":
 
     # Model args
     parser.add_argument("--model-size", type=str, default="1B", choices=["1B"])
-    parser.add_argument("--device-batch-size", type=int, default=32)
+    parser.add_argument("--device-batch-size", type=int, default=8)
     parser.add_argument("--no-packing", action="store_true")
 
     # Data args
