@@ -19,6 +19,13 @@ BASELINE_PROPORTIONS = [
     0.16, 0.127, 0.114, 0.09, 0.102, 0.098, 0.055, 0.056, 0.029, 0.024, 0.021,
     0.017, 0.037, 0.021, 0.012, 0.007, 0.009, 0.006, 0.008, 0.004, 0.002, 0.001
 ]
+CLUSTERS_22_PROPORTIONS = [
+    0.0384240625, 0.03094484375, 0.019497421875, 0.021077734375, 0.09471203125,
+    0.142099375, 0.016896328125, 0.035976796875, 0.0302825, 0.0598478125,
+    0.119653671875, 0.00718921875, 0.02127328125, 0.009433046875, 0.0166284375,
+    0.07820453125, 0.054911640625, 0.023267421875, 0.0343740625, 0.032515625,
+    0.08241453125, 0.030375625
+]
 REPLICATE_PROPORTIONS = [
     0.20163412392139435, 0.10023175925016403, 0.13405060768127441,
     0.1319042444229126, 0.07527627050876617, 0.09094192832708359,
@@ -82,8 +89,10 @@ def main(args):
                               log_freq=args.log_freq,
                               average=not args.ema)
 
-    if args.compare_run_name == "baseline":
+    if args.compare_run_name == "pile":
         compare_weights = BASELINE_PROPORTIONS
+    elif args.compare_run_name == "22-clusters":
+        compare_weights = CLUSTERS_22_PROPORTIONS
     elif args.compare_run_name == "replicate":
         compare_weights = REPLICATE_PROPORTIONS
     elif args.compare_run_name == "prev-iter":
