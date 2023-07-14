@@ -35,6 +35,7 @@ class DomainWeightSetter(Algorithm):
                  log_domain_weights_freq=100,
                  log_excess_loss=False):
 
+        self.num_domains = num_domains
         self.save_dir = save_dir
         self.step_size = step_size
         self.smoothing = smoothing
@@ -194,7 +195,8 @@ class DomainWeightSetter(Algorithm):
             lambdas[(lambdas == 0.0)] = self.lambdas[(lambdas == 0.0)]
             self.lambdas = lambdas
 
-            if self.log_excess_loss and dist.get_global_rank() == 0:
+            if self.log_excess_loss and dist.get_global_rank(
+            ) == 0 and self.num_domains == 22:
                 to_log = {}
                 for domain_idx, excess_loss in enumerate(lambdas):
                     excess_loss = excess_loss.cpu().item()

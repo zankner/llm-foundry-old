@@ -53,7 +53,7 @@ if __name__ == "__main__":
             )
     elif args.mode == "serial":
         base_run = RunConfig.from_file(
-            f"do-remb-mi/jobs/data-prep/yamls/build_reference_loss.yaml")
+            f"do-remb-mi/jobs/data/yamls/build_reference_loss.yaml")
 
         base_run.name = "ref-loss-all-domains"
         base_run.run_name = "ref-loss-all-domains"
