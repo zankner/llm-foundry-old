@@ -31,7 +31,7 @@ class LogDomainLoss(Callback):
     def after_forward(self, state: State, logger: Logger):
         if int(state.timestamp.batch) % self.log_freq != 0:
             return
-        
+
         logits = state.outputs.logits
         b, seq_len, _ = logits.shape
 
@@ -64,7 +64,7 @@ class LogDomainLoss(Callback):
         to_log = {}
         for domain_idx, loss in enumerate(loss / seq_len_normalization):
             loss = loss.cpu().item()
-            if loss > 0:
+            if loss > 0 and self.num_domains == 22:
                 to_log[
                     f"metrics/domains/domain-{PILE_DATA_SOURCES[domain_idx]}-loss"] = loss
-        logger.log_metrics(to_log)
+                logger.log_metrics(to_log)
