@@ -153,6 +153,8 @@ parameters:
       num_canonical_nodes: ${num_canonical_nodes}
       shuffle: true
       shuffle_algo: py1b
+      predownload: 16777216
+      shuffle_block_size: 16777216
       shuffle_seed: ${global_seed}
       local: /tmp/dataset/train
       remote: # Set by launch script
