@@ -3,8 +3,8 @@ from streaming import StreamingDataset
 from transformers import AutoTokenizer
 
 
-def get_samples(remote, split, tokenizer_name, num_samples=1):
-    ds = StreamingDataset(remote=remote, split=split, shuffle=False)
+def get_samples(remote, split, tokenizer_name, num_samples=1, shuffle=False):
+    ds = StreamingDataset(remote=remote, split=split, shuffle=shuffle)
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
     samples = []
     for i in range(num_samples):
