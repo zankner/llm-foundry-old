@@ -133,11 +133,11 @@ def main(args):
                 domain_name.split("-")[-1])]
         plt.plot(steps, weight_trajectory, label=display_domain_name)
 
-        #og_proportion = compare_weights[int(domain_name.split('-')[-1])]
-        #delta = weight_trajectory[-1] - og_proportion
-        #print(
-        #    f"{display_domain_name}: {weight_trajectory[-1]} ---- Delta: {green if delta >=0 else red}{delta:.3f}  ({(delta / og_proportion)*100:.2f}%){reset}"
-        #)
+        og_proportion = compare_weights[int(domain_name.split('-')[-1])]
+        delta = weight_trajectory[-1] - og_proportion
+        print(
+            f"{display_domain_name}: {weight_trajectory[-1]} ---- Delta: {green if delta >=0 else red}{delta:.3f}  ({(delta / og_proportion)*100:.2f}%){reset}"
+        )
 
     # Create the legend outside the plot
     plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
