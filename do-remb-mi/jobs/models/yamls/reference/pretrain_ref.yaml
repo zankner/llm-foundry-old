@@ -2,7 +2,7 @@ name: zack-doremi-reference
 
 integrations:
   - integration_type: git_repo
-    git_branch: zack/do-remb-mi
+    git_branch: zack/shuffle-doremi
     git_repo: zankner/llm-foundry
     pip_install: .[gpu]
     ssh_clone: true
@@ -121,7 +121,7 @@ parameters:
 
   # Dataloaders
   eos_token_id: 0 # update for hero run with custom tokenizer
-  num_canonical_nodes: 128 # update for hero run, must be codivisible by # physical nodes
+  num_canonical_nodes: 64 # update for hero run, must be codivisible by # physical nodes
 
   # Eval loader
   eval_loader:
@@ -153,6 +153,8 @@ parameters:
       num_canonical_nodes: ${num_canonical_nodes}
       shuffle: true
       shuffle_algo: py1b
+      predownload: 16777216
+      shuffle_block_size: 16777216
       shuffle_seed: ${global_seed}
       samples_per_epoch: # Fill with samples in the Pile
       streams: # Filled by launch script

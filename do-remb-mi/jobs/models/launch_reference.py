@@ -60,6 +60,7 @@ if __name__ == "__main__":
         args.proxy_iter = args.iter - 1
 
     run_name, domain_weight_source = build_ref_name(args)
+    run_name = f"shuffled-{run_name}"
 
     for seed in args.seeds:
         base_run = RunConfig.from_file(
