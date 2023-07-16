@@ -70,6 +70,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     run_name = build_final_name(args)
+    run_name = f"shuffled-{run_name}"
 
     for seed in args.seeds:
         base_run = RunConfig.from_file(
@@ -86,6 +87,7 @@ if __name__ == "__main__":
             proxy_run_name = build_proxy_name(
                 args, args.iter, args.proxy_model_size,
                 args.proxy_num_samples) + f"-sd-{seed}"
+            proxy_run_name = f"shuffled-{proxy_run_name}"
             proportions = get_proxy_weights(proxy_run_name, args.dataset)
         domain_streams = build_domain_streams(args.num_domains,
                                               remote_base,
