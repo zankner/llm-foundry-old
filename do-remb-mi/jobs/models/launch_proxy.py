@@ -47,6 +47,7 @@ if __name__ == "__main__":
 
     run_name = build_proxy_name(args, args.iter, args.model_size,
                                 args.num_samples)
+    run_name = f"shuffled-{run_name}"
 
     for seed in args.seeds:
         base_run = RunConfig.from_file(
