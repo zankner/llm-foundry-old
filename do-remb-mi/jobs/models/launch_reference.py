@@ -4,7 +4,7 @@ from mcli import RunConfig
 
 from utils import (set_common_args, get_remote_data_path, launch_run,
                    build_ref_name, build_proxy_name, build_domain_streams,
-                   get_proxy_weights)
+                   get_proxy_weights, PILE_BASELINE_PROPORTIONS)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -60,7 +60,6 @@ if __name__ == "__main__":
         args.proxy_iter = args.iter - 1
 
     run_name, domain_weight_source = build_ref_name(args)
-    run_name = f"shuffled-{run_name}"
 
     for seed in args.seeds:
         base_run = RunConfig.from_file(
@@ -68,7 +67,7 @@ if __name__ == "__main__":
 
         remote_base = get_remote_data_path(args, "ref", seed)
         if args.domain_weight_source == "baseline":
-            proportions = [None] * args.num_domains
+            proportions = PILE_BASELINE_PROPORTIONS
         elif args.domain_weight_source == "proxy":
             proxy_run_name = build_proxy_name(args, args.proxy_iter,
                                               args.model_size,

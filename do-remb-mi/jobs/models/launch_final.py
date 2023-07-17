@@ -4,7 +4,7 @@ from mcli import RunConfig
 
 from utils import (build_domain_streams, build_final_name, build_proxy_name,
                    get_remote_data_path, get_proxy_weights, launch_run,
-                   set_common_args)
+                   set_common_args, PILE_BASELINE_PROPORTIONS)
 
 # These are the weights reported in the paper
 replicate_125M_proportions = [
@@ -20,16 +20,6 @@ replicate_125M_proportions = [
 replicate_250M_proportions = [
     0.6057, 0.0046, 0.0224, 0.1019, 0.0036, 0.0113, 0.0072, 0.0047, 0.0699,
     0.0018, 0.0093, 0.0061, 0.0062, 0.0134, 0.0502, 0.0274, 0.0063, 0.0070
-]
-pile_proportions = [
-    0.09453842840643951, 0.14917909233033527, 0.10094214543052439,
-    0.10655481967324043, 0.12080817542576074, 0.057931398201810855,
-    0.04899461799656484, 0.06609301371629318, 0.033852550742558066,
-    0.028786516694716036, 0.030963661397225353, 0.014752223203858505,
-    0.06490474172635509, 0.02527727404201975, 0.014990856135336905,
-    0.006260514186577765, 0.0101892107589665, 0.007291182280087811,
-    0.00928314413519068, 0.004190338888072547, 0.002578251119249607,
-    0.0016378435088161597
 ]
 
 if __name__ == "__main__":
@@ -82,7 +72,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     run_name = build_final_name(args)
-    run_name = f"shuffled-{run_name}"
 
     for seed in args.seeds:
         base_run = RunConfig.from_file(
@@ -96,12 +85,11 @@ if __name__ == "__main__":
         elif args.domain_weight_source == "250M-replicate":
             proportions = replicate_250M_proportions
         elif args.domain_weight_source == "pile":
-            proportions = pile_proportions
+            proportions = PILE_BASELINE_PROPORTIONS
         elif args.domain_weight_source == "proxy":
             proxy_run_name = build_proxy_name(
                 args, args.iter, args.proxy_model_size,
                 args.proxy_num_samples) + f"-sd-{seed}"
-            proxy_run_name = f"shuffled-{proxy_run_name}"
             proportions = get_proxy_weights(proxy_run_name, args.dataset)
         domain_streams = build_domain_streams(args.num_domains,
                                               remote_base,
