@@ -68,6 +68,7 @@ if __name__ == "__main__":
         remote_base = get_remote_data_path(args, "ref", seed)
         if args.domain_weight_source == "baseline":
             proportions = PILE_BASELINE_PROPORTIONS
+            proportions = [None] * args.num_domains
         elif args.domain_weight_source == "proxy":
             proxy_run_name = build_proxy_name(args, args.proxy_iter,
                                               args.model_size,
