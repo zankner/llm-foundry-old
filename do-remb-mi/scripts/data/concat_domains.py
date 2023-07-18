@@ -27,10 +27,10 @@ PILE_DATA_SOURCES = [
 ]
 
 
-def build_dataloader(dataset, batch_size) -> DataLoader:
+def build_dataloader(dataset, batch_size, num_workers) -> DataLoader:
     # Multiple workers is only supported on linux machines
     if 'linux' in platform.platform().lower():
-        num_workers = 64  # type: ignore
+        num_workers = num_workers  # type: ignore
     else:
         num_workers = 0
 
@@ -152,6 +152,7 @@ if __name__ == "__main__":
                         type=str,
                         nargs="+",
                         default=["train", "val", "test"])
+    parser.add_argument("--num-workers", type=int, default=64)
 
     # Domain args
     parser.add_argument("--truncate-num-samples", type=int, default=None)
@@ -205,7 +206,9 @@ if __name__ == "__main__":
             max_length=args.max_length,
             no_wrap=args.no_wrap,
         )
-        loader = build_dataloader(data, batch_size=512)
+        loader = build_dataloader(data,
+                                  batch_size=512,
+                                  num_workers=args.num_workers)
         samples = generate_samples(loader,
                                    truncate_num_samples=truncate_num_samples)
 
