@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader, IterableDataset
 from tqdm import tqdm
 
 SHUFFLE_SEED = 17  # Fixing so that domains are properly mixed
-torch.multiprocessing.set_sharing_strategy('file_system')
+#torch.multiprocessing.set_sharing_strategy('file_system')
 
 
 def build_dataloader(dataset, batch_size, num_workers) -> DataLoader:
@@ -97,16 +97,18 @@ class ConcatDomainsTokensDataset(IterableDataset):
             while len(token_buffer) >= self.max_length:
                 concat_sample = token_buffer[:self.max_length]
                 concat_uids = uid_buffer[:self.max_length]
-                concat_num_tokens = uid_buffer[:self.max_length]
+                concat_num_tokens = num_tokens_buffer[:self.max_length]
                 token_buffer = token_buffer[
                     self.max_length:] if self.should_wrap else []
                 uid_buffer = uid_buffer[
+                    self.max_length:] if self.should_wrap else []
+                num_tokens_buffer = num_tokens_buffer[
                     self.max_length:] if self.should_wrap else []
                 yield {
                     # convert to bytes to store in MDS binary format
                     "tokens": np.asarray(concat_sample).tobytes(),
                     "uids": np.asarray(concat_uids).tobytes(),
-                    "num_tokens": concat_num_tokens
+                    "num_tokens": np.asarray(concat_num_tokens).tobytes()
                 }
 
 
@@ -184,10 +186,13 @@ if __name__ == "__main__":
     for step, sample in enumerate(
             tqdm(samples, desc="concat", total=denominator, leave=True)):
 
-        print(sample["uids"])
         uuids = np.frombuffer(sample["uids"], dtype=np.int64).copy().tolist()
-        uuids = sorted(set(uuids), key=sample["uids"].index)
-        num_tokens = sorted(set(sample["num_tokens"]), key=sample["num_tokens"].index)
+        num_tokens = np.frombuffer(sample["num_tokens"], dtype=np.int64).copy().tolist()
+
+        uuids = sorted(set(uuids), key=uuids.index)
+        num_tokens = sorted(set(num_tokens), key=num_tokens.index)
+        print(uuids)
+        print(num_tokens)
         del sample["num_tokens"]
 
         if step <= truncate_num_samples:
@@ -210,13 +215,15 @@ if __name__ == "__main__":
 
     holdout_writer.finish()
 
-    with open(os.path.join(args.local, "uid-artifacts", "uid_to_loss_id.pkl"),
+    uid_artifacts_dir = os.path.join(args.local, "uid-artifacts")
+    os.makedirs(uid_artifacts_dir, exist_ok=True)
+    with open(os.path.join(uid_artifacts_dir, "uid_to_loss_id.pkl"),
               "wb") as f:
         pickle.dump(uid_to_loss_id, f)
-    with open(os.path.join(args.local, "uid-artifacts", "loss_id_to_uid.pkl"),
+    with open(os.path.join(uid_artifacts_dir, "loss_id_to_uid.pkl"),
               "wb") as f:
         pickle.dump(loss_id_to_uid, f)
     with open(
-            os.path.join(args.local, "uid-artifacts",
+            os.path.join(uid_artifacts_dir,
                          "num_tokens_per_sample.pkl"), "wb") as f:
         pickle.dump(num_tokens_per_sample, f)
