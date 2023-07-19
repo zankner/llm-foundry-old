@@ -125,12 +125,6 @@ if __name__ == "__main__":
     # Domain args
     parser.add_argument("--truncate-num-samples", type=int, required=True)
     parser.add_argument("--upstream-batch-size", type=int, default=512)
-    parser.add_argument("--num-domains", type=int, required=True)
-    parser.add_argument("--domain-source",
-                        type=str,
-                        required=True,
-                        choices=["data-source", "clusters"])
-    parser.add_argument("--uid-to-domain-path", type=str, default=None)
 
     # Tokenization args
     parser.add_argument("--max-length", type=int, default=2048)
