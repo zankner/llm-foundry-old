@@ -4,7 +4,6 @@ import pickle
 from argparse import ArgumentParser
 from typing import Dict, Optional, Iterable
 
-import torch
 import wandb
 import numpy as np
 from streaming import MDSWriter, StreamingDataset
@@ -187,12 +186,11 @@ if __name__ == "__main__":
             tqdm(samples, desc="concat", total=denominator, leave=True)):
 
         uuids = np.frombuffer(sample["uids"], dtype=np.int64).copy().tolist()
-        num_tokens = np.frombuffer(sample["num_tokens"], dtype=np.int64).copy().tolist()
+        num_tokens = np.frombuffer(sample["num_tokens"],
+                                   dtype=np.int64).copy().tolist()
 
         uuids = sorted(set(uuids), key=uuids.index)
         num_tokens = sorted(set(num_tokens), key=num_tokens.index)
-        print(uuids)
-        print(num_tokens)
         del sample["num_tokens"]
 
         if step <= truncate_num_samples:
@@ -217,13 +215,10 @@ if __name__ == "__main__":
 
     uid_artifacts_dir = os.path.join(args.local, "uid-artifacts")
     os.makedirs(uid_artifacts_dir, exist_ok=True)
-    with open(os.path.join(uid_artifacts_dir, "uid_to_loss_id.pkl"),
-              "wb") as f:
+    with open(os.path.join(uid_artifacts_dir, "uid_to_loss_id.pkl"), "wb") as f:
         pickle.dump(uid_to_loss_id, f)
-    with open(os.path.join(uid_artifacts_dir, "loss_id_to_uid.pkl"),
-              "wb") as f:
+    with open(os.path.join(uid_artifacts_dir, "loss_id_to_uid.pkl"), "wb") as f:
         pickle.dump(loss_id_to_uid, f)
-    with open(
-            os.path.join(uid_artifacts_dir,
-                         "num_tokens_per_sample.pkl"), "wb") as f:
+    with open(os.path.join(uid_artifacts_dir, "num_tokens_per_sample.pkl"),
+              "wb") as f:
         pickle.dump(num_tokens_per_sample, f)
