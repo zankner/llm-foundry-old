@@ -165,12 +165,12 @@ if __name__ == "__main__":
 
     columns = {'tokens': 'bytes', 'uids': 'bytes'}
     denominator = 2 * truncate_num_samples
-    assert denominator < data.size, "Truncate num samples too large"
+    assert denominator < streaming_data.size, "Truncate num samples too large"
 
     training_writer = MDSWriter(columns=columns,
                                 out=os.path.join(
                                     f"{args.upload_remote}-sd-{SHUFFLE_SEED}",
-                                    "train"),
+                                    "train", "base", "train"),
                                 compression="zstd")
     holdout_writer = MDSWriter(columns=columns,
                                out=os.path.join(
@@ -181,13 +181,13 @@ if __name__ == "__main__":
     uid_to_loss_id = {}
     loss_id_to_uid = {}
     num_tokens_per_sample = {}
-    for step, (sample, domain_idx) in enumerate(
+    for step, sample in enumerate(
             tqdm(samples, desc="concat", total=denominator, leave=True)):
 
-        uuids = sorted(set(
-            np.frombuffer(sample["uids"], dtype=np.int64).copy().tolist()),
-                       key=uuids.index)
-        num_tokens = sorted(set(sample["num_tokens"]), key=num_tokens.index)
+        print(sample["uids"])
+        uuids = np.frombuffer(sample["uids"], dtype=np.int64).copy().tolist()
+        uuids = sorted(set(uuids), key=sample["uids"].index)
+        num_tokens = sorted(set(sample["num_tokens"]), key=sample["num_tokens"].index)
         del sample["num_tokens"]
 
         if step <= truncate_num_samples:
