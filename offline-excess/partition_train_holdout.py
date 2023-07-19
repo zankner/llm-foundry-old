@@ -1,5 +1,6 @@
 import os
 import platform
+import pickle
 from argparse import ArgumentParser
 from typing import Dict, Optional, Iterable
 
@@ -119,7 +120,7 @@ if __name__ == "__main__":
     parser = ArgumentParser()
     # Dataset args
     parser.add_argument("--download-remote", type=str, required=True)
-    parser.add_argument("--local", type=str, default="/tmp/sample-domains")
+    parser.add_argument("--local", type=str, default="/tmp/excess-loss")
     parser.add_argument("--num-workers", type=int, default=64)
 
     # Domain args
@@ -215,3 +216,14 @@ if __name__ == "__main__":
             wandb.log(({'step': step, 'progress': step / denominator}))
 
     holdout_writer.finish()
+
+    with open(os.path.join(args.local, "uid-artifacts", "uid_to_loss_id.pkl"),
+              "wb") as f:
+        pickle.dump(uid_to_loss_id, f)
+    with open(os.path.join(args.local, "uid-artifacts", "loss_id_to_uid.pkl"),
+              "wb") as f:
+        pickle.dump(loss_id_to_uid, f)
+    with open(
+            os.path.join(args.local, "uid-artifacts",
+                         "num_tokens_per_sample.pkl"), "wb") as f:
+        pickle.dump(num_tokens_per_sample, f)
