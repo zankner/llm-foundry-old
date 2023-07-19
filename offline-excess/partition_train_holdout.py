@@ -73,14 +73,10 @@ class ConcatDomainsTokensDataset(IterableDataset):
     def __init__(
         self,
         dataset: StreamingDataset,
-        num_domains: int,
-        domain_source: str,
         max_length: int,
         no_wrap: bool,
     ):
         self.dataset = dataset
-        self.num_domains = num_domains
-        self.domain_source = domain_source
         self.max_length = max_length
         self.should_wrap = not no_wrap
 
@@ -158,9 +154,6 @@ if __name__ == "__main__":
 
     data = ConcatDomainsTokensDataset(
         streaming_data,
-        num_domains=args.num_domains,
-        domain_source=args.domain_source,
-        uid_to_domain_path=args.uid_to_domain_path,
         max_length=args.max_length,
         no_wrap=args.no_wrap,
     )
