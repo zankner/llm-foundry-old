@@ -57,7 +57,7 @@ def set_common_args(args, base_run, run_name, seed, proxy_ref_size,
     if args.num_samples in ["10K", "25K"]:
         base_run.parameters["eval_interval"] = "1000ba"
         base_run.parameters["save_interval"] = "500ba"
-    elif args.num_samples == "100K":
+    elif args.num_samples in ["100K", "200K"]:
         base_run.parameters["eval_interval"] = "2000ba"
         base_run.parameters["save_interval"] = "1000ba"
     else:
@@ -114,7 +114,7 @@ def get_remote_data_path(args, run_type, seed):
     data_source = get_data_source(args)
     return os.path.join("oci://mosaicml-internal-doremi", args.dataset,
                         "pre-concat", args.tokenizer, data_source,
-                        f"{data_name}-sd-{seed}")
+                        f"{data_name}-sd-17-sd-{seed}")
 
 
 def get_data_source(args):

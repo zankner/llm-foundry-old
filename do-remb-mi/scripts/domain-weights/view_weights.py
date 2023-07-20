@@ -26,6 +26,17 @@ CLUSTERS_22_PROPORTIONS = [
     0.07820453125, 0.054911640625, 0.023267421875, 0.0343740625, 0.032515625,
     0.08241453125, 0.030375625
 ]
+CLUSTERS_44_PROPORTIONS = [
+    0.02585890625, 0.0088571875, 0.007390859375, 0.009468203125, 0.014252890625,
+    0.13188640625, 0.00593015625, 0.00966, 0.01457703125, 0.058385546875,
+    0.0570284375, 0.003818203125, 0.00992765625, 0.0514165625, 0.03367078125,
+    0.004112109375, 0.03283765625, 0.003831953125, 0.01844796875,
+    0.013873828125, 0.01127375, 0.021236171875, 0.018271875, 0.0064728125,
+    0.066834453125, 0.013847421875, 0.004701875, 0.005657421875, 0.012281484375,
+    0.021077109375, 0.12590875, 0.00204171875, 0.009427109375, 0.007524765625,
+    0.014443515625, 0.026650625, 0.01401234375, 0.004215859375, 0.008988828125,
+    0.040181171875, 0.01674171875, 0.003021015625, 0.013505703125, 0.01645015625
+]
 REPLICATE_PROPORTIONS = [
     0.20163412392139435, 0.10023175925016403, 0.13405060768127441,
     0.1319042444229126, 0.07527627050876617, 0.09094192832708359,
@@ -93,6 +104,8 @@ def main(args):
         compare_weights = BASELINE_PROPORTIONS
     elif args.compare_run_name == "22-clusters":
         compare_weights = CLUSTERS_22_PROPORTIONS
+    elif args.compare_run_name == "44-clusters":
+        compare_weights = CLUSTERS_44_PROPORTIONS
     elif args.compare_run_name == "replicate":
         compare_weights = REPLICATE_PROPORTIONS
     elif args.compare_run_name == "prev-iter":
@@ -133,11 +146,11 @@ def main(args):
         #        domain_name.split("-")[-1])]
         plt.plot(steps, weight_trajectory, label=display_domain_name)
 
-        #og_proportion = compare_weights[int(domain_name.split('-')[-1])]
-        #delta = weight_trajectory[-1] - og_proportion
-        #print(
-        #    f"{display_domain_name}: {weight_trajectory[-1]} ---- Delta: {green if delta >=0 else red}{delta:.3f}  ({(delta / og_proportion)*100:.2f}%){reset}"
-        #)
+        og_proportion = compare_weights[int(domain_name.split('-')[-1])]
+        delta = weight_trajectory[-1] - og_proportion
+        print(
+            f"{display_domain_name}: {weight_trajectory[-1]} ---- Delta: {green if delta >=0 else red}{delta:.3f}  ({(delta / og_proportion)*100:.2f}%){reset}"
+        )
 
     # Create the legend outside the plot
     plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))

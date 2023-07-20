@@ -66,7 +66,7 @@ if __name__ == "__main__":
     parser.add_argument("--num-samples",
                         type=str,
                         required=True,
-                        choices=["25K", "100K", "all"])
+                        choices=["25K", "100K", "200K", "all"])
     parser.add_argument("--not-embed", action="store_true")
 
     args = parser.parse_args()
