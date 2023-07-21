@@ -170,7 +170,9 @@ def build_model(model_size, tokenizer, max_seq_len):
 
 
 def main(args):
-    device_batch_size = int(args.batch_size / dist.get_world_size())
+    device_batch_size = args.batch_size
+    global_batch_size = device_batch_size * dist.get_world_size()
+    print(f"Global batch size: {global_batch_size}")
     assert args.batch_size % device_batch_size == 0, "Batch size must be divisible by the number of devices"
 
     for split in args.splits:
