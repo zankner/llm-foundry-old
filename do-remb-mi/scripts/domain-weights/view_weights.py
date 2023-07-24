@@ -149,7 +149,7 @@ def main(args):
         og_proportion = compare_weights[int(domain_name.split('-')[-1])]
         delta = weight_trajectory[-1] - og_proportion
         print(
-            f"{display_domain_name}: {weight_trajectory[-1]} ---- Delta: {green if delta >=0 else red}{delta:.3f}  ({(delta / og_proportion)*100:.2f}%){reset}"
+            f"{display_domain_name}: {weight_trajectory[-1]} ---- Delta: {green if delta >=0 else red}{delta:.3f}  ({(delta / og_proportion)*100:.2f}%) --- Passes: {(delta + og_proportion) / og_proportion:.2f} {reset}"
         )
 
     # Create the legend outside the plot
