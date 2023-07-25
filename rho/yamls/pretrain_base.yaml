@@ -1,14 +1,14 @@
-name: zack-doremi-final
+name: rho
 
 integrations:
   - integration_type: git_repo
-    git_branch: zack/offline-excess
+    git_branch: zack/amortized-selection
     git_repo: zankner/llm-foundry
     pip_install: .[gpu]
     ssh_clone: true
   - integration_type: wandb
     entity: mosaic-ml
-    project: offline-excess
+    project: amortized-excess
 
 image: # Set in launch script
 cluster: # Set in launch script
@@ -39,7 +39,7 @@ parameters:
       alibi: true
       attn_impl: triton
       clip_qkv: 6
-      attn_uses_sequence_id: # Set in launch script
+      attn_uses_sequence_id: true
 
   # Tokenizer
   tokenizer:
@@ -48,7 +48,7 @@ parameters:
       model_max_length: ${max_seq_len}
 
   # Optimization
-  global_train_batch_size: 512 # ~1M tokens, update for hero run, must be divisible by gpu_num
+  global_train_batch_size: 512 
   max_duration: # Set by launch script
 
   optimizer:
@@ -140,7 +140,7 @@ parameters:
       split: val
 
   # In-context-learning tasks
-  icl_tasks: eval/yamls/sem_concat_tasks.yaml
+  icl_tasks: eval/yamls/tasks_light.yaml
 
   # Train loader
   train_loader:

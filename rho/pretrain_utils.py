@@ -1,4 +1,13 @@
-def set_common_args(args, base_run, run_name, seed):
+import os
+
+from omegaconf import OmegaConf as om
+from mcli import create_run
+
+CKPT_BASE = "oci://mosaicml-internal-checkpoints/zack/rho/"
+
+
+def set_common_args(args, base_run, run_name, save_folder, data_remote,
+                    duration, seed):
     # Set run name
     base_run.name = run_name.lower()[:56]  # Mcli things
     base_run.parameters["run_name"] = run_name
@@ -21,21 +30,20 @@ def set_common_args(args, base_run, run_name, seed):
         base_run.gpu_type = "a100_40gb"
 
     # Set modeling args
+    model_cfg = build_model_arch(args.model_size)
     base_run.parameters["model"]["d_model"] = model_cfg["d_model"]
     base_run.parameters["model"]["n_heads"] = model_cfg["n_heads"]
     base_run.parameters["model"]["n_layers"] = model_cfg["n_layers"]
 
-    # Set attn config
-    base_run.parameters["model"]["attn_config"][
-        "attn_uses_sequence_id"] = not packing
+    # Set ckpt save folder
+    base_run.parameters["save_folder"] = save_folder
 
     # Set data args
     base_run.parameters["train_loader"]["dataset"]["remote"] = data_remote
 
     # Common wandb tags
     base_run.parameters["loggers"]["wandb"]["tags"] += [
-        f"dataset-{args.dataset}", f"concat-{concat_prefix}",
-        f"model-size-{args.model_size}", f"seed-{seed}", f"packing-{packing}"
+        f"dataset-{args.dataset}", f"seed-{seed}"
     ]
 
     # Handle preemption
@@ -51,11 +59,45 @@ def set_common_args(args, base_run, run_name, seed):
     base_run.parameters["device_eval_batch_size"] = args.device_batch_size
 
     # Set training duration
-    base_run.parameters["max_duration"] = f"{num_samples}ba"
+    if duration == "2B":
+        duration_tokens = 2_000_000_000
+    elif duration == "5B":
+        duration_tokens = 5_000_000_000
+    elif duration == "20B":
+        duration_tokens = 20_000_000_000
+    elif duration == "26B":
+        duration_tokens = 26_000_000_000
+    base_run.parameters["max_duration"] = f"{duration_tokens}tok"
 
-    # Set eval/ckpt freq
-    if num_samples in [25_000]:
-        base_run.parameters["eval_interval"] = "1000ba"
-        base_run.parameters["save_interval"] = "500ba"
+    base_run.parameters["eval_interval"] = "1000ba"
+    base_run.parameters["save_interval"] = "500ba"
+
+
+def launch_run(run, local_debug, seed):
+    if local_debug:
+        with open("debug.yaml", "w") as f:
+            om.save(config=om.create(run), f=f)
     else:
-        raise ValueError(f"Invalid num_samples {num_samples}")
+        run = create_run(run)
+        print(f"Launched seed {seed} with in {run.name}")
+
+
+def build_model_arch(model_size):
+    if model_size == "125M":
+        model_cfg = {"d_model": 768, "n_heads": 12, "n_layers": 12}
+    elif model_size == "250M":
+        model_cfg = {"d_model": 1024, "n_heads": 16, "n_layers": 16}
+    elif model_size == "1B":
+        model_cfg = {"d_model": 2048, "n_heads": 16, "n_layers": 24}
+    else:
+        raise ValueError(f"Unknown model size {model_size}")
+    return model_cfg
+
+
+def build_remote_base(num_holdout_tokens, dataset, seed):
+    return os.path.join("oci://mosaicml-internal-amortized-obs", "rho", dataset,
+                        f"{num_holdout_tokens}-holdout-tokens-sd-{seed}")
+
+
+def build_ref_base(num_tokens, num_params):
+    return f"{num_params}-hop-{num_tokens}-hot"
