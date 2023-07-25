@@ -101,6 +101,7 @@ if __name__ == "__main__":
     parser.add_argument("--download-remote", type=str, required=True)
     parser.add_argument("--local", type=str, default="/tmp/excess-loss")
     parser.add_argument("--num-workers", type=int, default=64)
+    parser.add_argument("--seed", type=int, required=True)
 
     # Domain args
     parser.add_argument("--holdout-num-tokens",
