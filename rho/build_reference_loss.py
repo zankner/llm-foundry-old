@@ -184,7 +184,6 @@ def main(args):
         tokenizer=tokenizer,
         max_seq_len=args.max_seq_len,
         batch_size=args.device_batch_size,
-        remote=args.data_remote,
         local=args.local,
         split="train",
         shuffle=False,
