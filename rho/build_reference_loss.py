@@ -43,16 +43,18 @@ class ReferenceLossCallback(Callback):
         losses = self.proxy_loss_fn(ref_logits.view(-1, vocab_size),
                                     targets.view(-1))
         losses = losses.view(-1, seq_len)
+        print(losses.shape)
         losses = torch.sum(losses, dim=-1)
+        print(losses.shape)
 
         all_losses = torch.vstack(dist.all_gather(losses))
         all_tokens = torch.vstack(dist.all_gather(tokens))
         all_idx = torch.vstack(dist.all_gather(idx))
         if dist.get_global_rank() == 0:
-            for losses, tokens, uids in zip(all_losses, all_tokens, all_idx):
+            for losses, tokens, idxs in zip(all_losses, all_tokens, all_idx):
                 losses = losses.cpu().item()
                 byte_tokens = tokens.cpu().numpy().tobytes()
-                ind_idx = uids.cpu().item()
+                ind_idx = idxs.cpu().item()
                 self.streaming_writer.write({
                     "tokens": byte_tokens,
                     "ref_loss": losses,
