@@ -184,7 +184,7 @@ def main(args):
         tokenizer=tokenizer,
         max_seq_len=args.max_seq_len,
         batch_size=args.device_batch_size,
-        local=args.local,
+        local="/tmp/train-data",
         split="train",
         shuffle=False,
     )
