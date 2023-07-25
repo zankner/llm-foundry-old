@@ -61,11 +61,11 @@ if __name__ == "__main__":
     ref_run_name = f"ref-{args.dataset}-{ref_base}"
     model_ckpt = os.path.join(CKPT_BASE, "reference",
                               f"{ref_run_name}-sd-{args.seed}", "ckpts",
-                              "latest")
+                              "latest-rank0.pt.symlink")
 
     base_run.command = base_run.command.replace(r"{model_ckpt}", model_ckpt)
     base_run.command = base_run.command.replace(r"{model_size}",
                                                 args.model_size)
 
     run = create_run(base_run)
-    print(f"Created run: {run.id}")
+    print(f"Created run: {run.name}")

@@ -23,11 +23,7 @@ class ReferenceLossCallback(Callback):
         super().__init__()
         streaming_writer = None
         if dist.get_global_rank() == 0:
-            columns = {
-                "tokens": "bytes",
-                "ref_losses": "bytes",
-                "idx": "int"
-            }
+            columns = {"tokens": "bytes", "ref_losses": "bytes", "idx": "int"}
             streaming_writer = MDSWriter(columns=columns,
                                          out=streaming_writer_path,
                                          compression="zstd")
@@ -40,13 +36,14 @@ class ReferenceLossCallback(Callback):
         tokens = state.batch["input_ids"]
         idx = state.batch["idx"]
         targets = state.model.get_targets(state.batch)
-        _, _, vocab_size = ref_logits.shape
+        _, seq_len, vocab_size = ref_logits.shape
 
         state.model.labels = targets  # So we can compute metrics
 
         losses = self.proxy_loss_fn(ref_logits.view(-1, vocab_size),
                                     targets.view(-1))
-        losses = losses.view(-1)
+        losses = losses.view(-1, seq_len)
+        losses = torch.sum(losses, dim=-1)
 
         all_losses = torch.vstack(dist.all_gather(losses))
         all_tokens = torch.vstack(dist.all_gather(tokens))
@@ -166,9 +163,9 @@ def main(args):
     print(f"Global batch size: {global_batch_size}")
 
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
-    model, fsdp_cfg = build_model(
-        args.model_size, tokenizer=tokenizer, max_seq_len=args.max_seq_len
-    )
+    model, fsdp_cfg = build_model(args.model_size,
+                                  tokenizer=tokenizer,
+                                  max_seq_len=args.max_seq_len)
     model.use_logits = False  # So that full ModellingOutputs passed to callback
     model.val_metrics = {
         LanguageCrossEntropy.__name__: LanguageCrossEntropy()
@@ -189,7 +186,7 @@ def main(args):
         batch_size=args.device_batch_size,
         remote=args.data_remote,
         local=args.local,
-        split="train"
+        split="train",
         shuffle=False,
     )
     lm_collate_fn = transformers.DataCollatorForLanguageModeling(
