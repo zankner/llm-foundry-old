@@ -179,6 +179,7 @@ def main(args):
                         name=f"{args.model_size}-ref-loss")
         ]
 
+    print(f"Downloading data from {args.download_remote}")
     dataset = StreamingTextDataset(
         remote=args.download_remote,
         tokenizer=tokenizer,
@@ -205,6 +206,7 @@ def main(args):
         persistent_workers=True,
     )
 
+    print(f"Uploading data to {args.upload_remote}")
     reference_loss_writer = ReferenceLossCallback(
         streaming_writer_path=args.upload_remote)
     trainer = Trainer(model=model,
