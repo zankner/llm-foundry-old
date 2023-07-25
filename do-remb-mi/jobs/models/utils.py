@@ -86,7 +86,7 @@ def set_common_args(args, base_run, run_name, seed, proxy_ref_size,
 def launch_run(run, local_debug, seed):
     if local_debug:
         with open("debug.yaml", "w") as f:
-            OmegaConf.save(config=OmegaConf.create(run.parameters), f=f)
+            OmegaConf.save(config=OmegaConf.create(run), f=f)
     else:
         run = create_run(run)
         print(f"Launched seed {seed} with in {run.name}")
