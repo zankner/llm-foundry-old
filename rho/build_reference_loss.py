@@ -23,7 +23,7 @@ class ReferenceLossCallback(Callback):
         super().__init__()
         streaming_writer = None
         if dist.get_global_rank() == 0:
-            columns = {"tokens": "bytes", "ref_loss": "float", "idx": "int"}
+            columns = {"tokens": "bytes", "ref_loss": "float32", "idx": "int"}
             streaming_writer = MDSWriter(columns=columns,
                                          out=streaming_writer_path,
                                          compression="zstd")
