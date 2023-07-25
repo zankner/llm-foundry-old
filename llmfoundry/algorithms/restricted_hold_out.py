@@ -8,7 +8,7 @@ class RestrictedHoldOut(Algorithm):
 
     def __init__(self, num_subsample: int):
         self.num_subsample = num_subsample
-        self.loss_fn = CrossEntropyLoss(reduction="none")
+        self.loss_fn = CrossEntropyLoss(reduction="none", ignore_index=-100)
 
     def match(self, event: Event):
         ...

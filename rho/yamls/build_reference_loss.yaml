@@ -1,0 +1,16 @@
+run_name: build-ref-loss
+platform: # Set in launch script
+gpu_type: # Set in launch script
+gpu_num: # Set in launch script 
+image: # Set in launch script
+integrations:
+  - integration_type: git_repo
+    git_repo: zankner/llm-foundry
+    git_branch: zack/amortized-selection
+    # git_commit: # OR use your commit hash
+    pip_install: -e .[gpu]
+    ssh_clone: false # Should be true if using a private repo
+
+command: |
+  cd llm-foundry
+  composer amortized-selection/build_reference_loss.py --device-batch-size {device_batch_size} --model-size {model_size} --model-ckpt {model_ckpt} --download-remote {download_remote} --upload-remote {upload_remote} --no-wandb

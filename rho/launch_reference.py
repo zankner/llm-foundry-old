@@ -22,7 +22,7 @@ if __name__ == "__main__":
                         type=str,
                         required=True,
                         choices=["125M", "250M"])
-    parser.add_argument("--device-batch-size", type=int, default=16)
+    parser.add_argument("--device-batch-size", type=int, default=32)
 
     # Data args
     parser.add_argument("--dataset", type=str, default="pile")
@@ -45,7 +45,7 @@ if __name__ == "__main__":
                               seed=seed), "holdout")
 
         save_folder = os.path.join(CKPT_BASE, "reference",
-                                   f"{run_name}-sd-{seed}")
+                                   f"{run_name}-sd-{seed}", "ckpts")
 
         set_common_args(args, base_run, run_name, save_folder, data_remote,
                         args.num_tokens, seed)

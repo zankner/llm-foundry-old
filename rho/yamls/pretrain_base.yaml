@@ -8,7 +8,7 @@ integrations:
     ssh_clone: true
   - integration_type: wandb
     entity: mosaic-ml
-    project: amortized-excess
+    project: amortized-selection
 
 image: # Set in launch script
 cluster: # Set in launch script
@@ -91,7 +91,7 @@ parameters:
   python_log_level: DEBUG
   loggers:
     wandb:
-      project: sem-concat
+      project: amortized-selection
       tags:
         - seed-${global_seed}
       group: ${run_name}
