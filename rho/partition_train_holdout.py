@@ -10,9 +10,6 @@ from streaming import MDSWriter, StreamingDataset
 from torch.utils.data import DataLoader, IterableDataset
 from tqdm import tqdm
 
-SHUFFLE_SEED = 17  # Fixing so that domains are properly mixed
-#torch.multiprocessing.set_sharing_strategy('file_system')
-
 
 def build_dataloader(dataset, batch_size, num_workers) -> DataLoader:
     # Multiple workers is only supported on linux machines
@@ -84,34 +81,19 @@ class ConcatDomainsTokensDataset(IterableDataset):
 
     def __iter__(self) -> Iterable[Dict[str, bytes]]:
         token_buffer = []
-        uid_buffer = []
-        num_tokens_buffer = []
         for sample in self.dataset:
-            uid = sample["uid"]
             tokens = self._read_binary_tokenized_sample(sample)
-            num_tokens = len(tokens)
             token_buffer += tokens
-            uid_buffer += [uid] * len(tokens)
-            num_tokens_buffer += [num_tokens] * len(tokens)
             while len(token_buffer) >= self.max_length:
                 concat_sample = token_buffer[:self.max_length]
-                concat_uids = uid_buffer[:self.max_length]
-                concat_num_tokens = num_tokens_buffer[:self.max_length]
                 token_buffer = token_buffer[
-                    self.max_length:] if self.should_wrap else []
-                uid_buffer = uid_buffer[
-                    self.max_length:] if self.should_wrap else []
-                num_tokens_buffer = num_tokens_buffer[
                     self.max_length:] if self.should_wrap else []
                 yield {
                     # convert to bytes to store in MDS binary format
                     "tokens": np.asarray(concat_sample).tobytes(),
-                    "uids": np.asarray(concat_uids).tobytes(),
-                    "num_tokens": np.asarray(concat_num_tokens).tobytes()
                 }
 
 
-# TODO: REFAC TO TAKE IN THE EMBEDDINGS FOR CLUSTERS
 if __name__ == "__main__":
 
     parser = ArgumentParser()
@@ -121,7 +103,10 @@ if __name__ == "__main__":
     parser.add_argument("--num-workers", type=int, default=64)
 
     # Domain args
-    parser.add_argument("--truncate-num-samples", type=int, required=True)
+    parser.add_argument("--holdout-num-tokens",
+                        type=str,
+                        required=True,
+                        choices=["2B", "5B", "20B"])
     parser.add_argument("--upstream-batch-size", type=int, default=512)
 
     # Tokenization args
@@ -129,7 +114,7 @@ if __name__ == "__main__":
     parser.add_argument("--no-wrap", default=False, action='store_true')
 
     # Upload args
-    parser.add_argument("--upload-remote", type=str, required=True)
+    parser.add_argument("--upload-base", type=str, required=True)
 
     # Misc
     parser.add_argument("--no-wandb", action="store_true")
@@ -141,16 +126,17 @@ if __name__ == "__main__":
         assert args.wandb_name is not None, "Wandb name necessary if using for logging"
 
         wandb.init(name=args.wandb_name,
-                   project="doremi-preprocess",
+                   project="pre-process-data",
                    entity="mosaic-ml")
-
-    truncate_num_samples = args.truncate_num_samples * args.upstream_batch_size
 
     streaming_data = StreamingDataset(remote=args.download_remote,
                                       local=args.local,
                                       split="train",
                                       shuffle=True,
-                                      shuffle_seed=SHUFFLE_SEED,
+                                      shuffle_seed=args.seed,
+                                      shuffle_algo="py1b",
+                                      shuffle_block_size=16777216,
+                                      predownload=16777216,
                                       num_canonical_nodes=128)
 
     data = ConcatDomainsTokensDataset(
@@ -161,64 +147,51 @@ if __name__ == "__main__":
     loader = build_dataloader(data,
                               batch_size=512,
                               num_workers=args.num_workers)
-    samples = generate_samples(loader,
-                               truncate_num_samples=truncate_num_samples * 2)
+    samples = generate_samples(loader, truncate_num_samples=None)
 
-    columns = {'tokens': 'bytes', 'uids': 'bytes'}
-    denominator = 2 * truncate_num_samples
-    assert denominator < streaming_data.size, "Truncate num samples too large"
+    columns = {'tokens': 'bytes'}
 
-    training_writer = MDSWriter(columns=columns,
-                                out=os.path.join(
-                                    f"{args.upload_remote}-sd-{SHUFFLE_SEED}",
-                                    "train", "base", "train"),
-                                compression="zstd")
+    if args.holdout_num_tokens == "2B":
+        holdout_num_tokens = 2_000_000_000
+    elif args.holdout_num_tokens == "5B":
+        holdout_num_tokens = 5_000_000_000
+    elif args.holdout_num_tokens == "20B":
+        holdout_num_tokens = 20_000_000_000
+    else:
+        raise ValueError(
+            f"Invalid holdout num tokens: {args.holdout_num_tokens}")
+
+    holdout_num_samples = (holdout_num_tokens // args.max_length) + 1
+    assert holdout_num_samples < streaming_data.size, "Truncate num samples too large"
+    print(f"Total holdout samples: {holdout_num_samples}")
+    print(
+        f"Percent training samples: {1 - (holdout_num_samples / streaming_data.size)}"
+    )
+
+    denominator = streaming_data.size * (6212 // 4) // args.max_length
+
+    upload_name = f"{args.holdout_num_tokens}-holdout-tokens-sd-{args.seed}"
+    upload_remote = os.path.join(args.upload_base, upload_name)
     holdout_writer = MDSWriter(columns=columns,
-                               out=os.path.join(
-                                   f"{args.upload_remote}-sd-{SHUFFLE_SEED}",
-                                   "holdout"),
+                               out=os.path.join(upload_remote, "holdout"),
                                compression="zstd")
-    num_unique = 0
-    uid_to_loss_id = {}
-    loss_id_to_uid = {}
-    num_tokens_per_sample = {}
+    training_writer = MDSWriter(columns=columns,
+                                out=os.path.join(upload_remote, "train", "base",
+                                                 "train"),
+                                compression="zstd")
     for step, sample in enumerate(
-            tqdm(samples, desc="concat", total=denominator, leave=True)):
+            tqdm(samples, desc="concat", total=holdout_num_samples,
+                 leave=True)):
 
-        uuids = np.frombuffer(sample["uids"], dtype=np.int64).copy().tolist()
-        num_tokens = np.frombuffer(sample["num_tokens"],
-                                   dtype=np.int64).copy().tolist()
-
-        uuids = sorted(set(uuids), key=uuids.index)
-        num_tokens = sorted(set(num_tokens), key=num_tokens.index)
-        del sample["num_tokens"]
-
-        if step <= truncate_num_samples:
-
-            for uid, num_token in zip(uuids, num_tokens):
-                if uid not in uid_to_loss_id:
-                    uid_to_loss_id[uid] = num_unique
-                    loss_id_to_uid[num_unique] = uid
-                    num_tokens_per_sample[num_unique] = num_token
-                    num_unique += 1
-
-            training_writer.write(sample)
-            if step == truncate_num_samples:
-                training_writer.finish()
-        else:
+        if step <= holdout_num_samples:
             holdout_writer.write(sample)
+            if step == holdout_num_samples:
+                holdout_writer.finish()
+            print("Finished writing holdout set")
+        else:
+            training_writer.write(sample)
 
         if use_wandb and step % 1_000 == 0:
             wandb.log(({'step': step, 'progress': step / denominator}))
 
-    holdout_writer.finish()
-
-    uid_artifacts_dir = os.path.join(args.local, "uid-artifacts")
-    os.makedirs(uid_artifacts_dir, exist_ok=True)
-    with open(os.path.join(uid_artifacts_dir, "uid_to_loss_id.pkl"), "wb") as f:
-        pickle.dump(uid_to_loss_id, f)
-    with open(os.path.join(uid_artifacts_dir, "loss_id_to_uid.pkl"), "wb") as f:
-        pickle.dump(loss_id_to_uid, f)
-    with open(os.path.join(uid_artifacts_dir, "num_tokens_per_sample.pkl"),
-              "wb") as f:
-        pickle.dump(num_tokens_per_sample, f)
+    training_writer.finish()
