@@ -1,14 +1,16 @@
 import os
 import platform
-import pickle
 from argparse import ArgumentParser
 from typing import Dict, Optional, Iterable
 
 import wandb
 import numpy as np
 from streaming import MDSWriter, StreamingDataset
+import torch
 from torch.utils.data import DataLoader, IterableDataset
 from tqdm import tqdm
+
+torch.multiprocessing.set_sharing_strategy('file_system')
 
 
 def build_dataloader(dataset, batch_size, num_workers) -> DataLoader:
@@ -23,7 +25,7 @@ def build_dataloader(dataset, batch_size, num_workers) -> DataLoader:
     # If not using workers, the torch DataLoader expects the default value for prefetch_factor,
     # which non-intuitively must be 2.
     prefetch_factor = max(1, 2 * batch_size //
-                          num_workers) if num_workers > 0 else 2
+                          num_workers) if num_workers > 0 else None
 
     return DataLoader(
         dataset=dataset,
@@ -162,37 +164,41 @@ if __name__ == "__main__":
         raise ValueError(
             f"Invalid holdout num tokens: {args.holdout_num_tokens}")
 
-    holdout_num_samples = (holdout_num_tokens // args.max_length) + 1
+    holdout_num_samples = -(-holdout_num_tokens // args.max_length)
     assert holdout_num_samples < streaming_data.size, "Truncate num samples too large"
     print(f"Total holdout samples: {holdout_num_samples}")
     print(
         f"Percent training samples: {1 - (holdout_num_samples / streaming_data.size)}"
     )
 
-    denominator = streaming_data.size * (6212 // 4) // args.max_length
-
     upload_name = f"{args.holdout_num_tokens}-holdout-tokens-sd-{args.seed}"
     upload_remote = os.path.join(args.upload_base, upload_name)
-    holdout_writer = MDSWriter(columns=columns,
-                               out=os.path.join(upload_remote, "holdout"),
-                               compression="zstd")
-    training_writer = MDSWriter(columns=columns,
-                                out=os.path.join(upload_remote, "train", "base",
-                                                 "train"),
-                                compression="zstd")
+
+    holdout_writer = MDSWriter(
+        columns=columns,
+        out=os.path.join(upload_remote, "holdout"),
+        compression="zstd",
+        max_workers=32,
+    )
+    #training_writer = MDSWriter(columns=columns,
+    #                            out=os.path.join(upload_remote, "train", "base",
+    #                                             "train"),
+    #                            compression="zstd",
+    #                            max_workers=128
+    #                            )
     for step, sample in enumerate(
-            tqdm(samples, desc="concat", total=holdout_num_samples,
+            tqdm(samples, desc="concat", total=streaming_data.size,
                  leave=True)):
 
         if step <= holdout_num_samples:
             holdout_writer.write(sample)
             if step == holdout_num_samples:
                 holdout_writer.finish()
-            print("Finished writing holdout set")
+                print("Finished writing holdout set")
         else:
             training_writer.write(sample)
 
         if use_wandb and step % 1_000 == 0:
-            wandb.log(({'step': step, 'progress': step / denominator}))
+            wandb.log(({'step': step, 'progress': step / streaming_data.size}))
 
     training_writer.finish()
