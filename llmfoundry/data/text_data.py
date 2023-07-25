@@ -162,16 +162,16 @@ class StreamingTextDataset(StreamingDataset):
         sample = super().__getitem__(idx)
         if 'text' in sample:
             token_sample = self._tokenize(sample)
-        elif 'ref_losses' in sample:
+        elif 'ref_loss' in sample:
             token_sample = {
                 "tokens": self._read_binary_tokenized_sample(sample),
-                "ref_losses": self._read_binary_reference_losses(sample),
-                "domain_idx": sample["domain_idx"]
+                "ref_loss": sample["ref_loss"],
+                "idx": sample["idx"]
             }
-        elif 'domain_idx' in sample:
+        elif 'idx' in sample:
             token_sample = {
                 "tokens": self._read_binary_tokenized_sample(sample),
-                "domain_idx": sample["domain_idx"]
+                "idx": sample["idx"]
             }
         elif 'tokens' in sample:
             token_sample = self._read_binary_tokenized_sample(sample)
@@ -217,14 +217,11 @@ class ConcatenatedSequenceCollatorWrapper:
             batch = self.base_collator(examples)
         batch['sequence_id'] = self.get_sequence_id_from_batch(batch)
         if isinstance(examples[0], Mapping):
-            batch["domain_idx"] = torch.tensor(
-                [example["domain_idx"] for example in examples])
-            if "ref_losses" in examples[0]:
-                batch["ref_losses"] = torch.vstack(
-                    [example["ref_losses"] for example in examples])
-                batch["domain_weights"] = torch.zeros_like(
-                    batch["domain_idx"]
-                )  # Filler because of batch_set_key reqs.
+            batch["idx"] = torch.tensor(
+                [example["idx"] for example in examples])
+            if "ref_loss" in examples[0]:
+                batch["ref_loss"] = torch.tensor(
+                    [example["ref_loss"] for example in examples])
         return batch
 
     def get_sequence_id_from_batch(

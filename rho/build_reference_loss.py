@@ -23,7 +23,7 @@ class ReferenceLossCallback(Callback):
         super().__init__()
         streaming_writer = None
         if dist.get_global_rank() == 0:
-            columns = {"tokens": "bytes", "ref_losses": "bytes", "idx": "int"}
+            columns = {"tokens": "bytes", "ref_loss": "float", "idx": "int"}
             streaming_writer = MDSWriter(columns=columns,
                                          out=streaming_writer_path,
                                          compression="zstd")
@@ -50,12 +50,12 @@ class ReferenceLossCallback(Callback):
         all_idx = torch.vstack(dist.all_gather(idx))
         if dist.get_global_rank() == 0:
             for losses, tokens, uids in zip(all_losses, all_tokens, all_idx):
-                byte_losses = losses.cpu().numpy().tobytes()
+                losses = losses.cpu().item()
                 byte_tokens = tokens.cpu().numpy().tobytes()
                 ind_idx = uids.cpu().item()
                 self.streaming_writer.write({
                     "tokens": byte_tokens,
-                    "ref_losses": byte_losses,
+                    "ref_loss": losses,
                     "idx": ind_idx
                 })
         dist.barrier()
