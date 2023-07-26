@@ -137,7 +137,6 @@ if __name__ == "__main__":
                                       split="train",
                                       shuffle=True,
                                       shuffle_seed=args.seed,
-                                      shuffle_algo="py1b",
                                       shuffle_block_size=16777216,
                                       predownload=16777216,
                                       num_canonical_nodes=128)
@@ -178,14 +177,13 @@ if __name__ == "__main__":
         columns=columns,
         out=os.path.join(upload_remote, "holdout"),
         compression="zstd",
-        max_workers=32,
+        max_workers=args.num_workers,
     )
-    #training_writer = MDSWriter(columns=columns,
-    #                            out=os.path.join(upload_remote, "train", "base",
-    #                                             "train"),
-    #                            compression="zstd",
-    #                            max_workers=128
-    #                            )
+    training_writer = MDSWriter(columns=columns,
+                                out=os.path.join(upload_remote, "train", "base",
+                                                 "train"),
+                                compression="zstd",
+                                max_workers=args.num_workers)
     for step, sample in enumerate(
             tqdm(samples, desc="concat", total=streaming_data.size,
                  leave=True)):
