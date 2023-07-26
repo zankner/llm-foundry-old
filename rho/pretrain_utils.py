@@ -7,7 +7,7 @@ CKPT_BASE = "oci://mosaicml-internal-checkpoints/zack/rho/"
 
 
 def set_common_args(args, base_run, run_name, save_folder, data_remote,
-                    duration, seed):
+                    model_size, duration, seed):
     # Set run name
     base_run.name = run_name.lower()[:56]  # Mcli things
     base_run.parameters["run_name"] = run_name
@@ -30,7 +30,7 @@ def set_common_args(args, base_run, run_name, save_folder, data_remote,
         base_run.gpu_type = "a100_40gb"
 
     # Set modeling args
-    model_cfg = build_model_arch(args.model_size)
+    model_cfg = build_model_arch(model_size)
     base_run.parameters["model"]["d_model"] = model_cfg["d_model"]
     base_run.parameters["model"]["n_heads"] = model_cfg["n_heads"]
     base_run.parameters["model"]["n_layers"] = model_cfg["n_layers"]
@@ -101,3 +101,7 @@ def build_remote_base(num_holdout_tokens, dataset, seed):
 
 def build_ref_base(num_tokens, num_params):
     return f"{num_params}-hop-{num_tokens}-hot"
+
+
+def build_proxy_base(num_tokens, num_params, full_batch_size):
+    return f"{num_params}-pp-{num_tokens}-pt-{full_batch_size}-fb"

@@ -23,7 +23,7 @@ from omegaconf import OmegaConf as om
 from transformers import (AutoTokenizer, PreTrainedTokenizer,
                           PreTrainedTokenizerFast)
 
-from llmfoundry.algorithms import DomainWeightSetter
+from llmfoundry.algorithms import DomainWeightSetter, RestrictedHoldOut
 from llmfoundry.callbacks import (FDiffMetrics, Generate, AverageICLLogger,
                                   LogDomainLoss, GlobalLRScaling, LayerFreezing,
                                   MonolithicCheckpointSaver,
@@ -95,6 +95,8 @@ def build_algorithm(name, kwargs):
         return algorithms.LowPrecisionLayerNorm(**kwargs)
     elif name == 'doremi':
         return DomainWeightSetter(**kwargs)
+    elif name == 'rho':
+        return RestrictedHoldOut(**kwargs)
     else:
         raise ValueError(f'Not sure how to build algorithm: {name}')
 

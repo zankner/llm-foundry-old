@@ -48,7 +48,7 @@ if __name__ == "__main__":
                                    f"{run_name}-sd-{seed}", "ckpts")
 
         set_common_args(args, base_run, run_name, save_folder, data_remote,
-                        args.num_tokens, seed)
+                        args.model_size, args.num_tokens, seed)
 
         base_run.parameters["loggers"]["wandb"]["tags"] += [
             f"hop-{args.model_size}", f"hot-{args.num_tokens}"
