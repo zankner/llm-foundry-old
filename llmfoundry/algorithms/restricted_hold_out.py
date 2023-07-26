@@ -1,6 +1,7 @@
 from typing import Any, Dict, List
 
 from composer import Algorithm, Event, State, Logger
+from composer.core import data_spec, get_precision_context
 from composer.utils import dist
 import torch
 import torch.distributed as torch_dist
@@ -41,27 +42,29 @@ class RestrictedHoldOut(Algorithm):
     def __init__(self, num_subsample: int):
         self.num_subsample = num_subsample
         assert self.num_subsample % dist.get_world_size(
-        ) == 0, "num_subsample must be divisible by world size"
-        self.device_num_subsample_size = self.num_subsample / dist.get_world_size(
+        ) == 0, "num_subsample must be divisible by world size" # Should really check world_size * micro_batch_size
+        self.device_num_subsample_size = self.num_subsample // dist.get_world_size(
         )
 
         self.loss_fn = CrossEntropyLoss(reduction="none", ignore_index=-100)
 
         self.data_trajectory = []
 
-    def match(self, event: Event):
+    def match(self, event: Event, state: State):
         return event == Event.AFTER_DATALOADER
 
     @torch.no_grad()
-    def _compute_excess_loss(self, microbatch, model):
-        b, seq_len = microbatch["input_ids"].shape
-        targets = self.get_targets(microbatch)
-        proxy_outputs = model(microbatch)
-        proxy_losses = self.loss_fn(
-            proxy_outputs.logits.view(-1, proxy_outputs.logits.size(-1)),
-            targets.view(-1))
-        proxy_losses = proxy_losses.view(b, seq_len).sum(dim=-1)
-        excess_loss = proxy_losses - microbatch["ref_loss"]
+    def _compute_excess_loss(self, microbatch, model, state):
+        with torch.no_grad(),\
+                get_precision_context(state.precision):
+            b, seq_len = microbatch["input_ids"].shape
+            targets = model.get_targets(microbatch)
+            proxy_outputs = model(microbatch)
+            proxy_losses = self.loss_fn(
+                proxy_outputs.logits.view(-1, proxy_outputs.logits.size(-1)),
+                targets.view(-1))
+            proxy_losses = proxy_losses.view(b, seq_len).sum(dim=-1)
+            excess_loss = proxy_losses - microbatch["ref_loss"]
         return excess_loss
 
     # Maybe set model in eval mode
@@ -70,13 +73,13 @@ class RestrictedHoldOut(Algorithm):
             return
 
         full_batch = state.batch
-        microbatches = self._train_data_spec.split_batch(
-            full_batch, self.state.device_train_microbatch_size)
+        microbatches = data_spec._default_split_batch(
+            full_batch, state.device_train_microbatch_size)
 
         excess_loss = []
         for microbatch in microbatches:
             micro_excess_loss = self._compute_excess_loss(
-                microbatch, state.model)
+                microbatch, state.model, state)
             excess_loss.append(micro_excess_loss)
         excess_loss = torch.cat(excess_loss).view(-1)
 
@@ -87,7 +90,7 @@ class RestrictedHoldOut(Algorithm):
 
         if dist.get_global_rank() == 0:
             # Select points with highest excess loss
-            sorted_idx = torch.argsort(gathered_excess)
+            sorted_idx = torch.argsort(gathered_excess, descending=True)
             subsample_idx = sorted_idx[:self.num_subsample]
 
             # Subsample the batch based on selected indices
@@ -96,7 +99,8 @@ class RestrictedHoldOut(Algorithm):
                 subsampled_batch[k] = v[subsample_idx]
 
             # Write the selected ds indices to state
-            self.data_trajectory.append(subsample_idx.cpu().list())
+            subsample_og_idx = gathered_batch["idx"][subsample_idx]
+            self.data_trajectory.append(subsample_og_idx.cpu().tolist())
         else:
             subsampled_batch = {}
             for k, v in gathered_batch.items():
@@ -106,10 +110,13 @@ class RestrictedHoldOut(Algorithm):
         for k, v in subsampled_batch.items():
             device_v = torch.zeros_like(v)[:self.device_num_subsample_size]
             dist_scatter(tensor=device_v,
-                         scatter_list=v.chunk(dist.get_world_size()),
+                         scatter_list=list(v.chunk(dist.get_world_size())),
                          src=0)
             dist.barrier()  # Can probably get rid of need to check
             state.batch_set_item(k, device_v)
+        
+        dist.barrier()
+
 
     def state_dict(self) -> Dict[str, Any]:
         state_dict = super().state_dict()
