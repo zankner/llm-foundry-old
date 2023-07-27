@@ -51,7 +51,7 @@ if __name__ == "__main__":
                         args.model_size, args.num_tokens, seed)
 
         base_run.parameters["loggers"]["wandb"]["tags"] += [
-            f"hop-{args.model_size}", f"hot-{args.num_tokens}"
+            "ref", f"hop-{args.model_size}", f"hot-{args.num_tokens}"
         ]
 
         launch_run(base_run, args.local_debug, seed)

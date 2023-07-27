@@ -6,8 +6,15 @@ from mcli import create_run
 CKPT_BASE = "oci://mosaicml-internal-checkpoints/zack/rho/"
 
 
-def set_common_args(args, base_run, run_name, save_folder, data_remote,
-                    model_size, duration, seed):
+def set_common_args(args,
+                    base_run,
+                    run_name,
+                    save_folder,
+                    data_remote,
+                    model_size,
+                    duration,
+                    seed,
+                    token_multiplier=1):
     # Set run name
     base_run.name = run_name.lower()[:56]  # Mcli things
     base_run.parameters["run_name"] = run_name
@@ -67,6 +74,7 @@ def set_common_args(args, base_run, run_name, save_folder, data_remote,
         duration_tokens = 20_000_000_000
     elif duration == "26B":
         duration_tokens = 26_000_000_000
+    duration_tokens *= token_multiplier
     base_run.parameters["max_duration"] = f"{duration_tokens}tok"
 
     base_run.parameters["eval_interval"] = "1000ba"
@@ -76,7 +84,7 @@ def set_common_args(args, base_run, run_name, save_folder, data_remote,
 def launch_run(run, local_debug, seed):
     if local_debug:
         with open("debug.yaml", "w") as f:
-            om.save(config=om.create(run), f=f)
+            om.save(config=om.create(run.parameters), f=f)
     else:
         run = create_run(run)
         print(f"Launched seed {seed} with in {run.name}")
@@ -105,3 +113,7 @@ def build_ref_base(num_tokens, num_params):
 
 def build_proxy_base(num_tokens, num_params, full_batch_size):
     return f"{num_params}-pp-{num_tokens}-pt-{full_batch_size}-fb"
+
+
+def build_final_base(num_tokens, num_params):
+    return f"{num_params}-fp-{num_tokens}-ft"

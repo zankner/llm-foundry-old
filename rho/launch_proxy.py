@@ -40,7 +40,7 @@ if __name__ == "__main__":
         "--full-batch-size",
         help="Batch size for points to be labeled that will then be pruned",
         type=int,
-        choices=[1024, 2048, 4096])
+        choices=[512, 1024, 2048, 4096])
 
     # Data args
     parser.add_argument("--dataset", type=str, default="pile")
@@ -62,14 +62,29 @@ if __name__ == "__main__":
                                         seed=seed)
         data_remote = os.path.join(remote_base, "train", ref_run_base)
 
+        ## Handling overhead for proxy
+        base_run.parameters["train_loader"]["num_workers"] = 1
+        #del base_run.parameters["train_loader"]["dataset"]["shuffle_block_size"]
+        #del base_run.parameters["train_loader"]["dataset"]["shuffle_seed"]
+        #del base_run.parameters["train_loader"]["dataset"]["shuffle_algo"]
+
         save_folder = os.path.join(CKPT_BASE, "proxy", f"{run_name}-sd-{seed}",
                                    "ckpts")
 
-        set_common_args(args, base_run, run_name, save_folder, data_remote,
-                        args.proxy_model_size, args.proxy_num_tokens, seed)
+        assert args.full_batch_size % 512 == 0, "Full batch size must be a multiple of pruned batch size"
+        token_multiplier = args.full_batch_size // 512
+        set_common_args(args,
+                        base_run,
+                        run_name,
+                        save_folder,
+                        data_remote,
+                        args.proxy_model_size,
+                        args.proxy_num_tokens,
+                        seed,
+                        token_multiplier=token_multiplier)
 
         base_run.parameters["loggers"]["wandb"]["tags"] += [
-            f"hop-{args.ref_model_size}", f"hot-{args.ref_num_tokens}",
+            "proxy", f"hop-{args.ref_model_size}", f"hot-{args.ref_num_tokens}",
             f"pp-{args.proxy_model_size}", f"pt-{args.proxy_num_tokens}",
             f"fb-{args.full_batch_size}"
         ]
