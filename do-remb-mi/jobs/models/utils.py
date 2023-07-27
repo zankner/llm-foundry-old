@@ -63,6 +63,12 @@ def set_common_args(args, base_run, run_name, seed, proxy_ref_size,
     else:
         raise ValueError(f"Invalid num_samples {args.num_samples}")
 
+    # Set max duration
+    if args.num_samples == "10K":
+        base_run.parameters["max_duration"] = "10000ba"
+    if args.num_samples == "25K":
+        base_run.parameters["max_duration"] = "25000ba"
+
     # Common wandb tags
     base_run.parameters["loggers"]["wandb"]["tags"] += [
         f"dataset-{args.dataset}",
@@ -109,7 +115,7 @@ def get_remote_data_path(args, run_type, seed):
                 "token-ref-loss",
                 f"all-samples-prp-{args.model_size}-proxy-{proxy_desc}")
     else:
-        data_name = os.path.join("base", f"{args.num_samples}-samples-baseline")
+        data_name = os.path.join("base", f"all-samples-baseline")
     data_source = get_data_source(args)
     return os.path.join("oci://mosaicml-internal-doremi", args.dataset,
                         "pre-concat", args.tokenizer, data_source,

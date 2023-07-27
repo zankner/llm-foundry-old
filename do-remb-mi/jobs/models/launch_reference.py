@@ -74,6 +74,7 @@ if __name__ == "__main__":
                                               args.model_size,
                                               args.num_samples) + f"-sd-{seed}"
             proportions = get_proxy_weights(proxy_run_name, args.dataset)
+        print(remote_base)
         domain_streams = build_domain_streams(args.num_domains,
                                               remote_base,
                                               proportions=proportions)

@@ -49,7 +49,7 @@ parameters:
 
   # Optimization
   global_train_batch_size: 512 # ~1M tokens, update for hero run, must be divisible by gpu_num
-  max_duration: 25000ba # Set by launch script
+  max_duration: # Set by launch script
 
   optimizer:
     name: decoupled_lionw
