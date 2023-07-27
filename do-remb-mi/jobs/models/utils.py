@@ -107,8 +107,7 @@ def get_remote_data_path(args, run_type, seed):
             )
             data_name = os.path.join(
                 "token-ref-loss",
-                f"{args.num_samples}-samples-prp-{args.model_size}-proxy-{proxy_desc}"
-            )
+                f"all-samples-prp-{args.model_size}-proxy-{proxy_desc}")
     else:
         data_name = os.path.join("base", f"{args.num_samples}-samples-baseline")
     data_source = get_data_source(args)
