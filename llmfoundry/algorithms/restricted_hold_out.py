@@ -105,28 +105,26 @@ class RestrictedHoldOut(Algorithm):
 
             # Logging losses
             to_log = {}
+            _, seq_len = gathered_batch["input_ids"].shape # Logging mean over tokens
 
             excess_loss_selected = gathered_excess[subsample_idx].mean().cpu(
-            ).item()
+            ).item() / seq_len
             excess_loss_leftout = gathered_excess[skipsample_idx].mean().cpu(
-            ).item()
-            excess_loss_selected_sum = gathered_excess[subsample_idx].sum().cpu(
-            ).item()
+            ).item() / seq_len
             to_log["proxy/excess-loss/selected"] = excess_loss_selected
-            to_log["proxy/excess-loss/sum"] = excess_loss_selected_sum
             to_log["proxy/excess-loss/leftout"] = excess_loss_leftout
 
             ref_loss_selected = gathered_batch["ref_loss"][subsample_idx].mean(
-            ).cpu().item()
+            ).cpu().item() / seq_len
             ref_loss_leftout = gathered_batch["ref_loss"][skipsample_idx].mean(
-            ).cpu().item()
+            ).cpu().item() / seq_len
             to_log["proxy/ref-loss/selected"] = ref_loss_selected
             to_log["proxy/ref-loss/leftout"] = ref_loss_leftout
 
             proxy_loss_selected = gathered_proxy[subsample_idx].mean().cpu(
-            ).item()
+            ).item() / seq_len
             proxy_loss_leftout = gathered_proxy[skipsample_idx].mean().cpu(
-            ).item()
+            ).item() / seq_len
             to_log["proxy/proxy-loss/selected"] = proxy_loss_selected
             to_log["proxy/proxy-loss/leftout"] = proxy_loss_leftout
 
