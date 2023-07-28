@@ -102,8 +102,7 @@ def get_remote_data_path(args, run_type, seed):
     if run_type == "proxy":
         if args.iter == 1:
             data_name = os.path.join(
-                "token-ref-loss",
-                f"{args.num_samples}-samples-prp-{args.model_size}-baseline")
+                "token-ref-loss", f"all-samples-prp-{args.model_size}-baseline")
         else:
             proxy_desc = proxy_descriptor(
                 args.iter - 1,  # Safe to use iter since proxy model
