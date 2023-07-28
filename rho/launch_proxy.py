@@ -52,7 +52,7 @@ if __name__ == "__main__":
     proxy_run_base = build_proxy_base(args.proxy_num_tokens,
                                       args.proxy_model_size,
                                       args.full_batch_size)
-    run_name = f"proxy-{args.dataset}-{proxy_run_base}-{ref_run_base}"
+    run_name = f"proxy-with-logging-{args.dataset}-{proxy_run_base}-{ref_run_base}"
 
     for seed in args.seeds:
         base_run = RunConfig.from_file(f"rho/yamls/pretrain_base.yaml")
