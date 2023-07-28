@@ -127,7 +127,7 @@ parameters:
   eval_loader:
     name: text
     drop_last: false
-    num_workers: 8
+    num_workers: 1
     dataset:
       eos_token_id: ${eos_token_id}
       max_seq_len: ${max_seq_len}
