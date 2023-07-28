@@ -42,7 +42,7 @@ class RestrictedHoldOut(Algorithm):
     def __init__(self, num_subsample: int):
         self.num_subsample = num_subsample
         assert self.num_subsample % dist.get_world_size(
-        ) == 0, "num_subsample must be divisible by world size" # Should really check world_size * micro_batch_size
+        ) == 0, "num_subsample must be divisible by world size"  # Should really check world_size * micro_batch_size
         self.device_num_subsample_size = self.num_subsample // dist.get_world_size(
         )
 
@@ -65,7 +65,7 @@ class RestrictedHoldOut(Algorithm):
                 targets.view(-1))
             proxy_losses = proxy_losses.view(b, seq_len).sum(dim=-1)
             excess_loss = proxy_losses - microbatch["ref_loss"]
-        return excess_loss
+        return excess_loss, proxy_losses
 
     # Maybe set model in eval mode
     def apply(self, event: Event, state: State, logger: Logger):
@@ -77,26 +77,55 @@ class RestrictedHoldOut(Algorithm):
             full_batch, state.device_train_microbatch_size)
 
         excess_loss = []
+        proxy_loss = []
         for microbatch in microbatches:
-            micro_excess_loss = self._compute_excess_loss(
+            micro_excess_loss, micro_proxy_loss = self._compute_excess_loss(
                 microbatch, state.model, state)
             excess_loss.append(micro_excess_loss)
+            proxy_loss.append(micro_proxy_loss)
         excess_loss = torch.cat(excess_loss).view(-1)
+        proxy_loss = torch.cat(proxy_loss).view(-1)
 
         gathered_batch = {}
         for k, v in full_batch.items():
             gathered_batch[k] = torch.cat(dist.all_gather(v))
         gathered_excess = torch.cat(dist.all_gather(excess_loss))
+        gathered_proxy = torch.cat(dist.all_gather(proxy_loss))
 
         if dist.get_global_rank() == 0:
             # Select points with highest excess loss
             sorted_idx = torch.argsort(gathered_excess, descending=True)
             subsample_idx = sorted_idx[:self.num_subsample]
+            skipsample_idx = sorted_idx[self.num_subsample:]
 
             # Subsample the batch based on selected indices
             subsampled_batch = {}
             for k, v in gathered_batch.items():
                 subsampled_batch[k] = v[subsample_idx]
+
+            # Logging losses
+            to_log = {}
+
+            excess_loss_selected = gathered_excess[subsample_idx].mean().cpu(
+            ).item()
+            excess_loss_leftout = gathered_excess[skipsample_idx].mean().cpu(
+            ).item()
+            to_log["proxy/excess-loss/selected"] = excess_loss_selected
+            to_log["proxy/excess-loss/leftout"] = excess_loss_leftout
+
+            ref_loss_selected = gathered_batch["ref_loss"][subsample_idx].mean(
+            ).cpu()
+            ref_loss_leftout = gathered_batch["ref_loss"][skipsample_idx].mean(
+            ).cpu()
+            to_log["proxy/ref-loss/selected"] = ref_loss_selected
+            to_log["proxy/ref-loss/leftout"] = ref_loss_leftout
+
+            proxy_loss_selected = gathered_proxy[subsample_idx].mean().cpu()
+            proxy_loss_leftout = gathered_proxy[skipsample_idx].mean().cpu()
+            to_log["proxy/proxy-loss/selected"] = proxy_loss_selected
+            to_log["proxy/proxy-loss/leftout"] = proxy_loss_leftout
+
+            logger.log_metrics(to_log)
 
             # Write the selected ds indices to state
             subsample_og_idx = gathered_batch["idx"][subsample_idx]
@@ -114,9 +143,8 @@ class RestrictedHoldOut(Algorithm):
                          src=0)
             dist.barrier()  # Can probably get rid of need to check
             state.batch_set_item(k, device_v)
-        
-        dist.barrier()
 
+        dist.barrier()
 
     def state_dict(self) -> Dict[str, Any]:
         state_dict = super().state_dict()
