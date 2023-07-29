@@ -1,7 +1,7 @@
 integrations:
 - integration_type: git_repo
-  git_repo: mosaicml/llm-foundry
-  git_branch: main
+  git_repo: zankner/llm-foundry
+  git_branch: zack/amortized-selection
   pip_install: -e ".[gpu]"
   ssh_clone: false # Should be true if using a private repo
 

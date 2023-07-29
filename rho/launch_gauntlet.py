@@ -40,7 +40,8 @@ if __name__ == "__main__":
     base_run.parameters["device_eval_batch_size"] = args.batch_size
 
     # Set model information
-    model_ckpt = os.path.join(CKPT_BASE, args.model_ckpt)
+    model_ckpt = os.path.join("oci://mosaicml-internal-checkpoints",
+                              args.model_ckpt)
     base_run.command = base_run.command.replace(r"{model_ckpt}", model_ckpt)
 
     if args.local_debug:
