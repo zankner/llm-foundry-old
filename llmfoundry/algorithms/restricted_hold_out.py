@@ -84,7 +84,8 @@ class RestrictedHoldOut(Algorithm):
         if "ref_loss" not in full_batch:
             assert self.ignore_ref, "Reference model loss required for RHOLs"
             full_batch["ref_loss"] = torch.zeros(
-                full_batch["input_ids"].shape[0])
+                full_batch["input_ids"].shape[0],
+                device=full_batch["input_ids"].device)
 
         microbatches = data_spec._default_split_batch(
             full_batch, state.device_train_microbatch_size)
