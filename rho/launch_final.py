@@ -36,6 +36,10 @@ if __name__ == "__main__":
         help="Batch size for points to be labeled that will then be pruned",
         type=int,
         choices=[1024, 2048, 4096])
+    parser.add_argument("--selection-algo",
+                        type=str,
+                        default="rho",
+                        choices=["rho", "hard-mine", "easy-mine"])
 
     # Final args
     parser.add_argument("--final-model-size",
@@ -57,11 +61,17 @@ if __name__ == "__main__":
     if args.is_baseline:
         suffix = "baseline"
     else:
-        ref_run_base = build_ref_base(args.ref_num_tokens, args.ref_model_size)
-        proxy_run_base = build_proxy_base(args.proxy_num_tokens,
+        assert args.ref_num_tokens is not None
+        proxy_run_base = build_proxy_base(args.selection_algo,
+                                          args.proxy_num_tokens,
                                           args.proxy_model_size,
                                           args.full_batch_size)
-        suffix = f"{proxy_run_base}-{ref_run_base}"
+        if args.selection_algo == "rho":
+            assert args.ref_model_size is not None
+            ref_run_base = build_ref_base(args.ref_num_tokens,
+                                          args.ref_model_size)
+            proxy_run_base += f"-{ref_run_base}"
+        suffix = f"proxy-{args.dataset}-{proxy_run_base}"
     final_run_base = build_final_base(args.final_num_tokens,
                                       args.final_model_size)
     run_name = f"final-{args.dataset}-{final_run_base}-{suffix}"
@@ -79,7 +89,8 @@ if __name__ == "__main__":
                 seed=seed)
             data_remote = os.path.join(
                 remote_base, "pruned",
-                f"{args.final_num_tokens}-final-tokens-pruned-from-{suffix}")
+                f"{args.final_num_tokens}-final-tokens-pruned-from-{proxy_run_base}"
+            )
 
             # Don't shuffle for proxy
             base_run.parameters["max_duration"] = "1ep"
@@ -97,9 +108,8 @@ if __name__ == "__main__":
                         args.final_model_size, args.final_num_tokens, seed)
 
         base_run.parameters["loggers"]["wandb"]["tags"] += [
-            "final",
-            f"fp-{args.final_model_size}",
-            f"ft-{args.final_num_tokens}",
+            "final", f"fp-{args.final_model_size}",
+            f"ft-{args.final_num_tokens}"
         ]
         if args.is_baseline:
             base_run.parameters["loggers"]["wandb"]["tags"] += ["baseline"]
@@ -107,7 +117,7 @@ if __name__ == "__main__":
             base_run.parameters["loggers"]["wandb"]["tags"] += [
                 f"hop-{args.ref_model_size}", f"hot-{args.ref_num_tokens}",
                 f"pp-{args.proxy_model_size}", f"pt-{args.proxy_num_tokens}",
-                f"fb-{args.full_batch_size}"
+                f"fb-{args.full_batch_size}", args.selection_algo
             ]
 
         launch_run(base_run, args.local_debug, seed)
