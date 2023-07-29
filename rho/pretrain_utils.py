@@ -111,8 +111,8 @@ def build_ref_base(num_tokens, num_params):
     return f"{num_params}-hop-{num_tokens}-hot"
 
 
-def build_proxy_base(num_tokens, num_params, full_batch_size):
-    return f"{num_params}-pp-{num_tokens}-pt-{full_batch_size}-fb"
+def build_proxy_base(sel_alg, num_tokens, num_params, full_batch_size):
+    return f"{sel_alg}-{num_params}-pp-{num_tokens}-pt-{full_batch_size}-fb"
 
 
 def build_final_base(num_tokens, num_params):

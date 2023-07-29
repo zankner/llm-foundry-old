@@ -18,10 +18,7 @@ if __name__ == "__main__":
     parser.add_argument("--local-debug", action="store_true")
 
     # Reference args
-    parser.add_argument("--ref-model-size",
-                        type=str,
-                        required=True,
-                        choices=["125M", "250M"])
+    parser.add_argument("--ref-model-size", type=str, choices=["125M", "250M"])
     parser.add_argument("--ref-num-tokens",
                         type=str,
                         required=True,
@@ -41,6 +38,10 @@ if __name__ == "__main__":
         help="Batch size for points to be labeled that will then be pruned",
         type=int,
         choices=[512, 1024, 2048, 4096])
+    parser.add_argument("--selection-algo",
+                        type=str,
+                        default="rho",
+                        choices=["rho", "hard-mine", "easy-mine"])
 
     # Data args
     parser.add_argument("--dataset", type=str, default="pile")
@@ -48,11 +49,17 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    ref_run_base = build_ref_base(args.ref_num_tokens, args.ref_model_size)
-    proxy_run_base = build_proxy_base(args.proxy_num_tokens,
+    if args.selection_algo == "rho":
+        assert args.ref_num_tokens is not None and args.ref_model_size is not None
+
+    proxy_run_base = build_proxy_base(args.selection_algo,
+                                      args.proxy_num_tokens,
                                       args.proxy_model_size,
                                       args.full_batch_size)
-    run_name = f"proxy-with-logging-{args.dataset}-{proxy_run_base}-{ref_run_base}"
+    run_name = f"proxy-{args.dataset}-{proxy_run_base}"
+    if args.selection_algo == "rho":
+        ref_run_base = build_ref_base(args.ref_num_tokens, args.ref_model_size)
+        run_name += f"-{ref_run_base}"
 
     for seed in args.seeds:
         base_run = RunConfig.from_file(f"rho/yamls/pretrain_base.yaml")
@@ -60,13 +67,13 @@ if __name__ == "__main__":
         remote_base = build_remote_base(num_holdout_tokens=args.ref_num_tokens,
                                         dataset=args.dataset,
                                         seed=seed)
-        data_remote = os.path.join(remote_base, "train", ref_run_base)
+        # handling different datasources for different selection algorithms
+        data_remote = os.path.join(
+            remote_base, "train",
+            ref_run_base if args.selection_algo == "rho" else "base")
 
-        ## Handling overhead for proxy
+        # Handling overhead for proxy
         base_run.parameters["train_loader"]["num_workers"] = 1
-        #del base_run.parameters["train_loader"]["dataset"]["shuffle_block_size"]
-        #del base_run.parameters["train_loader"]["dataset"]["shuffle_seed"]
-        #del base_run.parameters["train_loader"]["dataset"]["shuffle_algo"]
 
         save_folder = os.path.join(CKPT_BASE, "proxy", f"{run_name}-sd-{seed}",
                                    "ckpts")
@@ -86,11 +93,19 @@ if __name__ == "__main__":
         base_run.parameters["loggers"]["wandb"]["tags"] += [
             "proxy", f"hop-{args.ref_model_size}", f"hot-{args.ref_num_tokens}",
             f"pp-{args.proxy_model_size}", f"pt-{args.proxy_num_tokens}",
-            f"fb-{args.full_batch_size}"
+            f"fb-{args.full_batch_size}", args.selection_algo
         ]
 
-        # Configuring the RHO algorithm
+        # Configuring the selection algorithm
         base_run.parameters["global_train_batch_size"] = args.full_batch_size
-        base_run.parameters["algorithms"]["rho"] = {"num_subsample": 512}
+
+        selection_algorithm = {"num_subsample": 512}
+        if args.selection_algo == "hard-mine":
+            selection_algorithm["ignore_ref"] = True
+        elif args.selection_algo == "easy-mine":
+            selection_algorithm["ignore_ref"] = True
+            selection_algorithm["hard_examples"] = False
+
+        base_run.parameters["algorithms"]["rho"] = selection_algorithm
 
         launch_run(base_run, args.local_debug, seed)
