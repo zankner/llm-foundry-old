@@ -39,12 +39,18 @@ def dist_scatter(tensor: torch.Tensor, scatter_list: List[torch.Tensor],
 
 class RestrictedHoldOut(Algorithm):
 
-    def __init__(self, num_subsample: int):
+    def __init__(self,
+                 num_subsample: int,
+                 ignore_ref: bool = False,
+                 hard_examples: bool = True):
         self.num_subsample = num_subsample
         assert self.num_subsample % dist.get_world_size(
         ) == 0, "num_subsample must be divisible by world size"  # Should really check world_size * micro_batch_size
         self.device_num_subsample_size = self.num_subsample // dist.get_world_size(
         )
+
+        self.ignore_ref = ignore_ref
+        self.hard_examples = hard_examples
 
         self.loss_fn = CrossEntropyLoss(reduction="none", ignore_index=-100)
 
@@ -73,6 +79,12 @@ class RestrictedHoldOut(Algorithm):
             return
 
         full_batch = state.batch
+
+        # Sanity checking batch
+        if "ref_loss" not in full_batch:
+            assert self.ignore_ref, "Reference model loss required for RHOLs"
+            full_batch["ref_loss"] = torch.zeros_like(full_batch["input_ids"])
+
         microbatches = data_spec._default_split_batch(
             full_batch, state.device_train_microbatch_size)
 
@@ -94,7 +106,11 @@ class RestrictedHoldOut(Algorithm):
 
         if dist.get_global_rank() == 0:
             # Select points with highest excess loss
-            sorted_idx = torch.argsort(gathered_excess, descending=True)
+            sample_score = gathered_excess
+            if self.ignore_ref:
+                sample_score = gathered_proxy
+            sorted_idx = torch.argsort(sample_score,
+                                       descending=self.hard_examples)
             subsample_idx = sorted_idx[:self.num_subsample]
             skipsample_idx = sorted_idx[self.num_subsample:]
 
@@ -105,21 +121,23 @@ class RestrictedHoldOut(Algorithm):
 
             # Logging losses
             to_log = {}
-            _, seq_len = gathered_batch["input_ids"].shape # Logging mean over tokens
+            _, seq_len = gathered_batch[
+                "input_ids"].shape  # Logging mean over tokens
 
-            excess_loss_selected = gathered_excess[subsample_idx].mean().cpu(
-            ).item() / seq_len
-            excess_loss_leftout = gathered_excess[skipsample_idx].mean().cpu(
-            ).item() / seq_len
-            to_log["proxy/excess-loss/selected"] = excess_loss_selected
-            to_log["proxy/excess-loss/leftout"] = excess_loss_leftout
+            if not self.ignore_ref:
+                excess_loss_selected = gathered_excess[subsample_idx].mean(
+                ).cpu().item() / seq_len
+                excess_loss_leftout = gathered_excess[skipsample_idx].mean(
+                ).cpu().item() / seq_len
+                to_log["proxy/excess-loss/selected"] = excess_loss_selected
+                to_log["proxy/excess-loss/leftout"] = excess_loss_leftout
 
-            ref_loss_selected = gathered_batch["ref_loss"][subsample_idx].mean(
-            ).cpu().item() / seq_len
-            ref_loss_leftout = gathered_batch["ref_loss"][skipsample_idx].mean(
-            ).cpu().item() / seq_len
-            to_log["proxy/ref-loss/selected"] = ref_loss_selected
-            to_log["proxy/ref-loss/leftout"] = ref_loss_leftout
+                ref_loss_selected = gathered_batch["ref_loss"][
+                    subsample_idx].mean().cpu().item() / seq_len
+                ref_loss_leftout = gathered_batch["ref_loss"][
+                    skipsample_idx].mean().cpu().item() / seq_len
+                to_log["proxy/ref-loss/selected"] = ref_loss_selected
+                to_log["proxy/ref-loss/leftout"] = ref_loss_leftout
 
             proxy_loss_selected = gathered_proxy[subsample_idx].mean().cpu(
             ).item() / seq_len
