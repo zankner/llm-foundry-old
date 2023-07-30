@@ -1,12 +1,15 @@
 from launch_seed import run_seed
 from launch_trees import run_trees
+from mcli import wait_for_run_status
 
 def run_bbb(args):
     for sd in args.seeds:
         seed_run = run_seed(args, sd)
-
-        # wait ..
+        wait_for_run_status(seed_run, 'COMPLETED')
+        
         tree_runs = run_trees(args, sd)
+        for run in tree_runs:
+            wait_for_run_status(seed_run, 'COMPLETED')
 
 if __name__ == "__main__":
     # System args
