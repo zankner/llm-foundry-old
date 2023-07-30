@@ -27,8 +27,7 @@ def set_common_args(args,
                     domain_type,
                     num_domains,
                     model_size,
-                    duration,
-                    warmup_duration):
+                    duration):
     # Set run name
     base_run.name = run_name.lower()[:56]  # Mcli things
     base_run.parameters["run_name"] = run_name
@@ -70,7 +69,6 @@ def set_common_args(args,
         f"domain-type-{domain_type}",
         f"num-domain-{num_domains}",
         f"total-duration-{duration}",
-        f"warmup-duration-{warmup_duration}",
     ]
 
     # Handle preemption
@@ -86,8 +84,6 @@ def set_common_args(args,
     base_run.parameters["device_eval_batch_size"] = args.device_batch_size
 
     total_tokens = duration_to_tokens(duration)
-    duration_tokens = int(args.warmup_duration * total_tokens + ((1 - args.warmup_duration) * total_tokens) / num_domains)
-
     base_run.parameters["max_duration"] = f"{total_tokens}tok"
 
     base_run.parameters["eval_interval"] = "1000ba"
@@ -126,6 +122,9 @@ def build_seed_name(dataset, domain_type, num_params, total_duration, warmup_dur
 
 def build_tree_name(domain_type, domain_name, seed_name):
     return f"tree-dt-{domain_type}-{domain_name}-sf-{seed_name}"
+
+def build_baseline_name(dataset, domain_type, num_params, total_duration):
+    return f"baseline-{dataset}-dt-{domain_type}-p-{num_params}-dur-{total_duration}"
 
 def build_proxy_base(sel_alg, num_tokens, num_params, full_batch_size):
     return f"{sel_alg}-{num_params}-pp-{num_tokens}-pt-{full_batch_size}-fb"

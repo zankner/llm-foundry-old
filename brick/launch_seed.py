@@ -38,10 +38,15 @@ def run_seed(args, sd):
                     args.domain_type,
                     args.num_domains,
                     args.model_size,
-                    args.num_tokens,
-                    args.warmup_duration)
+                    args.num_tokens)
+
     total_tokens = duration_to_tokens(args.num_tokens)
-    base_run.parameters["callbacks"]["stop_time"] = f"{int(args.warmup_duration * total_tokens)}tok"
+    duration_tokens = int(args.warmup_duration * total_tokens + ((1 - args.warmup_duration) * total_tokens) / args.num_domains)
+    base_run.parameters["max_duration"] = f"{duration_tokens}tok"
+    base_run.parameters["callbacks"]["seed_stopper"] = {"stop_time": f"{int(args.warmup_duration * total_tokens)}tok"}
+    base_run.parameters["loggers"]["wandb"]["tags"] += [
+        f"warmup-duration-{args.warmup_duration}",
+    ]
 
     return launch_run(base_run, args.local_debug, sd)
 
