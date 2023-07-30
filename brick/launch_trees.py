@@ -20,14 +20,10 @@ def run_trees(args, sd):
                                 args.model_size,
                                 args.num_tokens,
                                 args.warmup_duration)
-    run_name = build_tree_name(args.domain_type,
-                               domain_id,
-                               seed_name)
 
     base_run = RunConfig.from_file(f"brick/yamls/pretrain_base.yaml")
 
     remote_base = "oci://mosaicml-internal-doremi/pile/pre-concat/gpt-neox-20b-seqlen-2048/22-clusters/base/all-samples-baseline-sd-17/"
-    save_folder = os.path.join(CKPT_BASE, "reference", f"{run_name}-sd-{sd}", "ckpts")
 
     domain_streams = build_domain_streams(args.num_domains,
                                           remote_base,
@@ -35,6 +31,12 @@ def run_trees(args, sd):
 
     tree_runs = []
     for domain_id, stream in domain_streams.items():
+        run_name = build_tree_name(args.domain_type,
+                                   domain_id,
+                                   seed_name)
+
+        save_folder = os.path.join(CKPT_BASE, "reference", f"{run_name}-sd-{sd}", "ckpts")
+
         set_common_args(args,
                         sd,
                         base_run,
