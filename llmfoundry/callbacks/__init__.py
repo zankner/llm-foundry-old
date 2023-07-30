@@ -4,6 +4,7 @@
 try:
     from llmfoundry.callbacks.fdiff_callback import FDiffMetrics
     from llmfoundry.callbacks.generate_callback import Generate
+    from llmfoundry.callbacks.seed_stopper import SeedStopper
     from llmfoundry.callbacks.log_average_icl import AverageICLLogger
     from llmfoundry.callbacks.log_domain_loss import LogDomainLoss
     from llmfoundry.callbacks.model_gauntlet_callback import ModelGauntlet
@@ -22,6 +23,7 @@ __all__ = [
     'FDiffMetrics',
     'Generate',
     'AverageICLLogger',
+    'SeedStopper',
     'LogDomainLoss',
     'MonolithicCheckpointSaver',
     'GlobalLRScaling',

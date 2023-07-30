@@ -24,7 +24,7 @@ from transformers import (AutoTokenizer, PreTrainedTokenizer,
                           PreTrainedTokenizerFast)
 
 from llmfoundry.algorithms import DomainWeightSetter, RestrictedHoldOut
-from llmfoundry.callbacks import (FDiffMetrics, Generate, AverageICLLogger,
+from llmfoundry.callbacks import (FDiffMetrics, SeedStopper, Generate, AverageICLLogger,
                                   LogDomainLoss, GlobalLRScaling, LayerFreezing,
                                   MonolithicCheckpointSaver,
                                   ScheduledGarbageCollector)
@@ -39,6 +39,8 @@ def build_callback(name, kwargs):
         return LRMonitor()
     elif name == 'average_icl_logger':
         return AverageICLLogger()
+    elif name == 'seed_stopper':
+        return SeedStopper(**kwargs)
     elif name == 'memory_monitor':
         return MemoryMonitor()
     elif name == 'speed_monitor':
