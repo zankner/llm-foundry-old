@@ -9,7 +9,8 @@ from pretrain_utils import (
     launch_run,
     build_remote_base,
     build_seed_name,
-    build_domain_streams
+    build_domain_streams,
+	duration_to_tokens,
 )
 
 def run_seed(args, sd):
@@ -39,6 +40,8 @@ def run_seed(args, sd):
                     args.model_size,
                     args.num_tokens,
                     args.warmup_duration)
+    total_tokens = duration_to_tokens(args.num_tokens)
+    base_run.parameters["callbacks"]["stop_time"] = f"{int(args.warmup_duration * total_tokens)}tok"
 
     return launch_run(base_run, args.local_debug, sd)
 

@@ -7,6 +7,16 @@ from typing import Optional, List
 
 CKPT_BASE = "oci://mosaicml-internal-checkpoints/zack/brick-brick-brick/"
 
+def duration_to_tokens(duration):
+    if duration == "2B":
+        total_tokens = 2_000_000_000
+    elif duration == "5B":
+        total_tokens = 5_000_000_000
+    elif duration == "20B":
+        total_tokens = 20_000_000_000
+    elif duration == "26B":
+        total_tokens = 26_000_000_000
+    return total_tokens
 
 def set_common_args(args,
                     seed,
@@ -75,17 +85,10 @@ def set_common_args(args,
     base_run.parameters["device_train_microbatch_size"] = args.device_batch_size
     base_run.parameters["device_eval_batch_size"] = args.device_batch_size
 
-    # Set training duration
-    if duration == "2B":
-        duration_tokens = 2_000_000_000
-    elif duration == "5B":
-        duration_tokens = 5_000_000_000
-    elif duration == "20B":
-        duration_tokens = 20_000_000_000
-    elif duration == "26B":
-        duration_tokens = 26_000_000_000
-    duration_tokens *= warmup_duration
-    base_run.parameters["max_duration"] = f"{duration_tokens}tok"
+    total_tokens = duration_to_tokens(duration)
+    duration_tokens = int(args.warmup_duration * total_tokens + ((1 - args.warmup_duration) * total_tokens) / num_domains)
+
+    base_run.parameters["max_duration"] = f"{total_tokens}tok"
 
     base_run.parameters["eval_interval"] = "1000ba"
     base_run.parameters["save_interval"] = "500ba"
