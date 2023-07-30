@@ -117,3 +117,24 @@ def build_proxy_base(sel_alg, num_tokens, num_params, full_batch_size):
 
 def build_final_base(num_tokens, num_params):
     return f"{num_params}-fp-{num_tokens}-ft"
+
+# domain streams handle different remotes for different app
+def build_domain_streams(num_domains: int,
+                         remote_base: str,
+                         proportions: Optional[List[float]] = None):
+
+    train_streams = {
+        f"domain-{domain_id}": {
+            "local": f"/tmp/dataset/domain-{domain_id}/",
+            "remote": os.path.join(remote_base, f"domain-{domain_id}"),
+            "split": "train",
+        } for domain_id in range(num_domains)
+    }
+    if proportions is not None:
+        train_streams = {
+            domain_id: {
+                **stream, "proportion": proportion
+            } for (domain_id,
+                  stream), proportion in zip(train_streams.items(), proportions)
+        }
+    return train_streams
