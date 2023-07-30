@@ -3,6 +3,8 @@ import os
 from omegaconf import OmegaConf as om
 from mcli import create_run
 
+from typing import Optional, List
+
 CKPT_BASE = "oci://mosaicml-internal-checkpoints/zack/rho/"
 
 
@@ -47,6 +49,7 @@ def set_common_args(args,
 
     # Set data args
     base_run.parameters["train_loader"]["dataset"]["remote"] = data_remote
+    base_run.parameters["train_loader"]["dataset"]["download_timeout"] = 1200
 
     # Common wandb tags
     base_run.parameters["loggers"]["wandb"]["tags"] += [
