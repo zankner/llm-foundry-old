@@ -5,18 +5,20 @@ from mcli import create_run
 
 from typing import Optional, List
 
-CKPT_BASE = "oci://mosaicml-internal-checkpoints/zack/rho/"
+CKPT_BASE = "oci://mosaicml-internal-checkpoints/zack/brick-brick-brick/"
 
 
 def set_common_args(args,
+                    seed,
                     base_run,
                     run_name,
                     save_folder,
-                    data_remote,
+                    domain_streams,
+                    domain_type,
+                    num_domains,
                     model_size,
                     duration,
-                    seed,
-                    token_multiplier=1):
+                    warmup_duration):
     # Set run name
     base_run.name = run_name.lower()[:56]  # Mcli things
     base_run.parameters["run_name"] = run_name
@@ -48,12 +50,17 @@ def set_common_args(args,
     base_run.parameters["save_folder"] = save_folder
 
     # Set data args
-    base_run.parameters["train_loader"]["dataset"]["remote"] = data_remote
-    base_run.parameters["train_loader"]["dataset"]["download_timeout"] = 1200
+    # base_run.parameters["train_loader"]["dataset"]["remote"] = data_remote
+    base_run.parameters["train_loader"]["dataset"]["streams"] = domain_streams
 
     # Common wandb tags
     base_run.parameters["loggers"]["wandb"]["tags"] += [
-        f"dataset-{args.dataset}", f"seed-{seed}"
+        f"dataset-{args.dataset}",
+        f"seed-{seed}",
+        f"domain-type-{domain_type}",
+        f"num-domain-{num_domains}",
+        f"total-duration-{duration}",
+        f"warmup-duration-{warmup_duration}",
     ]
 
     # Handle preemption
@@ -77,7 +84,7 @@ def set_common_args(args,
         duration_tokens = 20_000_000_000
     elif duration == "26B":
         duration_tokens = 26_000_000_000
-    duration_tokens *= token_multiplier
+    duration_tokens *= warmup_duration
     base_run.parameters["max_duration"] = f"{duration_tokens}tok"
 
     base_run.parameters["eval_interval"] = "1000ba"
@@ -110,9 +117,11 @@ def build_remote_base(num_holdout_tokens, dataset, seed):
                         f"{num_holdout_tokens}-holdout-tokens-sd-{seed}")
 
 
-def build_ref_base(num_tokens, num_params):
-    return f"{num_params}-hop-{num_tokens}-hot"
+def build_seed_name(dataset, domain_type, num_params, total_duration, warmup_duration):
+    return f"seed-{dataset}-domain-type-{domain_type}-params-{num_params}-total-duration-{total_duration}-warmup-duration-{warmup_duration}"
 
+def build_tree_name(domain_type, domain_name, seed_name):
+    return f"tree-domain-type-{domain_type}-{domain_name}-sprouted-from-{seed_name}"
 
 def build_proxy_base(sel_alg, num_tokens, num_params, full_batch_size):
     return f"{sel_alg}-{num_params}-pp-{num_tokens}-pt-{full_batch_size}-fb"

@@ -156,6 +156,5 @@ parameters:
       predownload: 16777216
       shuffle_block_size: 16777216
       shuffle_seed: ${global_seed}
-      local: /tmp/dataset/train
-      remote: # Set by launch script
+      streams: # Set by launch script
       split: train
