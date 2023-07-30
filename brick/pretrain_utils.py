@@ -98,6 +98,7 @@ def launch_run(run, local_debug, seed):
     else:
         run = create_run(run)
         print(f"Launched seed {seed} with in {run.name}")
+    return run
 
 
 def build_model_arch(model_size):

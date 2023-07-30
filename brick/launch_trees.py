@@ -30,12 +30,14 @@ def run_trees(args, sd):
                                           proportions=None)
 
     tree_runs = []
+    tree_ckpt_names = []
     for domain_id, stream in domain_streams.items():
         run_name = build_tree_name(args.domain_type,
                                    domain_id,
                                    seed_name)
 
-        save_folder = os.path.join(CKPT_BASE, "reference", f"{run_name}-sd-{sd}", "ckpts")
+        ckpt_name = f"{run_name}-sd-{sd}"
+        save_folder = os.path.join(CKPT_BASE, ckpt_name)
 
         set_common_args(args,
                         sd,
@@ -51,8 +53,9 @@ def run_trees(args, sd):
 
         run = launch_run(base_run, args.local_debug, sd)
         tree_runs.append(run)
+        tree_ckpt_names.append(ckpt_name)
 
-    return tree_runs
+    return tree_runs, tree_ckpt_names
         
 if __name__ == "__main__":
     # System args

@@ -12,7 +12,7 @@ from pretrain_utils import (
     build_domain_streams
 )
 
-def run_seed(args, sd)
+def run_seed(args, sd):
     run_name = build_seed_name(args.dataset,
                                args.domain_type,
                                args.model_size,

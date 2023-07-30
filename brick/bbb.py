@@ -1,15 +1,38 @@
+import argparse
+import time
 from launch_seed import run_seed
 from launch_trees import run_trees
-from mcli import wait_for_run_status
+from mcli import RunConfig
 
 def run_bbb(args):
     for sd in args.seeds:
         seed_run = run_seed(args, sd)
-        wait_for_run_status(seed_run, 'COMPLETED')
+        while True:
+            if seed_run.status == "COMPLETED":
+                break
+            time.sleep(2)
         
-        tree_runs = run_trees(args, sd)
+        tree_runs, tree_ckpt_names = run_trees(args, sd)
+        num_trees = len(tree_runs)
+        num_completed = 0
         for run in tree_runs:
-            wait_for_run_status(seed_run, 'COMPLETED')
+            if run.status == "COMPLETED":
+                num_completed += 1
+                if num_completed == num_trees:
+                    break
+            time.sleep(2)
+
+        ckpts = [run.submitted_config.parameters["save_folder"] for run in tree_runs]
+
+        merge_run_config = RunConfig.from_file("brick/yamls/merge_models.yaml")
+        merge_run_config.command = merge_run_config.command.replace(
+            "${model_ckpts}",
+            " ".join(tree_ckpt_names)
+        )
+        merge_run_config.command = merge_run_config.command.replace(
+            "${model_weights}",
+            " ".join(args.model_weights)
+        )
 
 if __name__ == "__main__":
     # System args
@@ -43,6 +66,7 @@ if __name__ == "__main__":
     parser.add_argument("--warmup-duration",
                         type=float,
                         required=True)
+    parser.add_argument("--merge-weights", type=float, nargs="+", default=None)
 
     args = parser.parse_args()
 
