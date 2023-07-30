@@ -1,0 +1,19 @@
+name: merge-bbb-models
+
+integrations:
+  - integration_type: git_repo
+    git_branch: brick-brick-brick
+    git_repo: zankner/llm-foundry
+    pip_install: .[gpu]
+    ssh_clone: true
+
+image: mosaicml/llm-foundry:1.13.1_cu117-latest
+cluster: r7z17
+gpu_num: 0
+
+command: |-
+  cd llm-foundry
+  python brick/merge_models.py \
+    --model-bucket oci://mosaicml-internal-checkpoints/zack/brick-brick-brick/ \
+    --model-ckpts ${model_ckpts} \
+    --model-weights ${model_weights}
