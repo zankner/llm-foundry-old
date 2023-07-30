@@ -7,16 +7,17 @@ from composer.utils.object_store.oci_object_store import OCIObjectStore
 
 
 def spread_seed(args):
-    remote_uploader = OCIObjectStore(bucket=args.ckpt_bucket)
+    remote_uploader = OCIObjectStore(
+        bucket=args.ckpt_bucket.replace("oci://", ""))
 
-    seed_ckpt = os.path.join(f"oci://{args.ckpt_bucket}", args.seed_ckpt)
+    seed_ckpt = os.path.join(args.ckpt_bucket, args.seed_ckpt)
 
     with tempfile.NamedTemporaryFile() as seed_tmp:
         get_file(seed_ckpt, seed_tmp.name, overwrite=True)
         print(f"Downloaded from seed ckpt: {seed_ckpt}")
         for tree_ckpt in args.tree_ckpts:
             remote_uploader.upload_object(
-                args.seed_ckpt,
+                tree_ckpt,
                 seed_tmp.name,
             )
             print(f"Uploaded to tree ckpt {tree_ckpt}")
