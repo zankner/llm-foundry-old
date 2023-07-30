@@ -7,6 +7,16 @@ from typing import Optional, List
 
 CKPT_BASE = "oci://mosaicml-internal-checkpoints/zack/brick-brick-brick/"
 
+def duration_to_tokens(duration):
+    if duration == "2B":
+        total_tokens = 2_000_000_000
+    elif duration == "5B":
+        total_tokens = 5_000_000_000
+    elif duration == "20B":
+        total_tokens = 20_000_000_000
+    elif duration == "26B":
+        total_tokens = 26_000_000_000
+    return total_tokens
 
 def set_common_args(args,
                     seed,
@@ -17,8 +27,7 @@ def set_common_args(args,
                     domain_type,
                     num_domains,
                     model_size,
-                    duration,
-                    warmup_duration):
+                    duration):
     # Set run name
     base_run.name = run_name.lower()[:56]  # Mcli things
     base_run.parameters["run_name"] = run_name
@@ -60,7 +69,6 @@ def set_common_args(args,
         f"domain-type-{domain_type}",
         f"num-domain-{num_domains}",
         f"total-duration-{duration}",
-        f"warmup-duration-{warmup_duration}",
     ]
 
     # Handle preemption
@@ -75,17 +83,8 @@ def set_common_args(args,
     base_run.parameters["device_train_microbatch_size"] = args.device_batch_size
     base_run.parameters["device_eval_batch_size"] = args.device_batch_size
 
-    # Set training duration
-    if duration == "2B":
-        duration_tokens = 2_000_000_000
-    elif duration == "5B":
-        duration_tokens = 5_000_000_000
-    elif duration == "20B":
-        duration_tokens = 20_000_000_000
-    elif duration == "26B":
-        duration_tokens = 26_000_000_000
-    duration_tokens *= warmup_duration
-    base_run.parameters["max_duration"] = f"{duration_tokens}tok"
+    total_tokens = duration_to_tokens(duration)
+    base_run.parameters["max_duration"] = f"{total_tokens}tok"
 
     base_run.parameters["eval_interval"] = "1000ba"
     base_run.parameters["save_interval"] = "500ba"
@@ -98,6 +97,7 @@ def launch_run(run, local_debug, seed):
     else:
         run = create_run(run)
         print(f"Launched seed {seed} with in {run.name}")
+    return run
 
 
 def build_model_arch(model_size):
@@ -118,10 +118,13 @@ def build_remote_base(num_holdout_tokens, dataset, seed):
 
 
 def build_seed_name(dataset, domain_type, num_params, total_duration, warmup_duration):
-    return f"seed-{dataset}-domain-type-{domain_type}-params-{num_params}-total-duration-{total_duration}-warmup-duration-{warmup_duration}"
+    return f"seed-{dataset}-dt-{domain_type}-p-{num_params}-dur-{total_duration}-wdur-{warmup_duration}"
 
 def build_tree_name(domain_type, domain_name, seed_name):
-    return f"tree-domain-type-{domain_type}-{domain_name}-sprouted-from-{seed_name}"
+    return f"tree-dt-{domain_type}-{domain_name}-sf-{seed_name}"
+
+def build_baseline_name(dataset, domain_type, num_params, total_duration):
+    return f"baseline-{dataset}-dt-{domain_type}-p-{num_params}-dur-{total_duration}"
 
 def build_proxy_base(sel_alg, num_tokens, num_params, full_batch_size):
     return f"{sel_alg}-{num_params}-pp-{num_tokens}-pt-{full_batch_size}-fb"

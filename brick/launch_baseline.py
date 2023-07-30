@@ -8,62 +8,39 @@ from pretrain_utils import (
     set_common_args,
     launch_run,
     build_remote_base,
-    build_seed_name,
-    build_tree_name,
+    build_baseline_name,
     build_domain_streams,
-    duration_to_tokens,
+	duration_to_tokens,
 )
 
-
-def run_trees(args, sd):
-    seed_name = build_seed_name(args.dataset,
-                                args.domain_type,
-                                args.model_size,
-                                args.num_tokens,
-                                args.warmup_duration)
+def run_baseline(args, sd):
+    run_name = build_baseline_name(args.dataset,
+                               args.domain_type,
+                               args.model_size,
+                               args.num_tokens)
 
     base_run = RunConfig.from_file(f"brick/yamls/pretrain_base.yaml")
 
     remote_base = "oci://mosaicml-internal-doremi/pile/pre-concat/gpt-neox-20b-seqlen-2048/22-clusters/base/all-samples-baseline-sd-17/"
+    save_folder = os.path.join(CKPT_BASE, "reference", f"{run_name}-sd-{sd}", "ckpts")
 
     domain_streams = build_domain_streams(args.num_domains,
                                           remote_base,
                                           proportions=None)
 
-    tree_runs = []
-    tree_ckpt_names = []
-    for domain_id, stream in domain_streams.items():
-        run_name = build_tree_name(args.domain_type,
-                                   domain_id,
-                                   seed_name)
+    set_common_args(args,
+                    sd,
+                    base_run,
+                    run_name,
+                    save_folder,
+                    domain_streams,
+                    args.domain_type,
+                    args.num_domains,
+                    args.model_size,
+                    args.num_tokens)
 
-        ckpt_name = f"{run_name}-sd-{sd}"
-        save_folder = os.path.join(CKPT_BASE, ckpt_name)
+    return launch_run(base_run, args.local_debug, sd)
 
-        set_common_args(args,
-                        sd,
-                        base_run,
-                        run_name,
-                        save_folder,
-                        {domain_id: stream},
-                        args.domain_type,
-                        args.num_domains,
-                        args.model_size,
-                        args.num_tokens)
-
-        total_tokens = duration_to_tokens(args.num_tokens)
-        duration_tokens = int(args.warmup_duration * total_tokens + ((1 - args.warmup_duration) * total_tokens) / args.num_domains)
-        base_run.parameters["max_duration"] = f"{duration_tokens}tok"
-        base_run.parameters["loggers"]["wandb"]["tags"] += [
-            f"warmup-duration-{args.warmup_duration}",
-        ]
-
-        run = launch_run(base_run, args.local_debug, sd)
-        tree_runs.append(run)
-        tree_ckpt_names.append(ckpt_name)
-
-    return tree_runs, tree_ckpt_names
-        
 if __name__ == "__main__":
     # System args
     parser = argparse.ArgumentParser()
@@ -93,11 +70,7 @@ if __name__ == "__main__":
                         type=str,
                         required=True,
                         choices=["2B", "5B", "20B"])
-    parser.add_argument("--warmup-duration",
-                        type=float,
-                        required=True)
-
     args = parser.parse_args()
 
     for sd in args.seeds:
-        run_trees(args, sd)
+        run_baseline(args, sd)
