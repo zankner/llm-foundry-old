@@ -118,10 +118,10 @@ def build_remote_base(num_holdout_tokens, dataset, seed):
 
 
 def build_seed_name(dataset, domain_type, num_params, total_duration, warmup_duration):
-    return f"seed-{dataset}-domain-type-{domain_type}-params-{num_params}-total-duration-{total_duration}-warmup-duration-{warmup_duration}"
+    return f"seed-{dataset}-dt-{domain_type}-p-{num_params}-dur-{total_duration}-wdur-{warmup_duration}"
 
 def build_tree_name(domain_type, domain_name, seed_name):
-    return f"tree-domain-type-{domain_type}-{domain_name}-sprouted-from-{seed_name}"
+    return f"tree-dt-{domain_type}-{domain_name}-sf-{seed_name}"
 
 def build_proxy_base(sel_alg, num_tokens, num_params, full_batch_size):
     return f"{sel_alg}-{num_params}-pp-{num_tokens}-pt-{full_batch_size}-fb"
