@@ -98,7 +98,7 @@ parameters:
 
   # Checkpointing
   autoresume: # Set by launch script
-  save_filename: ep{epoch}-ba{batch}/rank{rank}.pt
+  save_filename: ba{batch}/rank{rank}.pt
   save_folder: # Set by launch script
   save_interval: 1000ba # update for hero run, e.g. 2000ba
   save_num_checkpoints_to_keep: 1

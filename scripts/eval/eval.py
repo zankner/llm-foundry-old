@@ -80,7 +80,7 @@ def evaluate_model(model_cfg, run_name, model_gauntlet_df):
     in_memory_logger = InMemoryLogger()  # track metrics in the in_memory_logger
     loggers: List[LoggerDestination] = [
         build_logger(name, logger_cfg)
-        for name, logger_cfg in (cfg.get('loggers') or {}).items()
+        for name, logger_cfg in (model_cfg.get('loggers') or {}).items()
     ]
     loggers.append(in_memory_logger)
 
