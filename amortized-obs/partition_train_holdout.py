@@ -10,7 +10,7 @@ import torch
 from torch.utils.data import DataLoader, IterableDataset
 from tqdm import tqdm
 
-torch.multiprocessing.set_sharing_strategy('file_system')
+#torch.multiprocessing.set_sharing_strategy('file_system')
 
 
 def build_dataloader(dataset, batch_size, num_workers) -> DataLoader:
@@ -58,6 +58,8 @@ def generate_samples(
                 return
             n_samples += 1
             sample = {k: v[idx] for k, v in batch.items()}
+            unique_uids = np.unique(sample["uids"])
+            sample["uids"] = unique_uids
             yield sample
 
 
@@ -86,7 +88,7 @@ class ConcatDomainsTokensDataset(IterableDataset):
         uid_buffer = []
         for sample in self.dataset:
             tokens = self._read_binary_tokenized_sample(sample)
-            uids = [sample["uids"]] * len(tokens)
+            uids = [sample["uid"]] * len(tokens)
             token_buffer += tokens
             uid_buffer += uids
             while len(token_buffer) >= self.max_length:
@@ -99,7 +101,7 @@ class ConcatDomainsTokensDataset(IterableDataset):
                 yield {
                     # convert to bytes to store in MDS binary format
                     "tokens": np.asarray(concat_tokens).tobytes(),
-                    "uids": np.array(list(set(concat_uids)), dtype=np.int32)
+                    "uids": np.array(concat_uids, dtype=np.int32)
                 }
 
 
