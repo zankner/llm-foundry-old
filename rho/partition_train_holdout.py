@@ -83,16 +83,23 @@ class ConcatDomainsTokensDataset(IterableDataset):
 
     def __iter__(self) -> Iterable[Dict[str, bytes]]:
         token_buffer = []
+        uid_buffer = []
         for sample in self.dataset:
             tokens = self._read_binary_tokenized_sample(sample)
+            uids = [sample["uids"]] * len(tokens)
             token_buffer += tokens
+            uid_buffer += uids
             while len(token_buffer) >= self.max_length:
-                concat_sample = token_buffer[:self.max_length]
+                concat_tokens = token_buffer[:self.max_length]
+                concat_uids = uid_buffer[:self.max_length]
                 token_buffer = token_buffer[
+                    self.max_length:] if self.should_wrap else []
+                uid_buffer = uid_buffer[
                     self.max_length:] if self.should_wrap else []
                 yield {
                     # convert to bytes to store in MDS binary format
-                    "tokens": np.asarray(concat_sample).tobytes(),
+                    "tokens": np.asarray(concat_tokens).tobytes(),
+                    "uids": np.array(list(set(concat_uids)), dtype=np.int32)
                 }
 
 
@@ -132,14 +139,16 @@ if __name__ == "__main__":
                    project="pre-process-data",
                    entity="mosaic-ml")
 
-    streaming_data = StreamingDataset(remote=args.download_remote,
-                                      local=args.local,
-                                      split="train",
-                                      shuffle=True,
-                                      shuffle_seed=args.seed,
-                                      shuffle_block_size=16777216,
-                                      predownload=16777216,
-                                      num_canonical_nodes=128)
+    streaming_data = StreamingDataset(
+        remote=args.download_remote,
+        local=args.local,
+        split="train",
+        shuffle=True,
+        shuffle_algo="py1s",  # For some weird speed reasons
+        shuffle_seed=args.seed,
+        shuffle_block_size=16777216,
+        predownload=16777216,
+        num_canonical_nodes=128)
 
     data = ConcatDomainsTokensDataset(
         streaming_data,
@@ -151,7 +160,8 @@ if __name__ == "__main__":
                               num_workers=args.num_workers)
     samples = generate_samples(loader, truncate_num_samples=None)
 
-    columns = {'tokens': 'bytes'}
+    holdout_columns = {"tokens": "bytes", "uids": "ndarray:int32"}
+    train_columns = {"tokens": "bytes", "idx": "int", "uids": "ndarray:int32"}
 
     if args.holdout_num_tokens == "2B":
         holdout_num_tokens = 2_000_000_000
@@ -159,6 +169,8 @@ if __name__ == "__main__":
         holdout_num_tokens = 5_000_000_000
     elif args.holdout_num_tokens == "20B":
         holdout_num_tokens = 20_000_000_000
+    elif args.holdout_num_tokens == "26B":
+        holdout_num_tokens = 26_000_000_000
     else:
         raise ValueError(
             f"Invalid holdout num tokens: {args.holdout_num_tokens}")
@@ -174,16 +186,17 @@ if __name__ == "__main__":
     upload_remote = os.path.join(args.upload_base, upload_name)
 
     holdout_writer = MDSWriter(
-        columns=columns,
+        columns=holdout_columns,
         out=os.path.join(upload_remote, "holdout"),
         compression="zstd",
         max_workers=args.num_workers,
     )
-    training_writer = MDSWriter(columns=columns,
+    training_writer = MDSWriter(columns=train_columns,
                                 out=os.path.join(upload_remote, "train", "base",
                                                  "train"),
                                 compression="zstd",
                                 max_workers=args.num_workers)
+    train_idx = 0
     for step, sample in enumerate(
             tqdm(samples, desc="concat", total=streaming_data.size,
                  leave=True)):
@@ -194,7 +207,9 @@ if __name__ == "__main__":
                 holdout_writer.finish()
                 print("Finished writing holdout set")
         else:
+            sample = {**sample, "idx": train_idx}
             training_writer.write(sample)
+            train_idx += 1
 
         if use_wandb and step % 1_000 == 0:
             wandb.log(({'step': step, 'progress': step / streaming_data.size}))
