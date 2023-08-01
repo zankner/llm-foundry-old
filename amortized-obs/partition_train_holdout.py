@@ -10,7 +10,7 @@ import torch
 from torch.utils.data import DataLoader, IterableDataset
 from tqdm import tqdm
 
-#torch.multiprocessing.set_sharing_strategy('file_system')
+torch.multiprocessing.set_sharing_strategy('file_system')
 
 
 def build_dataloader(dataset, batch_size, num_workers) -> DataLoader:
@@ -184,7 +184,7 @@ if __name__ == "__main__":
         f"Percent training samples: {1 - (holdout_num_samples / streaming_data.size)}"
     )
 
-    upload_name = f"{args.holdout_num_tokens}-holdout-tokens-sd-{args.seed}"
+    upload_name = f"{args.holdout_num_tokens}-holdout-tokens"
     upload_remote = os.path.join(args.upload_base, upload_name)
 
     holdout_writer = MDSWriter(
