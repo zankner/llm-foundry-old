@@ -39,9 +39,10 @@ if __name__ == "__main__":
         base_run.image = "mosaicml/llm-foundry:1.13.1_cu117-latest"
         base_run.gpu_type = "a100_40gb"
 
-    remote_base = build_remote_base(num_holdout_tokens=args.num_tokens,
-                                    dataset=args.dataset,
-                                    seed=args.seed)
+    remote_base = build_remote_base(
+        num_holdout_tokens=args.num_tokens,
+        dataset=args.dataset,
+    )
     # Set remote source dataset
     download_remote = os.path.join(remote_base, "train", "base")
     base_run.command = base_run.command.replace(r"{download_remote}",

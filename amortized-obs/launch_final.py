@@ -81,7 +81,8 @@ if __name__ == "__main__":
     run_name = f"final-{args.dataset}-{final_run_base}-{suffix}-holdt-{args.holdout_num_tokens}"
 
     for seed in args.seeds:
-        base_run = RunConfig.from_file(f"rho/yamls/pretrain_base.yaml")
+        base_run = RunConfig.from_file(
+            f"amortized-obs/yamls/pretrain_base.yaml")
 
         if args.is_baseline:
             if args.dataset == "pile":
@@ -90,7 +91,7 @@ if __name__ == "__main__":
             remote_base = build_remote_base(
                 num_holdout_tokens=args.ref_num_tokens,
                 dataset=args.dataset,
-                seed=seed)
+            )
             data_remote = os.path.join(
                 remote_base, "pruned",
                 f"{args.final_num_tokens}-final-tokens-pruned-from-{proxy_run_base}"

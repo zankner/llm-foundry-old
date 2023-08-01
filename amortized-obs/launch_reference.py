@@ -41,18 +41,20 @@ if __name__ == "__main__":
     run_name = f"ref-{args.dataset}-{run_base}-holdt-{args.holdout_num_tokens}"
 
     for seed in args.seeds:
-        base_run = RunConfig.from_file(f"rho/yamls/pretrain_base.yaml")
+        base_run = RunConfig.from_file(
+            f"amortized-obs/yamls/pretrain_base.yaml")
 
         data_remote = os.path.join(
-            build_remote_base(num_holdout_tokens=args.holdout_num_tokens,
-                              dataset=args.dataset,
-                              seed=seed), "holdout")
+            build_remote_base(
+                num_holdout_tokens=args.holdout_num_tokens,
+                dataset=args.dataset,
+            ), "holdout")
 
         save_folder = os.path.join(CKPT_BASE, args.dataset, "reference",
                                    f"{run_name}-sd-{seed}", "ckpts")
 
         set_common_args(args, base_run, run_name, save_folder, data_remote,
-                        args.ref_model_size, args.num_tokens, seed)
+                        args.ref_model_size, args.ref_num_tokens, seed)
 
         base_run.parameters["loggers"]["wandb"]["tags"] += [
             "ref", f"holdt-{args.holdout_num_tokens}",

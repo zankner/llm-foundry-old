@@ -72,12 +72,13 @@ if __name__ == "__main__":
     run_name += f"-holdt-{args.holdout_num_tokens}"
 
     for seed in args.seeds:
-        base_run = RunConfig.from_file(f"rho/yamls/pretrain_base.yaml")
+        base_run = RunConfig.from_file(
+            f"amortized-obs/yamls/pretrain_base.yaml")
 
         remote_base = build_remote_base(
             num_holdout_tokens=args.holdout_num_tokens,
             dataset=args.dataset,
-            seed=seed)
+        )
         # handling different datasources for different selection algorithms
         data_remote = os.path.join(
             remote_base, "train",
