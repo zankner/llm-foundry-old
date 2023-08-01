@@ -153,9 +153,9 @@ def main(args):
     for domain_name, weight_trajectory in weights:
         #domain_name = f"domain-{domain_idx}"
         display_domain_name = domain_name
-        #if args.data_source:
-        #    display_domain_name = PILE_DATA_SOURCES[int(
-        #        domain_name.split("-")[-1])]
+        if args.data_source:
+            display_domain_name = PILE_DATA_SOURCES[int(
+                domain_name.split("-")[-1])]
         plt.plot(steps, weight_trajectory, label=display_domain_name)
 
         og_proportion = compare_weights[int(domain_name.split('-')[-1])]
