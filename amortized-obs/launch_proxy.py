@@ -21,8 +21,7 @@ if __name__ == "__main__":
     parser.add_argument("--ref-model-size", type=str, choices=["125M", "250M"])
     parser.add_argument("--ref-num-tokens",
                         type=str,
-                        required=True,
-                        choices=["2B", "5B", "20B"])
+                        choices=["2B", "5B", "20B", "26B"])
 
     # Proxy args
     parser.add_argument("--proxy-model-size",
@@ -38,6 +37,7 @@ if __name__ == "__main__":
         help="Batch size for points to be labeled that will then be pruned",
         type=int,
         choices=[512, 1024, 2048, 4096])
+    parser.add_argument("--num-pplx-filter", type=int)
     parser.add_argument("--selection-algo",
                         type=str,
                         default="rho",
@@ -46,6 +46,10 @@ if __name__ == "__main__":
     # Data args
     parser.add_argument("--dataset", type=str, default="pile")
     parser.add_argument("--device-batch-size", type=int, default=32)
+    parser.add_argument("--holdout-num-tokens",
+                        type=str,
+                        required=True,
+                        choices=["2B", "5B", "20B", "26B"])
 
     args = parser.parse_args()
 
@@ -58,15 +62,22 @@ if __name__ == "__main__":
                                       args.full_batch_size)
     run_name = f"proxy-{args.dataset}-{proxy_run_base}"
     if args.selection_algo == "rho":
-        ref_run_base = build_ref_base(args.ref_num_tokens, args.ref_model_size)
+        ref_run_base = ""
+        if args.num_pplx_filter is not None:
+            assert args.num_pplx_filter < args.full_batch_size and args.num_pplx_filter > 512
+            ref_run_base = f"filpplx-{args.num_pplx_filter}"
+            run_name += f"-{ref_run_base}-"
+        ref_run_base += build_ref_base(args.ref_num_tokens, args.ref_model_size)
         run_name += f"-{ref_run_base}"
+    run_name += f"-holdt-{args.holdout_num_tokens}"
 
     for seed in args.seeds:
         base_run = RunConfig.from_file(f"rho/yamls/pretrain_base.yaml")
 
-        remote_base = build_remote_base(num_holdout_tokens=args.ref_num_tokens,
-                                        dataset=args.dataset,
-                                        seed=seed)
+        remote_base = build_remote_base(
+            num_holdout_tokens=args.holdout_num_tokens,
+            dataset=args.dataset,
+            seed=seed)
         # handling different datasources for different selection algorithms
         data_remote = os.path.join(
             remote_base, "train",
@@ -91,16 +102,20 @@ if __name__ == "__main__":
                         token_multiplier=token_multiplier)
 
         base_run.parameters["loggers"]["wandb"]["tags"] += [
-            "proxy", f"hop-{args.ref_model_size}", f"hot-{args.ref_num_tokens}",
-            f"pp-{args.proxy_model_size}", f"pt-{args.proxy_num_tokens}",
-            f"fb-{args.full_batch_size}", args.selection_algo
+            "proxy", f"holdt-{args.holdout_num_tokens}",
+            f"reft-{args.ref_model_size}", f"reft-{args.ref_num_tokens}",
+            f"proxp-{args.proxy_model_size}", f"proxt-{args.proxy_num_tokens}",
+            f"fb-{args.full_batch_size}", f"fillpplx-{args.num_pplx_filter}",
+            args.selection_algo
         ]
 
         # Configuring the selection algorithm
         base_run.parameters["global_train_batch_size"] = args.full_batch_size
 
         selection_algorithm = {"num_subsample": 512}
-        if args.selection_algo == "hard-mine":
+        if args.selection_algo == "rho" and args.num_pplx_filter:
+            selection_algorithm["num_pplx_filter"] = args.num_pplx_filter
+        elif args.selection_algo == "hard-mine":
             selection_algorithm["ignore_ref"] = True
         elif args.selection_algo == "easy-mine":
             selection_algorithm["ignore_ref"] = True

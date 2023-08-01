@@ -3,7 +3,7 @@ import os
 from omegaconf import OmegaConf as om
 from mcli import create_run
 
-CKPT_BASE = "oci://mosaicml-internal-checkpoints/zack/rho/"
+CKPT_BASE = "oci://mosaicml-internal-checkpoints/zack/amortized-obs/"
 
 
 def set_common_args(args,
@@ -102,18 +102,18 @@ def build_model_arch(model_size):
     return model_cfg
 
 
-def build_remote_base(num_holdout_tokens, dataset, seed):
+def build_remote_base(num_holdout_tokens, dataset):
     return os.path.join("oci://mosaicml-internal-amortized-obs", "rho", dataset,
-                        f"{num_holdout_tokens}-holdout-tokens-sd-{seed}")
+                        f"{num_holdout_tokens}-holdout-tokens")
 
 
 def build_ref_base(num_tokens, num_params):
-    return f"{num_params}-hop-{num_tokens}-hot"
+    return f"refp-{num_params}-reft-{num_tokens}"
 
 
 def build_proxy_base(sel_alg, num_tokens, num_params, full_batch_size):
-    return f"{sel_alg}-{num_params}-pp-{num_tokens}-pt-{full_batch_size}-fb"
+    return f"{sel_alg}-proxp-{num_params}-proxt-{num_tokens}-fb{full_batch_size}"
 
 
 def build_final_base(num_tokens, num_params):
-    return f"{num_params}-fp-{num_tokens}-ft"
+    return f"finp-{num_params}-fint-{num_tokens}"

@@ -6,7 +6,6 @@ from typing import Dict, Optional, Iterable
 import wandb
 import numpy as np
 from streaming import MDSWriter, StreamingDataset
-import torch
 from torch.utils.data import DataLoader, IterableDataset
 from tqdm import tqdm
 
@@ -148,8 +147,6 @@ if __name__ == "__main__":
         shuffle=True,
         shuffle_algo="py1s",  # For some weird speed reasons
         shuffle_seed=args.seed,
-        shuffle_block_size=16777216,
-        predownload=16777216,
         num_canonical_nodes=128)
 
     data = ConcatDomainsTokensDataset(

@@ -18,40 +18,45 @@ if __name__ == "__main__":
     parser.add_argument("--local-debug", action="store_true")
 
     # Model args
-    parser.add_argument("--model-size",
+    parser.add_argument("--ref-model-size",
                         type=str,
                         required=True,
                         choices=["125M", "250M"])
+    parser.add_argument("--ref-num-tokens",
+                        type=str,
+                        required=True,
+                        choices=["2B", "5B", "20B", "26B"])
     parser.add_argument("--device-batch-size", type=int, default=32)
 
     # Data args
     parser.add_argument("--dataset", type=str, default="pile")
-    parser.add_argument("--num-tokens",
+    parser.add_argument("--holdout-num-tokens",
                         type=str,
                         required=True,
-                        choices=["2B", "5B", "20B"])
+                        choices=["2B", "5B", "20B", "26B"])
 
     args = parser.parse_args()
 
-    run_base = build_ref_base(args.num_tokens, args.model_size)
-    run_name = f"ref-{args.dataset}-{run_base}"
+    run_base = build_ref_base(args.ref_num_tokens, args.ref_model_size)
+    run_name = f"ref-{args.dataset}-{run_base}-holdt-{args.holdout_num_tokens}"
 
     for seed in args.seeds:
         base_run = RunConfig.from_file(f"rho/yamls/pretrain_base.yaml")
 
         data_remote = os.path.join(
-            build_remote_base(num_holdout_tokens=args.num_tokens,
+            build_remote_base(num_holdout_tokens=args.holdout_num_tokens,
                               dataset=args.dataset,
                               seed=seed), "holdout")
 
-        save_folder = os.path.join(CKPT_BASE, "reference",
+        save_folder = os.path.join(CKPT_BASE, args.dataset, "reference",
                                    f"{run_name}-sd-{seed}", "ckpts")
 
         set_common_args(args, base_run, run_name, save_folder, data_remote,
-                        args.model_size, args.num_tokens, seed)
+                        args.ref_model_size, args.num_tokens, seed)
 
         base_run.parameters["loggers"]["wandb"]["tags"] += [
-            "ref", f"hop-{args.model_size}", f"hot-{args.num_tokens}"
+            "ref", f"holdt-{args.holdout_num_tokens}",
+            f"refp-{args.ref_model_size}", f"reft-{args.ref_num_tokens}"
         ]
 
         launch_run(base_run, args.local_debug, seed)

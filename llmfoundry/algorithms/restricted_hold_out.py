@@ -42,6 +42,7 @@ class RestrictedHoldOut(Algorithm):
     def __init__(self,
                  num_subsample: int,
                  ignore_ref: bool = False,
+                 num_filter_pplx: int = 0,
                  hard_examples: bool = True):
         self.num_subsample = num_subsample
         assert self.num_subsample % dist.get_world_size(
@@ -72,6 +73,28 @@ class RestrictedHoldOut(Algorithm):
             proxy_losses = proxy_losses.view(b, seq_len).sum(dim=-1)
             excess_loss = proxy_losses - microbatch["ref_loss"]
         return excess_loss, proxy_losses
+
+    def _compute_mean_split(self,
+                            metric,
+                            selected_idx,
+                            skipped_idx,
+                            normalizer=1):
+        selected_metric = metric[selected_idx].mean().cpu().item() / normalizer
+        skipped_metric = metric[skipped_idx].mean().cpu().item() / normalizer
+        return selected_metric, skipped_metric
+
+    def _compute_percentile(self, metric, idx):
+        subsampled_metric = metric[idx].cpu().tolist().sorted()
+        metric = metric.cpu().tolist().sorted()
+        min_percentile = metric.index(subsampled_metric[0]) / len(metric)
+        max_percentile = metric.index(subsampled_metric[-1]) / len(metric)
+        return min_percentile, max_percentile
+
+    def _compute_min_max_split(self, metric, selected_idx, skipped_idx):
+        selected_min, selected_max = self._compute_percentile(
+            metric, selected_idx)
+        skipped_min, skipped_max = self._compute_percentile(metric, skipped_idx)
+        return selected_min, selected_max, skipped_min, skipped_max
 
     # Maybe set model in eval mode
     def apply(self, event: Event, state: State, logger: Logger):
@@ -107,6 +130,15 @@ class RestrictedHoldOut(Algorithm):
         gathered_proxy = torch.cat(dist.all_gather(proxy_loss))
 
         if dist.get_global_rank() == 0:
+            # Filter by pplx if applicable
+            if self.num_filter_pplx > 0:
+                pplx_sorted_idx = torch.argsort(gathered_proxy,
+                                                descending=self.hard_examples)
+                pplx_selected_idx = pplx_sorted_idx[:self.num_filter_pplx]
+                gathered_excess = gathered_excess[pplx_selected_idx]
+                gathered_proxy = gathered_proxy[pplx_selected_idx]
+                for k, v in gathered_batch.items():
+                    gathered_batch[k] = v[pplx_selected_idx]
             # Select points with highest excess loss
             sample_score = gathered_excess
             if self.ignore_ref:
@@ -127,26 +159,40 @@ class RestrictedHoldOut(Algorithm):
                 "input_ids"].shape  # Logging mean over tokens
 
             if not self.ignore_ref:
-                excess_loss_selected = gathered_excess[subsample_idx].mean(
-                ).cpu().item() / seq_len
-                excess_loss_leftout = gathered_excess[skipsample_idx].mean(
-                ).cpu().item() / seq_len
-                to_log["proxy/excess-loss/selected"] = excess_loss_selected
-                to_log["proxy/excess-loss/leftout"] = excess_loss_leftout
+                excess_loss_selected, excess_loss_leftout = self._compute_mean_split(
+                    gathered_excess,
+                    selected_idx=subsample_idx,
+                    skipped_idx=skipsample_idx,
+                    normalizer=seq_len)
+                to_log["proxy/mean-excess-loss/selected"] = excess_loss_selected
+                to_log["proxy/mean-excess-loss/leftout"] = excess_loss_leftout
 
-                ref_loss_selected = gathered_batch["ref_loss"][
-                    subsample_idx].mean().cpu().item() / seq_len
-                ref_loss_leftout = gathered_batch["ref_loss"][
-                    skipsample_idx].mean().cpu().item() / seq_len
-                to_log["proxy/ref-loss/selected"] = ref_loss_selected
-                to_log["proxy/ref-loss/leftout"] = ref_loss_leftout
+                ref_loss_selected, ref_loss_leftout = self._compute_mean_split(
+                    gathered_batch["ref_loss"],
+                    selected_idx=subsample_idx,
+                    skipped_idx=skipsample_idx,
+                    normalizer=seq_len)
+                to_log["proxy/mean-ref-loss/selected"] = ref_loss_selected
+                to_log["proxy/mean-ref-loss/leftout"] = ref_loss_leftout
 
-            proxy_loss_selected = gathered_proxy[subsample_idx].mean().cpu(
-            ).item() / seq_len
-            proxy_loss_leftout = gathered_proxy[skipsample_idx].mean().cpu(
-            ).item() / seq_len
-            to_log["proxy/proxy-loss/selected"] = proxy_loss_selected
-            to_log["proxy/proxy-loss/leftout"] = proxy_loss_leftout
+            proxy_loss_selected, proxy_loss_leftout = self._compute_mean_split(
+                gathered_proxy,
+                selected_idx=subsample_idx,
+                skipped_idx=skipsample_idx,
+                normalizer=seq_len)
+            to_log["proxy/mean-proxy-loss/selected"] = proxy_loss_selected
+            to_log["proxy/mean-proxy-loss/leftout"] = proxy_loss_leftout
+            if not self.ignore_ref:
+                proxy_loss_selected_min, proxy_loss_selected_max, proxy_loss_leftout_min, proxy_loss_leftout_max = self._compute_min_max_split(
+                    gathered_proxy,
+                    selected_idx=subsample_idx,
+                    skipped_idx=skipsample_idx)
+                to_log[
+                    "proxy/min-proxy-loss/selected"] = proxy_loss_selected_min
+                to_log[
+                    "proxy/max-proxy-loss/selected"] = proxy_loss_selected_max
+                to_log["proxy/min-proxy-loss/leftout"] = proxy_loss_leftout_min
+                to_log["proxy/max-proxy-loss/leftout"] = proxy_loss_leftout_max
 
             logger.log_metrics(to_log)
 

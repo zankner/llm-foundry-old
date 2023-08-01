@@ -11,8 +11,15 @@ if __name__ == "__main__":
     parser.add_argument("--cluster", type=str, default="r1z1")
     parser.add_argument("--ngpus", type=str, default=8)
     parser.add_argument("--batch-size", type=int, default=8)
-    parser.add_argument("--ckpt-prefix", type=str, required=True)
+    parser.add_argument("--run-type",
+                        type=str,
+                        required=True,
+                        choices=["final", "reference", "proxy"])
     parser.add_argument("--run-name", type=str, required=True)
+    parser.add_argument("--num-tokens",
+                        type=str,
+                        required=True,
+                        choices=["2B", "5B", "20B", "26B"])
     parser.add_argument("--local-debug", action="store_true")
     parser.add_argument("--eval-type",
                         type=str,
@@ -46,12 +53,12 @@ if __name__ == "__main__":
     # Set batch information
     base_run.parameters["device_eval_batch_size"] = args.batch_size
 
-    def build_ckpt_path(run_name, ckpt_prefix, step):
+    def build_ckpt_path(run_name, run_type, step):
         if step == "final":
             step_fmt = "latest-rank0.pt.symlink"
         else:
             step_fmt = f"ba{step}/rank0.pt"
-        return os.path.join("oci://mosaicml-internal-checkpoints", ckpt_prefix,
+        return os.path.join("oci://mosaicml-internal-checkpoints", run_type,
                             run_name, "ckpts", step_fmt)
 
     def build_wandb_logger(run_name, step):
@@ -61,7 +68,7 @@ if __name__ == "__main__":
             "tags": ["eval", f"step-{step}"]
         }
 
-    def build_model_cfg(run_name, step, model_size, ckpt_prefix):
+    def build_model_cfg(run_name, step, model_size, run_type):
         # For now assuming tokenization / max length are fixed
         model_arch = build_model_arch(model_size)
         return {
@@ -87,13 +94,14 @@ if __name__ == "__main__":
             },
             "loggers": {
                 "wandb": build_wandb_logger(run_name, step)
-            }
+            },
+            "load_path": build_ckpt_path(run_name, run_type, step)
         }
 
     # TODO: Fix with seeds once we finish re-writing the rest of the code base
     if args.eval_type == "final":
         base_run.parameters["models"] = [
-            build_model_cfg(args.run_name, "final", args.ckpt_prefix, seed)
+            build_model_cfg(args.run_name, "final", args.run_type, seed)
             for seed in args.seeds
         ]
     elif args.eval_type == "sweep":
@@ -103,7 +111,7 @@ if __name__ == "__main__":
         models = []
         for seed in args.seeds:
             models += [
-                build_model_cfg(args.run_name, step, args.ckpt_prefix)
+                build_model_cfg(args.run_name, step, args.run_type)
                 for step in steps
             ]
         base_run.parameters["models"] = models

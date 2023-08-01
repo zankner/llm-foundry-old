@@ -36,6 +36,7 @@ if __name__ == "__main__":
         help="Batch size for points to be labeled that will then be pruned",
         type=int,
         choices=[1024, 2048, 4096])
+    parser.add_argument("--num-pplx-filter", type=int)
     parser.add_argument("--selection-algo",
                         type=str,
                         default="rho",
@@ -68,13 +69,16 @@ if __name__ == "__main__":
                                           args.full_batch_size)
         if args.selection_algo == "rho":
             assert args.ref_model_size is not None
+            if args.num_pplx_filter is not None:
+                assert args.num_pplx_filter < args.full_batch_size and args.num_pplx_filter > 512
+                proxy_run_base += f"-filpplx-{args.num_pplx_filter}"
             ref_run_base = build_ref_base(args.ref_num_tokens,
                                           args.ref_model_size)
             proxy_run_base += f"-{ref_run_base}"
-        suffix = f"proxy-{args.dataset}-{proxy_run_base}"
+        suffix = proxy_run_base
     final_run_base = build_final_base(args.final_num_tokens,
                                       args.final_model_size)
-    run_name = f"final-{args.dataset}-{final_run_base}-{suffix}"
+    run_name = f"final-{args.dataset}-{final_run_base}-{suffix}-holdt-{args.holdout_num_tokens}"
 
     for seed in args.seeds:
         base_run = RunConfig.from_file(f"rho/yamls/pretrain_base.yaml")
@@ -115,9 +119,11 @@ if __name__ == "__main__":
             base_run.parameters["loggers"]["wandb"]["tags"] += ["baseline"]
         else:
             base_run.parameters["loggers"]["wandb"]["tags"] += [
-                f"hop-{args.ref_model_size}", f"hot-{args.ref_num_tokens}",
-                f"pp-{args.proxy_model_size}", f"pt-{args.proxy_num_tokens}",
-                f"fb-{args.full_batch_size}", args.selection_algo
+                f"holdt-{args.holdout_num_tokens}",
+                f"refp-{args.ref_model_size}", f"reft-{args.ref_num_tokens}",
+                f"proxp-{args.proxy_model_size}",
+                f"proxt-{args.proxy_num_tokens}", f"fb-{args.full_batch_size}",
+                f"fillpplx-{args.num_pplx_filter}", args.selection_algo
             ]
 
         launch_run(base_run, args.local_debug, seed)
