@@ -39,7 +39,9 @@ if __name__ == "__main__":
     parser.add_argument("--num-pplx-filter", type=int, default=0)
     parser.add_argument("--selection-algo",
                         type=str,
-                        choices=["rho", "hard-mine", "easy-mine"])
+                        required=True,
+                        choices=["rho", "hard-mine", "easy-mine", "baseline"
+                                ])  # Treat baseline as a selection algo
 
     # Final args
     parser.add_argument("--final-model-size",
@@ -49,8 +51,7 @@ if __name__ == "__main__":
     parser.add_argument("--final-num-tokens",
                         type=str,
                         required=True,
-                        choices=["2B", "5B", "20B"])
-    parser.add_argument("--is-baseline", action="store_true")
+                        choices=["2B", "5B", "20B", "26B"])
 
     # Data args
     parser.add_argument("--dataset", type=str, default="pile", choices=["pile"])
@@ -62,32 +63,40 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if args.is_baseline:
-        suffix = "baseline"
+    final_run_base = build_final_base(args.final_num_tokens,
+                                      args.final_model_size)
+    if args.selection_algo == "baseline":
+        run_name = f"final-{args.dataset}-baseline-{final_run_base}-holdt-{args.holdout_num_tokens}"
     else:
-        assert args.holdout_num_tokens is not None
+        assert (args.proxy_model_size is not None and
+                args.proxy_num_tokens is not None and
+                args.full_batch_size is not None)
+        assert args.proxy_num_tokens == args.final_num_tokens
         proxy_run_base = build_proxy_base(args.selection_algo,
                                           args.proxy_num_tokens,
                                           args.proxy_model_size,
                                           args.full_batch_size,
                                           args.num_pplx_filter)
         if args.selection_algo == "rho":
+            assert (args.ref_model_size is not None and
+                    args.ref_num_tokens is not None and
+                    args.num_pplx_filter is not None)
             ref_run_base = build_ref_base(args.ref_num_tokens,
                                           args.ref_model_size)
             proxy_run_base += f"-{ref_run_base}"
-        suffix = proxy_run_base
-    final_run_base = build_final_base(args.final_num_tokens,
-                                      args.final_model_size)
-    run_name = f"final-{args.dataset}-{final_run_base}-{suffix}-holdt-{args.holdout_num_tokens}"
+
+        fmt_proxy_run_base = proxy_run_base.replace(f"{args.selection_algo}-",
+                                                    "")
+        run_name = f"final-{args.dataset}-{args.selection_algo}-{final_run_base}-{fmt_proxy_run_base}-holdt-{args.holdout_num_tokens}"
 
     for seed in args.seeds:
         base_run = RunConfig.from_file(
             f"amortized-obs/yamls/pretrain_base.yaml")
 
-        if args.is_baseline:
+        if args.selection_algo == "baseline":
             # Making the choice to select baseline from the partitioned data for consistency
             remote_base = build_remote_base(
-                num_holdout_tokens=args.ref_num_tokens,
+                num_holdout_tokens=args.holdout_num_tokens,
                 dataset=args.dataset,
             )
             data_remote = os.path.join(
@@ -97,12 +106,12 @@ if __name__ == "__main__":
             )
         else:
             remote_base = build_remote_base(
-                num_holdout_tokens=args.ref_num_tokens,
+                num_holdout_tokens=args.holdout_num_tokens,
                 dataset=args.dataset,
             )
             data_remote = os.path.join(
                 remote_base, "pruned",
-                f"{args.final_num_tokens}-final-tokens-pruned-from-{proxy_run_base}"
+                f"{args.final_num_tokens}-final-tokens-pruned-from-{proxy_run_base}-sd-{seed}"
             )
 
             # Don't shuffle for proxy
@@ -124,15 +133,11 @@ if __name__ == "__main__":
             "final", f"fp-{args.final_model_size}",
             f"ft-{args.final_num_tokens}"
         ]
-        if args.is_baseline:
-            base_run.parameters["loggers"]["wandb"]["tags"] += ["baseline"]
-        else:
-            base_run.parameters["loggers"]["wandb"]["tags"] += [
-                f"holdt-{args.holdout_num_tokens}",
-                f"refp-{args.ref_model_size}", f"reft-{args.ref_num_tokens}",
-                f"proxp-{args.proxy_model_size}",
-                f"proxt-{args.proxy_num_tokens}", f"fb-{args.full_batch_size}",
-                f"fillpplx-{args.num_pplx_filter}", args.selection_algo
-            ]
+        base_run.parameters["loggers"]["wandb"]["tags"] += [
+            f"holdt-{args.holdout_num_tokens}", f"refp-{args.ref_model_size}",
+            f"reft-{args.ref_num_tokens}", f"proxp-{args.proxy_model_size}",
+            f"proxt-{args.proxy_num_tokens}", f"fb-{args.full_batch_size}",
+            f"fillpplx-{args.num_pplx_filter}", args.selection_algo
+        ]
 
         launch_run(base_run, args.local_debug, seed)
