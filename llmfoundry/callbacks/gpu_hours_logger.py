@@ -8,5 +8,5 @@ class GpuHourLogger(Callback):
         train_wct = state.timestamp.total_wct.total_seconds()
         world_size = dist.get_world_size()
         logger.log_metrics({
-            "gpu-hours/train": world_size * train_wct / self.divider,
+            "gpu-hours/train": world_size * train_wct / (60 * 60),
         })
