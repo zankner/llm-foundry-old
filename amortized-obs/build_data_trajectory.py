@@ -9,8 +9,7 @@ import torch
 from tqdm import tqdm
 from composer.utils import get_file
 
-from pretrain_utils import (CKPT_BASE, build_proxy_base, build_ref_base,
-                            build_remote_base)
+from pretrain_utils import (CKPT_BASE, build_proxy_base, build_remote_base)
 
 torch.multiprocessing.set_sharing_strategy('file_system')
 
@@ -130,11 +129,9 @@ if __name__ == "__main__":
                                       args.proxy_num_tokens,
                                       args.proxy_model_size,
                                       args.full_batch_size,
-                                      args.num_pplx_filter)
+                                      args.num_pplx_filter, args.ref_num_tokens,
+                                      args.ref_model_size)
     proxy_run_name = f"proxy-{args.dataset}-{proxy_run_base}"
-    if args.selection_algo == "rho":
-        ref_run_base = build_ref_base(args.ref_num_tokens, args.ref_model_size)
-        proxy_run_name += f"-{ref_run_base}"
 
     proxy_ckpt = os.path.join(CKPT_BASE, args.dataset, "proxy",
                               f"{proxy_run_name}-sd-{args.seed}", "ckpts",

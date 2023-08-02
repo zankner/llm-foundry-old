@@ -53,19 +53,13 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if args.selection_algo == "rho":
-        assert args.ref_num_tokens is not None and args.ref_model_size is not None
-
     proxy_run_base = build_proxy_base(args.selection_algo,
                                       args.proxy_num_tokens,
                                       args.proxy_model_size,
                                       args.full_batch_size,
-                                      args.num_pplx_filter)
-    run_name = f"proxy-{args.dataset}-{proxy_run_base}"
-    if args.selection_algo == "rho":
-        ref_run_base = build_ref_base(args.ref_num_tokens, args.ref_model_size)
-        run_name += f"-{ref_run_base}"
-    run_name += f"-holdt-{args.holdout_num_tokens}"
+                                      args.num_pplx_filter, args.ref_num_tokens,
+                                      args.ref_model_size)
+    run_name = f"proxy-{args.dataset}-{proxy_run_base}-holdt-{args.holdout_num_tokens}"
 
     for seed in args.seeds:
         base_run = RunConfig.from_file(
@@ -77,7 +71,8 @@ if __name__ == "__main__":
         )
         # handling different datasources for different selection algorithms
         data_remote = os.path.join(
-            remote_base, "train", f"{ref_run_base}-sd-{seed}"
+            remote_base, "train",
+            f"{build_ref_base(args.ref_num_tokens, args.ref_model_size)}-sd-{seed}"
             if args.selection_algo == "rho" else "base")
 
         # Handling overhead for proxy

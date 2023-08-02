@@ -16,7 +16,7 @@ def set_common_args(args,
                     seed,
                     token_multiplier=1):
     # Set run name
-    base_run.name = f"sd-{seed}-{run_name.lower()[:56]}"  # Mcli things
+    base_run.name = f"sd-{seed}-{run_name.lower()}"[:56]  # Mcli things
     base_run.parameters["run_name"] = run_name
 
     # Set seed
@@ -112,11 +112,22 @@ def build_ref_base(num_tokens, num_params):
     return f"refp-{num_params}-reft-{num_tokens}"
 
 
-def build_proxy_base(sel_alg, num_tokens, num_params, full_batch_size,
-                     num_pplx_filter):
+def build_proxy_base(selection_algo,
+                     proxy_num_tokens,
+                     proxy_num_params,
+                     full_batch_size,
+                     num_pplx_filter,
+                     ref_num_tokens=None,
+                     ref_num_params=None):
     if num_pplx_filter > 0:
         assert num_pplx_filter < full_batch_size and num_pplx_filter > 512  # Hard setting 512 bs
-    return f"{sel_alg}{'-filpplx-' + str(num_pplx_filter) if num_pplx_filter > 0 else ''}-proxp-{num_params}-proxt-{num_tokens}-fb-{full_batch_size}"
+    proxy_base = f"{selection_algo}{'-filpplx-' + str(num_pplx_filter) if num_pplx_filter > 0 else ''}-proxp-{proxy_num_params}-proxt-{proxy_num_tokens}-fb-{full_batch_size}"
+    if selection_algo == "rho":
+        assert (ref_num_params is not None and ref_num_tokens is not None and
+                num_pplx_filter is not None)
+        ref_run_base = build_ref_base(ref_num_tokens, ref_num_params)
+        proxy_base += f"-{ref_run_base}"
+    return proxy_base
 
 
 def build_final_base(num_tokens, num_params):

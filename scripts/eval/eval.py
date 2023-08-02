@@ -93,7 +93,7 @@ def evaluate_model(model_cfg, run_name, model_gauntlet_df):
         precision=cfg.precision,
         fsdp_config=fsdp_config,  # type: ignore
         load_path=load_path,
-        load_weights_only=True,
+        load_weights_only=False,  # Hopefully will resume the timestamp
         progress_bar=False,
         log_to_console=True,
         dist_timeout=cfg.dist_timeout,
@@ -123,7 +123,7 @@ def main(cfg):
     models_df = None
     for model_cfg in cfg.models:
         (in_memory_logger, logger_keys, model_gauntlet_callback, model_gauntlet,
-         model_gauntlet_df) = evaluate_model(model_cfg, cfg.run_name,
+         model_gauntlet_df) = evaluate_model(model_cfg, model_cfg.run_name,
                                              model_gauntlet_df)
 
         if model_gauntlet_callback is not None:

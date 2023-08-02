@@ -111,6 +111,7 @@ class ModelGauntlet(Callback):
     def eval_end(self, state: State, logger: Logger):
         new_metrics = self.compute_averages(logger)
         composite_scores = {}
+        ind_task_scores = []
         for category in self.categories:
             composite_scores[category['name']] = []
             for benchmark in category['benchmarks']:
@@ -140,6 +141,7 @@ class ModelGauntlet(Callback):
                         'score': score,
                         'weighting': benchmark['weighting']
                     })
+                    ind_task_scores.append(score)
             total_weight = sum(
                 k['weighting'] for k in composite_scores[category['name']])
             composite_scores[category['name']] = sum(
@@ -151,8 +153,12 @@ class ModelGauntlet(Callback):
             for k, v in composite_scores.items()
         }
 
-        composite_scores['metrics/model_gauntlet/average'] = sum(
+        composite_scores['metrics/model_gauntlet/category-average'] = sum(
             composite_scores.values()) / len(composite_scores.values())
+
+        composite_scores['metrics/model_gauntlet/task-average'] = sum(
+            ind_task_scores) / len(ind_task_scores)
+
         logger.log_metrics(composite_scores)
 
         return composite_scores

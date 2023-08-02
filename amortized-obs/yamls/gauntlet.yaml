@@ -7,7 +7,6 @@ integrations:
 
 command: |
   cd llm-foundry/scripts
-  python inference/convert_composer_to_hf.py --composer_path {model_ckpt} --hf_output_path /tmp/model/ --output_precision bf16
   composer eval/eval.py /mnt/config/parameters.yaml
 
 # Mosaic Cloud will use run_name (with a unique suffix) to populate the env var $RUN_NAME

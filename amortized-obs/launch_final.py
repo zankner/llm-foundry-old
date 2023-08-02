@@ -4,7 +4,7 @@ import os
 from mcli import RunConfig
 
 from pretrain_utils import (CKPT_BASE, set_common_args, launch_run,
-                            build_remote_base, build_ref_base, build_proxy_base,
+                            build_remote_base, build_proxy_base,
                             build_final_base)
 
 if __name__ == "__main__":
@@ -68,23 +68,10 @@ if __name__ == "__main__":
     if args.selection_algo == "baseline":
         run_name = f"final-{args.dataset}-baseline-{final_run_base}-holdt-{args.holdout_num_tokens}"
     else:
-        assert (args.proxy_model_size is not None and
-                args.proxy_num_tokens is not None and
-                args.full_batch_size is not None)
-        assert args.proxy_num_tokens == args.final_num_tokens
-        proxy_run_base = build_proxy_base(args.selection_algo,
-                                          args.proxy_num_tokens,
-                                          args.proxy_model_size,
-                                          args.full_batch_size,
-                                          args.num_pplx_filter)
-        if args.selection_algo == "rho":
-            assert (args.ref_model_size is not None and
-                    args.ref_num_tokens is not None and
-                    args.num_pplx_filter is not None)
-            ref_run_base = build_ref_base(args.ref_num_tokens,
-                                          args.ref_model_size)
-            proxy_run_base += f"-{ref_run_base}"
-
+        proxy_run_base = build_proxy_base(
+            args.selection_algo, args.proxy_num_tokens, args.proxy_model_size,
+            args.full_batch_size, args.num_pplx_filter, args.ref_num_tokens,
+            args.ref_model_size)
         fmt_proxy_run_base = proxy_run_base.replace(f"{args.selection_algo}-",
                                                     "")
         run_name = f"final-{args.dataset}-{args.selection_algo}-{final_run_base}-{fmt_proxy_run_base}-holdt-{args.holdout_num_tokens}"
