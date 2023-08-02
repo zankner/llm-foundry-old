@@ -10,14 +10,18 @@ if __name__ == "__main__":
     parser.add_argument("--cluster", type=str, default="r9z1")
     parser.add_argument("--ngpus", type=int, default=32)
     parser.add_argument("--device-batch-size", type=int, default=128)
-    parser.add_argument("--model-size",
+    parser.add_argument("--ref-model-size",
                         type=str,
                         required=True,
                         choices=["125M", "250M", "1B"])
-    parser.add_argument("--num-tokens",
+    parser.add_argument("--ref-num-tokens",
                         type=str,
                         required=True,
-                        choices=["2B", "5B", "20B"])
+                        choices=["2B", "5B", "26B"])
+    parser.add_argument("--holdout-num-tokens",
+                        type=str,
+                        required=True,
+                        choices=["2B", "5B", "26B"])
     parser.add_argument("--dataset", type=str, default="pile")
     parser.add_argument("--seed", type=int, required=True)
     args = parser.parse_args()
@@ -40,7 +44,7 @@ if __name__ == "__main__":
         base_run.gpu_type = "a100_40gb"
 
     remote_base = build_remote_base(
-        num_holdout_tokens=args.num_tokens,
+        num_holdout_tokens=args.holdout_num_tokens,
         dataset=args.dataset,
     )
     # Set remote source dataset
@@ -49,7 +53,7 @@ if __name__ == "__main__":
                                                 download_remote)
 
     # Set remote upload dataset
-    ref_base = build_ref_base(args.num_tokens, args.model_size)
+    ref_base = build_ref_base(args.ref_num_tokens, args.ref_model_size)
     upload_remote = os.path.join(remote_base, "train", ref_base, "train")
     base_run.command = base_run.command.replace(r"{upload_remote}",
                                                 upload_remote)

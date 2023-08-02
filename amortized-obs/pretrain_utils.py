@@ -52,6 +52,7 @@ def set_common_args(args,
     base_run.parameters["loggers"]["wandb"]["tags"] += [
         f"dataset-{args.dataset}", f"seed-{seed}"
     ]
+    base_run.parameters["loggers"]["wandb"]["name"] = f"{run_name}-sd-{seed}"
 
     # Handle preemption
     if args.preemptible:

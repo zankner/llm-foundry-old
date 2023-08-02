@@ -15,7 +15,7 @@ if __name__ == "__main__":
     parser.add_argument("--autoresume", action="store_true")
     parser.add_argument("--preemptible", action="store_true")
     parser.add_argument("--seeds", nargs="+", type=int,
-                        default=[17])  # Add more later
+                        required=True)  # Add more later
     parser.add_argument("--local-debug", action="store_true")
 
     # Reference args
