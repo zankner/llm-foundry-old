@@ -13,4 +13,4 @@ integrations:
 
 command: |
   cd llm-foundry
-  composer rho/build_reference_loss.py --device-batch-size {device_batch_size} --model-size {model_size} --model-ckpt {model_ckpt} --download-remote {download_remote} --upload-remote {upload_remote} --no-wandb
+  composer amortized-obs/build_reference_loss.py --device-batch-size {device_batch_size} --model-size {model_size} --model-ckpt {model_ckpt} --download-remote {download_remote} --upload-remote {upload_remote} --no-wandb

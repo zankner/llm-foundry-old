@@ -1,9 +1,11 @@
 import os
 import argparse
 
+from omegaconf import OmegaConf as om
 from mcli import RunConfig, create_run
 
-from pretrain_utils import CKPT_BASE, build_ref_base, build_remote_base
+from pretrain_utils import (CKPT_BASE, build_ref_base, build_remote_base,
+                            launch_run)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -24,9 +26,11 @@ if __name__ == "__main__":
                         choices=["2B", "5B", "26B"])
     parser.add_argument("--dataset", type=str, default="pile")
     parser.add_argument("--seed", type=int, required=True)
+    parser.add_argument("--local-debug", action="store_true")
     args = parser.parse_args()
 
-    base_run = RunConfig.from_file(f"rho/yamls/build_reference_loss.yaml")
+    base_run = RunConfig.from_file(
+        f"amortized-obs/yamls/build_reference_loss.yaml")
 
     # Set compute
     base_run.cluster = args.cluster
@@ -54,7 +58,8 @@ if __name__ == "__main__":
 
     # Set remote upload dataset
     ref_base = build_ref_base(args.ref_num_tokens, args.ref_model_size)
-    upload_remote = os.path.join(remote_base, "train", ref_base, "train")
+    upload_remote = os.path.join(remote_base, "train",
+                                 f"{ref_base}-sd-{args.seed}", "train")
     base_run.command = base_run.command.replace(r"{upload_remote}",
                                                 upload_remote)
 
@@ -63,14 +68,23 @@ if __name__ == "__main__":
                                                 str(args.device_batch_size))
 
     # Set model information
-    ref_run_name = f"ref-{args.dataset}-{ref_base}"
-    model_ckpt = os.path.join(CKPT_BASE, "reference",
+    ref_run_name = f"ref-{args.dataset}-{ref_base}-holdt-{args.holdout_num_tokens}"
+    model_ckpt = os.path.join(CKPT_BASE, args.dataset, "reference",
                               f"{ref_run_name}-sd-{args.seed}", "ckpts",
                               "latest-rank0.pt.symlink")
 
     base_run.command = base_run.command.replace(r"{model_ckpt}", model_ckpt)
     base_run.command = base_run.command.replace(r"{model_size}",
-                                                args.model_size)
+                                                args.ref_model_size)
 
-    run = create_run(base_run)
-    print(f"Created run: {run.name}")
+    # Set run name
+    run_name = f"sd-{args.seed}-build-ref-loss-{ref_base}"
+    base_run.run_name = run_name
+    base_run.name = run_name
+
+    if args.local_debug:
+        with open("debug.yaml", "w") as f:
+            om.save(config=om.create(base_run), f=f)
+    else:
+        run = create_run(base_run)
+        print(f"Launched seed {args.seed} with in {run.name}")

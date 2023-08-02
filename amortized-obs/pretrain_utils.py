@@ -16,7 +16,7 @@ def set_common_args(args,
                     seed,
                     token_multiplier=1):
     # Set run name
-    base_run.name = run_name.lower()[:56]  # Mcli things
+    base_run.name = f"sd-{seed}-{run_name.lower()[:56]}"  # Mcli things
     base_run.parameters["run_name"] = run_name
 
     # Set seed
