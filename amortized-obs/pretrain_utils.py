@@ -103,7 +103,7 @@ def build_model_arch(model_size):
 
 
 def build_remote_base(num_holdout_tokens, dataset):
-    return os.path.join("oci://mosaicml-internal-amortized-obs", "rho", dataset,
+    return os.path.join("oci://mosaicml-internal-amortized-obs", dataset,
                         f"{num_holdout_tokens}-holdout-tokens")
 
 
@@ -111,8 +111,11 @@ def build_ref_base(num_tokens, num_params):
     return f"refp-{num_params}-reft-{num_tokens}"
 
 
-def build_proxy_base(sel_alg, num_tokens, num_params, full_batch_size):
-    return f"{sel_alg}-proxp-{num_params}-proxt-{num_tokens}-fb{full_batch_size}"
+def build_proxy_base(sel_alg, num_tokens, num_params, full_batch_size,
+                     num_pplx_filter):
+    if num_pplx_filter > 0:
+        assert num_pplx_filter < full_batch_size and num_pplx_filter > 512  # Hard setting 512 bs
+    return f"{sel_alg}{'-filpplx-' + str(num_pplx_filter) if num_pplx_filter > 0 else ''}-proxp-{num_params}-proxt-{num_tokens}-fb-{full_batch_size}"
 
 
 def build_final_base(num_tokens, num_params):

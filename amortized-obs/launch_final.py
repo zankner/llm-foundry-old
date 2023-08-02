@@ -22,7 +22,7 @@ if __name__ == "__main__":
     parser.add_argument("--ref-model-size", type=str, choices=["125M", "250M"])
     parser.add_argument("--ref-num-tokens",
                         type=str,
-                        choices=["2B", "5B", "20B"])
+                        choices=["2B", "5B", "20B", "26B"])
 
     # Proxy args
     parser.add_argument("--proxy-model-size",
@@ -30,16 +30,15 @@ if __name__ == "__main__":
                         choices=["125M", "250M", "1B"])
     parser.add_argument("--proxy-num-tokens",
                         type=str,
-                        choices=["2B", "5B", "20B"])
+                        choices=["2B", "5B", "20B", "26B"])
     parser.add_argument(
         "--full-batch-size",
         help="Batch size for points to be labeled that will then be pruned",
         type=int,
         choices=[1024, 2048, 4096])
-    parser.add_argument("--num-pplx-filter", type=int)
+    parser.add_argument("--num-pplx-filter", type=int, default=0)
     parser.add_argument("--selection-algo",
                         type=str,
-                        default="rho",
                         choices=["rho", "hard-mine", "easy-mine"])
 
     # Final args
@@ -56,22 +55,23 @@ if __name__ == "__main__":
     # Data args
     parser.add_argument("--dataset", type=str, default="pile", choices=["pile"])
     parser.add_argument("--device-batch-size", type=int, default=32)
+    parser.add_argument("--holdout-num-tokens",
+                        type=str,
+                        required=True,
+                        choices=["2B", "5B", "20B", "26B"])
 
     args = parser.parse_args()
 
     if args.is_baseline:
         suffix = "baseline"
     else:
-        assert args.ref_num_tokens is not None
+        assert args.holdout_num_tokens is not None
         proxy_run_base = build_proxy_base(args.selection_algo,
                                           args.proxy_num_tokens,
                                           args.proxy_model_size,
-                                          args.full_batch_size)
+                                          args.full_batch_size,
+                                          args.num_pplx_filter)
         if args.selection_algo == "rho":
-            assert args.ref_model_size is not None
-            if args.num_pplx_filter is not None:
-                assert args.num_pplx_filter < args.full_batch_size and args.num_pplx_filter > 512
-                proxy_run_base += f"-filpplx-{args.num_pplx_filter}"
             ref_run_base = build_ref_base(args.ref_num_tokens,
                                           args.ref_model_size)
             proxy_run_base += f"-{ref_run_base}"
@@ -85,8 +85,16 @@ if __name__ == "__main__":
             f"amortized-obs/yamls/pretrain_base.yaml")
 
         if args.is_baseline:
-            if args.dataset == "pile":
-                data_remote = "oci://mosaicml-internal-dataset-pile/pre-concat/gpt-neox-20b-seqlen-2048"
+            # Making the choice to select baseline from the partitioned data for consistency
+            remote_base = build_remote_base(
+                num_holdout_tokens=args.ref_num_tokens,
+                dataset=args.dataset,
+            )
+            data_remote = os.path.join(
+                remote_base,
+                "train",
+                "base",
+            )
         else:
             remote_base = build_remote_base(
                 num_holdout_tokens=args.ref_num_tokens,

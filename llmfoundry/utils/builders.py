@@ -23,10 +23,10 @@ from omegaconf import OmegaConf as om
 from transformers import (AutoTokenizer, PreTrainedTokenizer,
                           PreTrainedTokenizerFast)
 
-from llmfoundry.algorithms import DomainWeightSetter, RestrictedHoldOut
+from llmfoundry.algorithms import DomainWeightSetter, OnlineBatchSelection
 from llmfoundry.callbacks import (FDiffMetrics, Generate, AverageICLLogger,
-                                  LogDomainLoss, GlobalLRScaling, LayerFreezing,
-                                  MonolithicCheckpointSaver,
+                                  LogDomainLoss, GpuHourLogger, GlobalLRScaling,
+                                  LayerFreezing, MonolithicCheckpointSaver,
                                   ScheduledGarbageCollector)
 from llmfoundry.optim import (DecoupledAdaLRLion, DecoupledClipLion,
                               DecoupledLionW)
@@ -59,6 +59,8 @@ def build_callback(name, kwargs):
         return Generate(prompts=list(prompts), **kwargs)
     elif name == 'global_lr_scaling':
         return GlobalLRScaling(**kwargs)
+    elif name == 'gpu_hour_logger':
+        return GpuHourLogger()
     elif name == 'layer_freezing':
         return LayerFreezing(**kwargs)
     elif name == 'mono_ckpt_saver':
@@ -95,8 +97,8 @@ def build_algorithm(name, kwargs):
         return algorithms.LowPrecisionLayerNorm(**kwargs)
     elif name == 'doremi':
         return DomainWeightSetter(**kwargs)
-    elif name == 'rho':
-        return RestrictedHoldOut(**kwargs)
+    elif name == 'online_batch_selection':
+        return OnlineBatchSelection(**kwargs)
     else:
         raise ValueError(f'Not sure how to build algorithm: {name}')
 

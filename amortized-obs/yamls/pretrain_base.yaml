@@ -118,6 +118,7 @@ parameters:
       batch_interval: 2000
     speed_monitor:
       window_size: 1
+    gpu_hour_logger: {}
 
   # Dataloaders
   eos_token_id: 0 # update for hero run with custom tokenizer

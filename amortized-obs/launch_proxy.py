@@ -31,16 +31,16 @@ if __name__ == "__main__":
     parser.add_argument("--proxy-num-tokens",
                         type=str,
                         required=True,
-                        choices=["2B", "5B", "20B"])
+                        choices=["2B", "5B", "20B", "26B"])
     parser.add_argument(
         "--full-batch-size",
         help="Batch size for points to be labeled that will then be pruned",
         type=int,
         choices=[512, 1024, 2048, 4096])
-    parser.add_argument("--num-pplx-filter", type=int)
+    parser.add_argument("--num-pplx-filter", type=int, default=0)
     parser.add_argument("--selection-algo",
                         type=str,
-                        default="rho",
+                        required=True,
                         choices=["rho", "hard-mine", "easy-mine"])
 
     # Data args
@@ -59,15 +59,11 @@ if __name__ == "__main__":
     proxy_run_base = build_proxy_base(args.selection_algo,
                                       args.proxy_num_tokens,
                                       args.proxy_model_size,
-                                      args.full_batch_size)
+                                      args.full_batch_size,
+                                      args.num_pplx_filter)
     run_name = f"proxy-{args.dataset}-{proxy_run_base}"
     if args.selection_algo == "rho":
-        ref_run_base = ""
-        if args.num_pplx_filter is not None:
-            assert args.num_pplx_filter < args.full_batch_size and args.num_pplx_filter > 512
-            ref_run_base = f"filpplx-{args.num_pplx_filter}"
-            run_name += f"-{ref_run_base}-"
-        ref_run_base += build_ref_base(args.ref_num_tokens, args.ref_model_size)
+        ref_run_base = build_ref_base(args.ref_num_tokens, args.ref_model_size)
         run_name += f"-{ref_run_base}"
     run_name += f"-holdt-{args.holdout_num_tokens}"
 
@@ -81,8 +77,8 @@ if __name__ == "__main__":
         )
         # handling different datasources for different selection algorithms
         data_remote = os.path.join(
-            remote_base, "train",
-            ref_run_base if args.selection_algo == "rho" else "base")
+            remote_base, "train", f"{ref_run_base}-sd-{seed}"
+            if args.selection_algo == "rho" else "base")
 
         # Handling overhead for proxy
         base_run.parameters["train_loader"]["num_workers"] = 1
@@ -122,6 +118,7 @@ if __name__ == "__main__":
             selection_algorithm["ignore_ref"] = True
             selection_algorithm["hard_examples"] = False
 
-        base_run.parameters["algorithms"]["rho"] = selection_algorithm
+        base_run.parameters["algorithms"][
+            "online_batch_selection"] = selection_algorithm
 
         launch_run(base_run, args.local_debug, seed)
