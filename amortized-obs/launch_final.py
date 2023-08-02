@@ -123,8 +123,8 @@ if __name__ == "__main__":
             del base_run.parameters["train_loader"]["dataset"]["shuffle_seed"]
             del base_run.parameters["train_loader"]["dataset"]["shuffle_algo"]
 
-        save_folder = os.path.join(CKPT_BASE, "final", f"{run_name}-sd-{seed}",
-                                   "ckpts")
+        save_folder = os.path.join(CKPT_BASE, args.dataset, "final",
+                                   f"{run_name}-sd-{seed}", "ckpts")
 
         set_common_args(args, base_run, run_name, save_folder, data_remote,
                         args.final_model_size, args.final_num_tokens, seed)

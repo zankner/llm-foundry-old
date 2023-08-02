@@ -83,8 +83,8 @@ if __name__ == "__main__":
         # Handling overhead for proxy
         base_run.parameters["train_loader"]["num_workers"] = 1
 
-        save_folder = os.path.join(CKPT_BASE, "proxy", f"{run_name}-sd-{seed}",
-                                   "ckpts")
+        save_folder = os.path.join(CKPT_BASE, args.dataset, "proxy",
+                                   f"{run_name}-sd-{seed}", "ckpts")
 
         assert args.full_batch_size % 512 == 0, "Full batch size must be a multiple of pruned batch size"
         token_multiplier = args.full_batch_size // 512
