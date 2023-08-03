@@ -4,16 +4,17 @@ import argparse
 from mcli import RunConfig, create_run
 from omegaconf import OmegaConf as om
 
-from pretrain_utils import build_model_arch, build_final_base, build_proxy_base
+from pretrain_utils import (CKPT_BASE, build_model_arch, build_final_base,
+                            build_proxy_base)
 
 
-def build_ckpt_path(run_name, run_type, step, dataset):
+def build_ckpt_path(run_name, run_type, step, dataset, seed):
     if step == "final":
         step_fmt = "latest-rank0.pt.symlink"
     else:
         step_fmt = f"ba{step}/rank0.pt"
-    return os.path.join("oci://mosaicml-internal-checkpoints", dataset,
-                        run_type, run_name, "ckpts", step_fmt)
+    return os.path.join(CKPT_BASE, dataset, run_type, f"{run_name}-sd-{seed}",
+                        "ckpts", step_fmt)
 
 
 def build_wandb_logger(run_name, step, model_tags):
@@ -43,6 +44,7 @@ def build_model_cfg(run_name, step, model_size, run_type, model_tags, dataset,
             "max_seq_len": "${max_seq_len}",
             "vocab_size": 50432,
             "expansion_ratio": 4,
+            "no_bias": True,
             "attn_config": {
                 "alibi": True,
                 "attn_impl": "triton",
@@ -54,7 +56,7 @@ def build_model_cfg(run_name, step, model_size, run_type, model_tags, dataset,
         "loggers": {
             "wandb": build_wandb_logger(run_name, step, model_tags)
         },
-        "load_path": build_ckpt_path(run_name, run_type, step, dataset)
+        "load_path": build_ckpt_path(run_name, run_type, step, dataset, seed)
     }
 
 
@@ -173,6 +175,9 @@ if __name__ == "__main__":
     # Set name
     base_run.run_name = f"eval-{run_name}"
     base_run.name = f"eval-{run_name}"
+
+    # Set seed for reasons
+    base_run.parameters["seed"] = args.seed
 
     # Set compute
     base_run.cluster = args.cluster
