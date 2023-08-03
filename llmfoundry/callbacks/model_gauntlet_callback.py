@@ -165,8 +165,6 @@ class ModelGauntlet(Callback):
         composite_scores['metrics/model_gauntlet/category-average'] = sum(
             composite_scores.values()) / len(composite_scores.values())
 
-        print(sum(new_metrics.values()), "metric sum")
-        print(len(new_metrics), "metric len")
         composite_scores['metrics/model_gauntlet/task-average'] = sum(
             new_metrics.values()) / len(new_metrics)
 
