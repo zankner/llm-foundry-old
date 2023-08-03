@@ -22,7 +22,7 @@ from llmfoundry.utils.builders import (build_icl_evaluators, build_logger,
 from llmfoundry.utils.config_utils import process_init_device
 
 
-def load_model(model_cfg, tokenizer, fsdp_config, num_retries):
+def load_model(model_cfg, tokenizer, fsdp_config, num_retries=1):
     init_context = process_init_device(model_cfg, fsdp_config)
 
     retries = 0
@@ -53,14 +53,30 @@ def evaluate_models(model_cfgs, run_name):
     fsdp_config = cfg.get('fsdp_config', None)
     fsdp_config = om.to_container(
         fsdp_config, resolve=True) if fsdp_config is not None else None
+    
+    composer_model = load_model(cfg.model, tokenizer, fsdp_config)
 
-    composer_model = load_model(cfg.model, tokenizer, fsdp_config,
-                                cfg.get('num_retries', 3))
-
+    # Build tokenizer and model
     if hasattr(cfg, 'model_gauntlet'):
+        if isinstance(cfg.model_gauntlet, str):
+            with open(cfg.model_gauntlet, 'r') as icl_f:
+                model_gauntlet_cfg = om.load(icl_f)
+            model_gauntlet = model_gauntlet_cfg.model_gauntlet
+        else:
+            model_gauntlet = cfg.model_gauntlet
+        model_gauntlet.logger_keys = logger_keys
+        model_gauntlet.benchmark_sizes = {
+            e.label: e.dataloader.num_samples for e in evaluators
+        }
+        model_gauntlet_callback = ModelGauntlet(**model_gauntlet)
         model_gauntlet_df = pd.DataFrame(
             columns=['model_name', 'cat-average', 'task-average'] +
             [t.name for t in model_gauntlet.categories])
+    else:
+        model_gauntlet = None
+        model_gauntlet_callback = None
+        model_gauntlet_df = None
+
 
     loggers: List[LoggerDestination] = [
         build_logger(name, logger_cfg)
@@ -84,30 +100,13 @@ def evaluate_models(model_cfgs, run_name):
 
     for model_cfg in model_cfgs:
         print(f'Evaluating model: {model_cfg.model_name}', flush=True)
-        # Build tokenizer and model
-        if hasattr(cfg, 'model_gauntlet'):
-            if isinstance(cfg.model_gauntlet, str):
-                with open(cfg.model_gauntlet, 'r') as icl_f:
-                    model_gauntlet_cfg = om.load(icl_f)
-                model_gauntlet = model_gauntlet_cfg.model_gauntlet
-            else:
-                model_gauntlet = cfg.model_gauntlet
-            model_gauntlet.logger_keys = logger_keys
-            model_gauntlet.benchmark_sizes = {
-                e.label: e.dataloader.num_samples for e in evaluators
-            }
-            model_gauntlet_callback = ModelGauntlet(**model_gauntlet)
-        else:
-            model_gauntlet = None
-            model_gauntlet_callback = None
 
-        in_memory_logger = InMemoryLogger(
-        )  # track metrics in the in_memory_logger
-        loggers.append(in_memory_logger)
+        in_memory_logger = InMemoryLogger()  # track metrics in the in_memory_logger
+        in_memory_logger.init(state=trainer.state, logger=None)
 
         # Updating loggers to be new in memory logger
         new_loggers = [
-            lg for lg in enumerate(trainer.logger.destinations)
+            lg for lg in trainer.logger.destinations
             if not isinstance(lg, InMemoryLogger)
         ] + [in_memory_logger]
         trainer.logger.destinations = ensure_tuple(new_loggers)
@@ -130,8 +129,9 @@ def evaluate_models(model_cfgs, run_name):
 
         composite_scores = None
         if model_gauntlet_callback is not None:
-            composite_scores = model_gauntlet_callback.eval_after_all(
-                None, loggers)
+            print("broke here for removing in mem logger logger") 
+            to_eval_loggers = loggers + [in_memory_logger]
+            composite_scores = model_gauntlet_callback.eval_after_all(None, to_eval_loggers)
             all_composite_scores.append(composite_scores)
 
     return (all_in_memory_loggers, logger_keys, all_composite_scores,
@@ -146,11 +146,9 @@ def main(cfg):
     reproducibility.seed_all(cfg.seed)
     dist.initialize_dist(get_device(None), timeout=cfg.dist_timeout)
 
-    model_gauntlet_df = None
     models_df = None
     (all_in_memory_logger, logger_keys, all_composite_scores, model_gauntlet,
-     model_gauntlet_df) = evaluate_models(cfg.models, cfg.run_name,
-                                          model_gauntlet_df)
+     model_gauntlet_df) = evaluate_models(cfg.models, cfg.run_name)
     model_names = [model_cfg["model_name"] for model_cfg in cfg.models]
     for (model_name, in_memory_logger,
          composite_scores) in zip(model_names, all_in_memory_logger,
