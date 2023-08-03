@@ -85,7 +85,7 @@ class OnlineBatchSelection(Algorithm):
         return selected_metric, skipped_metric
 
     def _compute_percentile(self, metric, idx):
-        subsampled_metric = metric[idx].cpu().tolist().sorted()
+        subsampled_metric = sorted(metric[idx].cpu().tolist())
         metric = metric.cpu().tolist().sorted()
         min_percentile = metric.index(subsampled_metric[0]) / len(metric)
         max_percentile = metric.index(subsampled_metric[-1]) / len(metric)
