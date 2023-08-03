@@ -81,7 +81,6 @@ class ModelGauntlet(Callback):
                     weight = max(math.log(cumulative_samples, 2), 1)
 
                 benchmark['weighting'] = weight
-        
 
     def compute_averages(self, logger_data):
 
@@ -117,10 +116,11 @@ class ModelGauntlet(Callback):
                 logger_found = True
                 break
         if not logger_found:
-            raise Exception("Couldn't find InMemoryLogger in logger destinations!")
+            raise Exception(
+                "Couldn't find InMemoryLogger in logger destinations!")
 
         composite_scores = {}
-        ind_task_scores = []
+        #ind_task_scores = []
         for category in self.categories:
             composite_scores[category['name']] = []
             for benchmark in category['benchmarks']:
@@ -150,7 +150,7 @@ class ModelGauntlet(Callback):
                         'score': score,
                         'weighting': benchmark['weighting']
                     })
-                    ind_task_scores.append(score)
+                    #ind_task_scores.append(score)
             total_weight = sum(
                 k['weighting'] for k in composite_scores[category['name']])
             composite_scores[category['name']] = sum(
@@ -165,8 +165,10 @@ class ModelGauntlet(Callback):
         composite_scores['metrics/model_gauntlet/category-average'] = sum(
             composite_scores.values()) / len(composite_scores.values())
 
+        print(sum(new_metrics.values()), "metric sum")
+        print(len(new_metrics), "metric len")
         composite_scores['metrics/model_gauntlet/task-average'] = sum(
-            ind_task_scores) / len(ind_task_scores)
+            new_metrics.values()) / len(new_metrics)
 
         for lg in logger:
             lg.log_metrics(composite_scores)
