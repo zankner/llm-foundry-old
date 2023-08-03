@@ -176,6 +176,17 @@ class OnlineBatchSelection(Algorithm):
                 to_log["proxy/mean-ref-loss/selected"] = ref_loss_selected
                 to_log["proxy/mean-ref-loss/leftout"] = ref_loss_leftout
 
+                (ref_loss_selected_min, ref_loss_selected_max,
+                 ref_loss_leftout_min,
+                 ref_loss_leftout_max) = self._compute_min_max_split(
+                     gathered_batch["ref_loss"],
+                     selected_idx=subsample_idx,
+                     skipped_idx=skipsample_idx)
+                to_log["proxy/min-ref-loss/selected"] = ref_loss_selected_min
+                to_log["proxy/max-ref-loss/selected"] = ref_loss_selected_max
+                to_log["proxy/min-ref-loss/leftout"] = ref_loss_leftout_min
+                to_log["proxy/max-ref-loss/leftout"] = ref_loss_leftout_max
+
             proxy_loss_selected, proxy_loss_leftout = self._compute_mean_split(
                 gathered_proxy,
                 selected_idx=subsample_idx,
@@ -183,17 +194,6 @@ class OnlineBatchSelection(Algorithm):
                 normalizer=seq_len)
             to_log["proxy/mean-proxy-loss/selected"] = proxy_loss_selected
             to_log["proxy/mean-proxy-loss/leftout"] = proxy_loss_leftout
-            if not self.ignore_ref:
-                proxy_loss_selected_min, proxy_loss_selected_max, proxy_loss_leftout_min, proxy_loss_leftout_max = self._compute_min_max_split(
-                    gathered_proxy,
-                    selected_idx=subsample_idx,
-                    skipped_idx=skipsample_idx)
-                to_log[
-                    "proxy/min-proxy-loss/selected"] = proxy_loss_selected_min
-                to_log[
-                    "proxy/max-proxy-loss/selected"] = proxy_loss_selected_max
-                to_log["proxy/min-proxy-loss/leftout"] = proxy_loss_leftout_min
-                to_log["proxy/max-proxy-loss/leftout"] = proxy_loss_leftout_max
 
             logger.log_metrics(to_log)
 
