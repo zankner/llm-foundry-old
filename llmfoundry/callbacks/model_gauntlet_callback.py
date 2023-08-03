@@ -9,7 +9,7 @@ from enum import Enum
 from typing import Optional
 
 from composer.core import Callback, State
-from composer.loggers import Logger
+from composer.loggers import Logger, InMemoryLogger
 
 __all__ = ['ModelGauntlet']
 
@@ -81,6 +81,7 @@ class ModelGauntlet(Callback):
                     weight = max(math.log(cumulative_samples, 2), 1)
 
                 benchmark['weighting'] = weight
+        
 
     def compute_averages(self, logger_data):
 
@@ -108,8 +109,16 @@ class ModelGauntlet(Callback):
                     results[key] = [val]
         return {k: sum(v) / len(v) for k, v in results.items()}
 
-    def eval_end(self, state: State, logger: Logger):
-        new_metrics = self.compute_averages(logger)
+    def eval_after_all(self, state: State, logger: Logger):
+        logger_found = False
+        for lg in logger:
+            if isinstance(lg, InMemoryLogger):
+                new_metrics = self.compute_averages(lg)
+                logger_found = True
+                break
+        if not logger_found:
+            raise Exception("Couldn't find InMemoryLogger in logger destinations!")
+
         composite_scores = {}
         ind_task_scores = []
         for category in self.categories:
@@ -159,6 +168,7 @@ class ModelGauntlet(Callback):
         composite_scores['metrics/model_gauntlet/task-average'] = sum(
             ind_task_scores) / len(ind_task_scores)
 
-        logger.log_metrics(composite_scores)
+        for lg in logger:
+            lg.log_metrics(composite_scores)
 
         return composite_scores

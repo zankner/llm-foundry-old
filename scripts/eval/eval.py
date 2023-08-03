@@ -49,6 +49,7 @@ def evaluate_model(model_cfg, run_name, model_gauntlet_df):
     evaluators, logger_keys = build_icl_evaluators(cfg.icl_tasks, tokenizer,
                                                    cfg.max_seq_len,
                                                    cfg.device_eval_batch_size)
+    callbacks = []
     if hasattr(cfg, 'model_gauntlet'):
         if isinstance(cfg.model_gauntlet, str):
             with open(cfg.model_gauntlet, 'r') as icl_f:
@@ -61,6 +62,7 @@ def evaluate_model(model_cfg, run_name, model_gauntlet_df):
             e.label: e.dataloader.num_samples for e in evaluators
         }
         model_gauntlet_callback = ModelGauntlet(**model_gauntlet)
+        callbacks.append(model_gauntlet_callback)
     else:
         model_gauntlet = None
         model_gauntlet_callback = None
@@ -68,13 +70,12 @@ def evaluate_model(model_cfg, run_name, model_gauntlet_df):
     fsdp_config = cfg.get('fsdp_config', None)
     fsdp_config = om.to_container(
         fsdp_config, resolve=True) if fsdp_config is not None else None
-
     composer_model = load_model(model_cfg.model, tokenizer, fsdp_config,
                                 cfg.get('num_retries', 3))
 
     if model_gauntlet_df is None and model_gauntlet is not None:
         model_gauntlet_df = pd.DataFrame(
-            columns=['model_name', 'average'] +
+            columns=['model_name', 'cat-average', 'task-average'] +
             [t.name for t in model_gauntlet.categories])
 
     in_memory_logger = InMemoryLogger()  # track metrics in the in_memory_logger
@@ -91,9 +92,9 @@ def evaluate_model(model_cfg, run_name, model_gauntlet_df):
         model=composer_model,
         loggers=loggers,
         precision=cfg.precision,
-        fsdp_config=fsdp_config,  # type: ignore
         load_path=load_path,
         load_weights_only=False,  # Hopefully will resume the timestamp
+        fsdp_config=fsdp_config,
         progress_bar=False,
         log_to_console=True,
         dist_timeout=cfg.dist_timeout,
@@ -107,7 +108,11 @@ def evaluate_model(model_cfg, run_name, model_gauntlet_df):
         torch.cuda.synchronize()
     b = time.time()
     print(f'Ran {model_cfg.model_name} eval in: {b-a} seconds')
-    return (in_memory_logger, logger_keys, model_gauntlet_callback,
+    composite_scores = None
+    if model_gauntlet_callback is not None:
+        composite_scores = model_gauntlet_callback.eval_after_all(
+                None, loggers) 
+    return (in_memory_logger, logger_keys, composite_scores,
             model_gauntlet, model_gauntlet_df)
 
 
@@ -122,13 +127,9 @@ def main(cfg):
     model_gauntlet_df = None
     models_df = None
     for model_cfg in cfg.models:
-        (in_memory_logger, logger_keys, model_gauntlet_callback, model_gauntlet,
+        (in_memory_logger, logger_keys, composite_scores, model_gauntlet,
          model_gauntlet_df) = evaluate_model(model_cfg, model_cfg.run_name,
                                              model_gauntlet_df)
-
-        if model_gauntlet_callback is not None:
-            composite_scores = model_gauntlet_callback.eval_end(
-                None, in_memory_logger)
 
         benchmark_to_taxonomy = {}
         if model_gauntlet is not None:
@@ -153,7 +154,10 @@ def main(cfg):
                 for t in model_gauntlet.categories
             })
             row.update({
-                'average': composite_scores[f'metrics/model_gauntlet/average']
+                'cat-average': composite_scores[f'metrics/model_gauntlet/category-average']
+            })
+            row.update({
+                'task-average': composite_scores[f'metrics/model_gauntlet/task-average']
             })
             model_gauntlet_df = pd.concat(
                 [model_gauntlet_df, pd.DataFrame([row])], ignore_index=True)
@@ -161,7 +165,7 @@ def main(cfg):
             print(f'Printing gauntlet results for all models')
             print(
                 model_gauntlet_df.sort_values(
-                    'average', ascending=False).to_markdown(index=False))
+                    'cat-average', ascending=False).to_markdown(index=False))
         print(f'Printing complete results for all models')
         print(models_df.to_markdown(index=False))
 
