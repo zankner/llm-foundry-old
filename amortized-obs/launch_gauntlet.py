@@ -1,4 +1,4 @@
-import os
+ import os
 import argparse
 
 from mcli import RunConfig, create_run
@@ -17,45 +17,17 @@ def build_ckpt_path(run_name, run_type, step, dataset, seed):
                         "ckpts", step_fmt)
 
 
-def build_wandb_logger(run_name, step, model_tags):
+def build_wandb_logger(run_name, model_tags):
     return {
         "project": "amortized-selection",
         "group": f"eval-{run_name}",
-        "tags": model_tags + [f"step-{step}"]
+        "tags": model_tags
     }
 
 
-def build_model_cfg(run_name, step, model_size, run_type, model_tags, dataset,
-                    seed):
-    # For now assuming tokenization / max length are fixed
-    model_arch = build_model_arch(model_size)
+def build_model_cfg(run_name, step, run_type, dataset, seed):
     return {
-        "run_name": f"eval-{run_name}-step-{step}-sd-{seed}",
         "model_name": f"eval-{run_name}-step-{step}",
-        "tokenizer": {
-            "name": "EleutherAI/gpt-neox-20b",
-            "kwargs": {
-                "model_max_length": "${max_seq_len}"
-            }
-        },
-        "model": {
-            "name": "mpt_causal_lm",
-            "init_device": "meta",
-            "max_seq_len": "${max_seq_len}",
-            "vocab_size": 50432,
-            "expansion_ratio": 4,
-            "no_bias": True,
-            "attn_config": {
-                "alibi": True,
-                "attn_impl": "triton",
-                "clip_qkv": 6,
-                "attn_use_sequence_id": True
-            },
-            **model_arch
-        },
-        "loggers": {
-            "wandb": build_wandb_logger(run_name, step, model_tags)
-        },
         "load_path": build_ckpt_path(run_name, run_type, step, dataset, seed)
     }
 
@@ -156,25 +128,11 @@ if __name__ == "__main__":
     else:
         raise ValueError("Not supporting eval reference runs yet")
 
-    # Just setting a whole bunch of tags
-    model_tags += [
-        f"holdt-{args.holdout_num_tokens}",
-        f"refp-{args.ref_model_size}",
-        f"reft-{args.ref_num_tokens}",
-        f"proxp-{args.proxy_model_size}",
-        f"proxt-{args.proxy_num_tokens}",
-        f"fb-{args.full_batch_size}",
-        f"fillpplx-{args.num_pplx_filter}",
-        f"fp-{args.final_model_size}",
-        f"ft-{args.final_num_tokens}",
-        args.selection_algo,
-        "eval",
-        f"seed-{args.seed}",
-        args.run_type,
-    ]
     # Set name
     base_run.run_name = f"eval-{run_name}"
     base_run.name = f"eval-{run_name}"
+    base_run.parameters[
+        "run_name"] = f"eval-{args.eval_type}-{run_name}-sd-{args.seed}"
 
     # Set seed for reasons
     base_run.parameters["seed"] = args.seed
@@ -197,13 +155,57 @@ if __name__ == "__main__":
     # Set batch information
     base_run.parameters["device_eval_batch_size"] = args.device_batch_size
 
+    # Set model / tokenizer information
+    base_run.parameters["tokenizer"] = {
+        "name": "EleutherAI/gpt-neox-20b",
+        "kwargs": {
+            "model_max_length": "${max_seq_len}"
+        }
+    }
+    base_run.parameters["model"] = {
+        "name": "mpt_causal_lm",
+        "init_device": "meta",
+        "max_seq_len": "${max_seq_len}",
+        "vocab_size": 50432,
+        "expansion_ratio": 4,
+        "no_bias": True,
+        "attn_config": {
+            "alibi": True,
+            "attn_impl": "triton",
+            "clip_qkv": 6,
+            "attn_use_sequence_id": True
+        },
+        **build_model_arch(model_size)
+    }
+
+    # Set logger information
+    model_tags += [
+        f"holdt-{args.holdout_num_tokens}",
+        f"refp-{args.ref_model_size}",
+        f"reft-{args.ref_num_tokens}",
+        f"proxp-{args.proxy_model_size}",
+        f"proxt-{args.proxy_num_tokens}",
+        f"fb-{args.full_batch_size}",
+        f"fillpplx-{args.num_pplx_filter}",
+        f"fp-{args.final_model_size}",
+        f"ft-{args.final_num_tokens}",
+        args.selection_algo,
+        "eval",
+        f"eval-{args.eval_type}",
+        f"seed-{args.seed}",
+        args.run_type,
+    ]
+    base_run.parameters["loggers"] = {
+        "wandb": build_wandb_logger(run_name, model_tags)
+    },
+
     if args.eval_type == "final":
         base_run.parameters["models"] = [
-            build_model_cfg(run_name, "final", model_size, args.run_type,
-                            model_tags, args.dataset, args.seed)
+            build_model_cfg(run_name, "final", args.run_type, args.dataset,
+                            args.seed)
         ]
     elif args.eval_type == "sweep":
-        assert args.num_tokens is not None
+        assert num_tokens is not None
 
         if num_tokens == "26B":
             start_step = 1_000
@@ -215,9 +217,8 @@ if __name__ == "__main__":
         steps = list(range(start_step, end_step + 1, 1_000))
 
         models = [
-            build_model_cfg(run_name, step, model_size, args.run_type,
-                            model_tags, args.dataset, args.seed)
-            for step in steps
+            build_model_cfg(run_name, step, args.run_type, args.dataset,
+                            args.seed) for step in steps
         ]
         base_run.parameters["models"] = models
 

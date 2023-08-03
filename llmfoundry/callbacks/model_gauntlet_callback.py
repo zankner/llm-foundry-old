@@ -120,7 +120,6 @@ class ModelGauntlet(Callback):
                 "Couldn't find InMemoryLogger in logger destinations!")
 
         composite_scores = {}
-        #ind_task_scores = []
         for category in self.categories:
             composite_scores[category['name']] = []
             for benchmark in category['benchmarks']:
@@ -150,7 +149,6 @@ class ModelGauntlet(Callback):
                         'score': score,
                         'weighting': benchmark['weighting']
                     })
-                    #ind_task_scores.append(score)
             total_weight = sum(
                 k['weighting'] for k in composite_scores[category['name']])
             composite_scores[category['name']] = sum(

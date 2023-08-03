@@ -11,7 +11,8 @@ import pandas as pd
 import torch
 from composer.loggers import InMemoryLogger, LoggerDestination
 from composer.trainer import Trainer
-from composer.utils import dist, get_device, reproducibility
+from composer.utils import (dist, get_device, reproducibility, ensure_tuple,
+                            load_checkpoint)
 from omegaconf import OmegaConf as om
 
 from llmfoundry.callbacks import ModelGauntlet
@@ -41,78 +42,99 @@ def load_model(model_cfg, tokenizer, fsdp_config, num_retries):
                     )
 
 
-def evaluate_model(model_cfg, run_name, model_gauntlet_df):
-    print(f'Evaluating model: {model_cfg.model_name}', flush=True)
-    # Build tokenizer and model
-    tokenizer = build_tokenizer(model_cfg.tokenizer)
+def evaluate_models(model_cfgs, run_name):
+    # Building shared objects
+    tokenizer = build_tokenizer(cfg.tokenizer)
 
     evaluators, logger_keys = build_icl_evaluators(cfg.icl_tasks, tokenizer,
                                                    cfg.max_seq_len,
                                                    cfg.device_eval_batch_size)
-    callbacks = []
-    if hasattr(cfg, 'model_gauntlet'):
-        if isinstance(cfg.model_gauntlet, str):
-            with open(cfg.model_gauntlet, 'r') as icl_f:
-                model_gauntlet_cfg = om.load(icl_f)
-            model_gauntlet = model_gauntlet_cfg.model_gauntlet
-        else:
-            model_gauntlet = cfg.model_gauntlet
-        model_gauntlet.logger_keys = logger_keys
-        model_gauntlet.benchmark_sizes = {
-            e.label: e.dataloader.num_samples for e in evaluators
-        }
-        model_gauntlet_callback = ModelGauntlet(**model_gauntlet)
-        callbacks.append(model_gauntlet_callback)
-    else:
-        model_gauntlet = None
-        model_gauntlet_callback = None
 
     fsdp_config = cfg.get('fsdp_config', None)
     fsdp_config = om.to_container(
         fsdp_config, resolve=True) if fsdp_config is not None else None
-    composer_model = load_model(model_cfg.model, tokenizer, fsdp_config,
+
+    composer_model = load_model(cfg.model, tokenizer, fsdp_config,
                                 cfg.get('num_retries', 3))
 
-    if model_gauntlet_df is None and model_gauntlet is not None:
+    if hasattr(cfg, 'model_gauntlet'):
         model_gauntlet_df = pd.DataFrame(
             columns=['model_name', 'cat-average', 'task-average'] +
             [t.name for t in model_gauntlet.categories])
 
-    in_memory_logger = InMemoryLogger()  # track metrics in the in_memory_logger
     loggers: List[LoggerDestination] = [
         build_logger(name, logger_cfg)
-        for name, logger_cfg in (model_cfg.get('loggers') or {}).items()
+        for name, logger_cfg in (cfg.get('loggers') or {}).items()
     ]
-    loggers.append(in_memory_logger)
-
-    load_path = model_cfg.get('load_path', None)
 
     trainer = Trainer(
         run_name=run_name,
         model=composer_model,
         loggers=loggers,
         precision=cfg.precision,
-        load_path=load_path,
-        load_weights_only=False,  # Hopefully will resume the timestamp
         fsdp_config=fsdp_config,
         progress_bar=False,
         log_to_console=True,
         dist_timeout=cfg.dist_timeout,
     )
 
-    if torch.cuda.is_available():
-        torch.cuda.synchronize()
-    a = time.time()
-    trainer.eval(eval_dataloader=evaluators)
-    if torch.cuda.is_available():
-        torch.cuda.synchronize()
-    b = time.time()
-    print(f'Ran {model_cfg.model_name} eval in: {b-a} seconds')
-    composite_scores = None
-    if model_gauntlet_callback is not None:
-        composite_scores = model_gauntlet_callback.eval_after_all(
-                None, loggers) 
-    return (in_memory_logger, logger_keys, composite_scores,
+    # Objects that need to be tracked
+    all_in_memory_loggers = []
+    all_composite_scores = []
+
+    for model_cfg in model_cfgs:
+        print(f'Evaluating model: {model_cfg.model_name}', flush=True)
+        # Build tokenizer and model
+        if hasattr(cfg, 'model_gauntlet'):
+            if isinstance(cfg.model_gauntlet, str):
+                with open(cfg.model_gauntlet, 'r') as icl_f:
+                    model_gauntlet_cfg = om.load(icl_f)
+                model_gauntlet = model_gauntlet_cfg.model_gauntlet
+            else:
+                model_gauntlet = cfg.model_gauntlet
+            model_gauntlet.logger_keys = logger_keys
+            model_gauntlet.benchmark_sizes = {
+                e.label: e.dataloader.num_samples for e in evaluators
+            }
+            model_gauntlet_callback = ModelGauntlet(**model_gauntlet)
+        else:
+            model_gauntlet = None
+            model_gauntlet_callback = None
+
+        in_memory_logger = InMemoryLogger(
+        )  # track metrics in the in_memory_logger
+        loggers.append(in_memory_logger)
+
+        # Updating loggers to be new in memory logger
+        new_loggers = [
+            lg for lg in enumerate(trainer.logger.destinations)
+            if not isinstance(lg, InMemoryLogger)
+        ] + [in_memory_logger]
+        trainer.logger.destinations = ensure_tuple(new_loggers)
+
+        assert hasattr(model_cfg,
+                       'load_path'), "Must specify path to load the model from"
+        load_path = model_cfg.get('load_path', None)
+        load_checkpoint(load_path, trainer.state, trainer.logger)
+
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+        a = time.time()
+        trainer.eval(eval_dataloader=evaluators)
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+        b = time.time()
+        print(f'Ran {model_cfg.model_name} eval in: {b-a} seconds')
+
+        all_in_memory_loggers.append(in_memory_logger)
+
+        composite_scores = None
+        if model_gauntlet_callback is not None:
+            composite_scores = model_gauntlet_callback.eval_after_all(
+                None, loggers)
+            all_composite_scores.append(composite_scores)
+
+    return (all_in_memory_loggers, logger_keys, all_composite_scores,
             model_gauntlet, model_gauntlet_df)
 
 
@@ -126,10 +148,13 @@ def main(cfg):
 
     model_gauntlet_df = None
     models_df = None
-    for model_cfg in cfg.models:
-        (in_memory_logger, logger_keys, composite_scores, model_gauntlet,
-         model_gauntlet_df) = evaluate_model(model_cfg, model_cfg.run_name,
-                                             model_gauntlet_df)
+    (all_in_memory_logger, logger_keys, all_composite_scores, model_gauntlet,
+     model_gauntlet_df) = evaluate_models(cfg.models, cfg.run_name,
+                                          model_gauntlet_df)
+    model_names = [model_cfg["model_name"] for model_cfg in cfg.models]
+    for (model_name, in_memory_logger,
+         composite_scores) in zip(model_names, all_in_memory_logger,
+                                  all_composite_scores):
 
         benchmark_to_taxonomy = {}
         if model_gauntlet is not None:
@@ -140,7 +165,7 @@ def main(cfg):
         model_results = calculate_markdown_results(logger_keys,
                                                    in_memory_logger.data,
                                                    benchmark_to_taxonomy,
-                                                   model_cfg.model_name)
+                                                   model_name)
 
         if models_df is None:
             models_df = model_results
@@ -148,16 +173,18 @@ def main(cfg):
             models_df = pd.concat([models_df, model_results], ignore_index=True)
 
         if model_gauntlet_df is not None and model_gauntlet is not None and model_gauntlet_df is not None:
-            row = {'model_name': model_cfg['model_name']}
+            row = {'model_name': model_name}
             row.update({
                 t.name: composite_scores[f'metrics/model_gauntlet/{t.name}']
                 for t in model_gauntlet.categories
             })
             row.update({
-                'cat-average': composite_scores[f'metrics/model_gauntlet/category-average']
+                'cat-average':
+                    composite_scores[f'metrics/model_gauntlet/category-average']
             })
             row.update({
-                'task-average': composite_scores[f'metrics/model_gauntlet/task-average']
+                'task-average':
+                    composite_scores[f'metrics/model_gauntlet/task-average']
             })
             model_gauntlet_df = pd.concat(
                 [model_gauntlet_df, pd.DataFrame([row])], ignore_index=True)
