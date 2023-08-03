@@ -42,7 +42,7 @@ class OnlineBatchSelection(Algorithm):
     def __init__(self,
                  num_subsample: int,
                  ignore_ref: bool = False,
-                 num_filter_pplx: int = 0,
+                 num_pplx_filter: int = 0,
                  hard_examples: bool = True):
         self.num_subsample = num_subsample
         assert self.num_subsample % dist.get_world_size(
@@ -52,7 +52,7 @@ class OnlineBatchSelection(Algorithm):
 
         self.ignore_ref = ignore_ref
         self.hard_examples = hard_examples
-        self.num_filter_pplx = num_filter_pplx
+        self.num_pplx_filter = num_pplx_filter
 
         self.loss_fn = CrossEntropyLoss(reduction="none", ignore_index=-100)
 
@@ -132,10 +132,10 @@ class OnlineBatchSelection(Algorithm):
 
         if dist.get_global_rank() == 0:
             # Filter by pplx if applicable
-            if self.num_filter_pplx > 0:
+            if self.num_pplx_filter > 0:
                 pplx_sorted_idx = torch.argsort(gathered_proxy,
                                                 descending=self.hard_examples)
-                pplx_selected_idx = pplx_sorted_idx[:self.num_filter_pplx]
+                pplx_selected_idx = pplx_sorted_idx[:self.num_pplx_filter]
                 gathered_excess = gathered_excess[pplx_selected_idx]
                 gathered_proxy = gathered_proxy[pplx_selected_idx]
                 for k, v in gathered_batch.items():
