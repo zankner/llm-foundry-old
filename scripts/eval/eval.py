@@ -53,7 +53,7 @@ def evaluate_models(model_cfgs, run_name):
     fsdp_config = cfg.get('fsdp_config', None)
     fsdp_config = om.to_container(
         fsdp_config, resolve=True) if fsdp_config is not None else None
-    
+
     composer_model = load_model(cfg.model, tokenizer, fsdp_config)
 
     # Build tokenizer and model
@@ -76,7 +76,6 @@ def evaluate_models(model_cfgs, run_name):
         model_gauntlet = None
         model_gauntlet_callback = None
         model_gauntlet_df = None
-
 
     loggers: List[LoggerDestination] = [
         build_logger(name, logger_cfg)
@@ -101,7 +100,8 @@ def evaluate_models(model_cfgs, run_name):
     for model_cfg in model_cfgs:
         print(f'Evaluating model: {model_cfg.model_name}', flush=True)
 
-        in_memory_logger = InMemoryLogger()  # track metrics in the in_memory_logger
+        in_memory_logger = InMemoryLogger(
+        )  # track metrics in the in_memory_logger
         in_memory_logger.init(state=trainer.state, logger=None)
 
         # Updating loggers to be new in memory logger
@@ -129,9 +129,9 @@ def evaluate_models(model_cfgs, run_name):
 
         composite_scores = None
         if model_gauntlet_callback is not None:
-            print("broke here for removing in mem logger logger") 
             to_eval_loggers = loggers + [in_memory_logger]
-            composite_scores = model_gauntlet_callback.eval_after_all(None, to_eval_loggers)
+            composite_scores = model_gauntlet_callback.eval_after_all(
+                None, to_eval_loggers)
             all_composite_scores.append(composite_scores)
 
     return (all_in_memory_loggers, logger_keys, all_composite_scores,

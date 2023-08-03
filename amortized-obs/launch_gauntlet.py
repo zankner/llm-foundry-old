@@ -1,4 +1,4 @@
- import os
+import os
 import argparse
 
 from mcli import RunConfig, create_run
@@ -6,6 +6,11 @@ from omegaconf import OmegaConf as om
 
 from pretrain_utils import (CKPT_BASE, build_model_arch, build_final_base,
                             build_proxy_base)
+
+
+def build_ckpt_base(run_name, run_type, dataset, seed):
+    return os.path.join(CKPT_BASE, dataset, run_type, f"{run_name}-sd-{seed}",
+                        "ckpts")
 
 
 def build_ckpt_path(run_name, run_type, step, dataset, seed):
@@ -129,8 +134,8 @@ if __name__ == "__main__":
         raise ValueError("Not supporting eval reference runs yet")
 
     # Set name
-    base_run.run_name = f"eval-{run_name}"
-    base_run.name = f"eval-{run_name}"
+    base_run.run_name = f"eval-{args.eval_type}-{run_name}"[:56]
+    base_run.name = f"eval-{args.eval_type}-{run_name}"[:56]
     base_run.parameters[
         "run_name"] = f"eval-{args.eval_type}-{run_name}-sd-{args.seed}"
 
@@ -197,7 +202,7 @@ if __name__ == "__main__":
     ]
     base_run.parameters["loggers"] = {
         "wandb": build_wandb_logger(run_name, model_tags)
-    },
+    }
 
     if args.eval_type == "final":
         base_run.parameters["models"] = [
