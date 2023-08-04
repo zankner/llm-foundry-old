@@ -15,10 +15,12 @@ def build_ckpt_base(run_name, run_type, dataset, seed):
 
 def build_ckpt_path(run_name, run_type, step, dataset, seed):
     if step == "final":
+        prefix = CKPT_BASE
         step_fmt = "latest-rank0.pt.symlink"
     else:
+        prefix = "/tmp/models/zack/amortized-obs"
         step_fmt = f"ba{step}/rank0.pt"
-    return os.path.join(CKPT_BASE, dataset, run_type, f"{run_name}-sd-{seed}",
+    return os.path.join(prefix, dataset, run_type, f"{run_name}-sd-{seed}",
                         "ckpts", step_fmt)
 
 
@@ -134,8 +136,8 @@ if __name__ == "__main__":
         raise ValueError("Not supporting eval reference runs yet")
 
     # Set name
-    base_run.run_name = f"eval-{args.eval_type}-{run_name}"[:56]
-    base_run.name = f"eval-{args.eval_type}-{run_name}"[:56]
+    base_run.run_name = f"sd-{args.seed}-eval-{args.eval_type}-{run_name}"[:56]
+    base_run.name = f"sd-{args.seed}-eval-{args.eval_type}-{run_name}"[:56]
     base_run.parameters[
         "run_name"] = f"eval-{args.eval_type}-{run_name}-sd-{args.seed}"
 
@@ -205,6 +207,7 @@ if __name__ == "__main__":
     }
 
     if args.eval_type == "final":
+        base_run.command = base_run.command.replace("{download_cmd}", "")
         base_run.parameters["models"] = [
             build_model_cfg(run_name, "final", args.run_type, args.dataset,
                             args.seed)
@@ -220,6 +223,13 @@ if __name__ == "__main__":
 
         # Fixing to be eval every 1k batches for now
         steps = list(range(start_step, end_step + 1, 1_000))
+
+        download_prefix = os.path.join("zack", "amortized-obs", args.dataset,
+                                       args.run_type,
+                                       f"{run_name}-sd-{args.seed}", "ckpts")
+        download_cmd = f"oci os object bulk-download -bn mosaicml-internal-checkpoints --prefix {download_prefix} --dest-dir /tmp/models/ --parallel-operations-count 128"
+        base_run.command = base_run.command.replace("{download_cmd}",
+                                                    download_cmd)
 
         models = [
             build_model_cfg(run_name, step, args.run_type, args.dataset,

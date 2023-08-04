@@ -6,6 +6,7 @@ integrations:
   ssh_clone: false # Should be true if using a private repo
 
 command: |
+  {download_cmd}
   cd llm-foundry/scripts
   composer eval/eval.py /mnt/config/parameters.yaml
 
