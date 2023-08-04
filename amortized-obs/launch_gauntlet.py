@@ -146,7 +146,7 @@ if __name__ == "__main__":
 
     # Set compute
     base_run.cluster = args.cluster
-    base_run.num_gpus = args.ngpus
+    base_run.gpu_num = args.ngpus
 
     # Set rest of cluster params
     if args.cluster == "r9z1":
