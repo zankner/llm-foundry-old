@@ -47,10 +47,7 @@ def generate_samples(
 def fetch_data_trajectory(proxy_ckpt: str):
     # Loading the data trajectory
     with tempfile.NamedTemporaryFile() as tmp_file:
-        get_file(os.path.join("oci://mosaicml-internal-checkpoints",
-                              proxy_ckpt),
-                 tmp_file.name,
-                 overwrite=True)
+        get_file(proxy_ckpt, tmp_file.name, overwrite=True)
         proxy_ckpt = torch.load(tmp_file.name, map_location="cpu")
 
     data_trajectories = [
