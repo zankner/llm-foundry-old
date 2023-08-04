@@ -4,7 +4,9 @@ integrations:
   git_branch: zack/amortized-selection
   pip_install: -e ".[gpu]"
   ssh_clone: false # Should be true if using a private repo
-
+- integration_type: "pip_packages"
+  packages:
+  - oci-cli
 command: |
   {download_cmd}
   cd llm-foundry/scripts
