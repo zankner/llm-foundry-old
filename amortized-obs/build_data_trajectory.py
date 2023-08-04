@@ -53,11 +53,11 @@ def fetch_data_trajectory(proxy_ckpt: str):
     data_trajectories = [
         alg_state[1]["data_trajectory"]
         for alg_state in proxy_ckpt["state"]["algorithms"]
-        if alg_state[0] == "RestrictedHoldOut"
+        if alg_state[0] == "OnlineBatchSelection"
     ]
     assert len(
         data_trajectories
-    ) == 1, f"Model ckpt must have one and only one RHO algorithm state, instead found {len(data_trajectories)}"
+    ) == 1, f"Model ckpt must have one and only one OnlineBatchSelection algorithm state, instead found {len(data_trajectories)}"
     data_trajectory = data_trajectories[0]
     return data_trajectory
 
