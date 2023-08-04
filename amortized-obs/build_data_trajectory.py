@@ -150,7 +150,7 @@ if __name__ == "__main__":
                                     dataset=args.dataset)
     upload_remote = os.path.join(
         upload_base, "pruned",
-        f"{args.holdout_num_tokens}-final-tokens-pruned-from-{proxy_run_base}-sd-{args.seed}"
+        f"{args.proxy_num_tokens}-final-tokens-pruned-from-{proxy_run_base}-sd-{args.seed}"
     )
 
     print(f"Uploading samples to {upload_remote}")
