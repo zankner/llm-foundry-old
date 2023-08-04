@@ -38,7 +38,6 @@ def generate_samples(
             sample = {
                 "tokens": sample["tokens"],
                 "idx": sample["idx"],
-                "uids": sample["uids"]
             }
             if sample_idx != sample["idx"]:
                 raise ValueError("All sample indices should be the same")
@@ -104,9 +103,6 @@ if __name__ == "__main__":
                         choices=["rho", "hard-mine", "easy-mine"
                                 ])  # Treat baseline as a selection algo
 
-    # Upload args
-    parser.add_argument("--upload-base", type=str, required=True)
-
     # Misc
     parser.add_argument("--no-wandb", action="store_true")
     parser.add_argument("--wandb-name", type=str, default=None)
@@ -131,10 +127,10 @@ if __name__ == "__main__":
                                       args.full_batch_size,
                                       args.num_pplx_filter, args.ref_num_tokens,
                                       args.ref_model_size)
-    proxy_run_name = f"proxy-{args.dataset}-{proxy_run_base}"
+    run_name = f"proxy-{args.dataset}-{proxy_run_base}-holdt-{args.holdout_num_tokens}"
 
     proxy_ckpt = os.path.join(CKPT_BASE, args.dataset, "proxy",
-                              f"{proxy_run_name}-sd-{args.seed}", "ckpts",
+                              f"{run_name}-sd-{args.seed}", "ckpts",
                               "latest-rank0.pt.symlink")
     print(f"Loading proxy ckpt from {proxy_ckpt}")
 
@@ -151,7 +147,7 @@ if __name__ == "__main__":
     samples = generate_samples(streaming_data,
                                data_trajectory=data_trajectory,
                                truncate_num_samples=None)
-    columns = {'tokens': 'bytes', 'idx': 'int', 'uids': 'ndarray:int32'}
+    columns = {'tokens': 'bytes', 'idx': 'int'}
 
     upload_base = build_remote_base(num_holdout_tokens=args.holdout_num_tokens,
                                     dataset=args.dataset)
