@@ -29,6 +29,9 @@ parameters:
   device_eval_batch_size: # Set in launch script 
   precision: amp_bf16
 
+  loggers:
+    slack_logger: {}
+
   models: # Set in launch script
 
   # FSDP config for model sharding

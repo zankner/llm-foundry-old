@@ -9,6 +9,9 @@ integrations:
   - integration_type: wandb
     entity: mosaic-ml
     project: amortized-selection
+  - integration_type: "pip_packages"
+    packages:
+      - slack-sdk
 
 image: # Set in launch script
 cluster: # Set in launch script
@@ -119,6 +122,7 @@ parameters:
     speed_monitor:
       window_size: 1
     gpu_hour_logger: {}
+    slack_logger: {}
 
   # Dataloaders
   eos_token_id: 0 # update for hero run with custom tokenizer

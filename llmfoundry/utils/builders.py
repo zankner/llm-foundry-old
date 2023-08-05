@@ -27,7 +27,7 @@ from llmfoundry.algorithms import DomainWeightSetter, OnlineBatchSelection
 from llmfoundry.callbacks import (FDiffMetrics, Generate, AverageICLLogger,
                                   LogDomainLoss, GpuHourLogger, GlobalLRScaling,
                                   LayerFreezing, MonolithicCheckpointSaver,
-                                  ScheduledGarbageCollector)
+                                  ScheduledGarbageCollector, SlackLogger)
 from llmfoundry.optim import (DecoupledAdaLRLion, DecoupledClipLion,
                               DecoupledLionW)
 
@@ -67,6 +67,8 @@ def build_callback(name, kwargs):
         return MonolithicCheckpointSaver(**kwargs)
     elif name == 'scheduled_gc':
         return ScheduledGarbageCollector(**kwargs)
+    elif name == 'slack_logger':
+        return SlackLogger(**kwargs)
     elif name == 'early_stopper':
         return EarlyStopper(**kwargs)
     else:

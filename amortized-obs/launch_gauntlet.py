@@ -136,8 +136,8 @@ if __name__ == "__main__":
         raise ValueError("Not supporting eval reference runs yet")
 
     # Set name
-    base_run.run_name = f"sd-{args.seed}-eval-{args.eval_type}-{run_name}"[:56]
     base_run.name = f"sd-{args.seed}-eval-{args.eval_type}-{run_name}"[:56]
+    base_run.run_name = f"eval-{args.eval_type}-{run_name}-sd-{args.seed}"
     base_run.parameters[
         "run_name"] = f"eval-{args.eval_type}-{run_name}-sd-{args.seed}"
 
@@ -202,9 +202,8 @@ if __name__ == "__main__":
         f"seed-{args.seed}",
         args.run_type,
     ]
-    base_run.parameters["loggers"] = {
-        "wandb": build_wandb_logger(run_name, model_tags)
-    }
+    base_run.parameters["loggers"]["wandb"] = build_wandb_logger(
+        run_name, model_tags)
 
     if args.eval_type == "final":
         base_run.command = base_run.command.replace("{download_cmd}", "")
