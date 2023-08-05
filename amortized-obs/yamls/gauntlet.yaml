@@ -29,6 +29,8 @@ parameters:
   device_eval_batch_size: # Set in launch script 
   precision: amp_bf16
 
+  loggers: {}
+
   callbacks:
     slack_logger: {}
 
