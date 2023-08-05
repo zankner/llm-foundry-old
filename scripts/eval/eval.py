@@ -15,7 +15,7 @@ from composer.utils import (dist, get_device, reproducibility, ensure_tuple,
                             load_checkpoint)
 from omegaconf import OmegaConf as om
 
-from llmfoundry.callbacks import ModelGauntlet
+from llmfoundry.callbacks import ModelGauntlet, SlackLogger
 from llmfoundry.models.model_registry import COMPOSER_MODEL_REGISTRY
 from llmfoundry.utils.builders import (build_icl_evaluators, build_logger,
                                        build_tokenizer)
@@ -133,6 +133,12 @@ def evaluate_models(model_cfgs, run_name):
             composite_scores = model_gauntlet_callback.eval_after_all(
                 None, to_eval_loggers)
             all_composite_scores.append(composite_scores)
+
+    slack_loggers = [
+        lg for lg in trainer.logger.destinations if isinstance(lg, SlackLogger)
+    ]
+    for slack_logger in slack_loggers:
+        slack_logger.fit_end(trainer.state, trainer.logger)
 
     return (all_in_memory_loggers, logger_keys, all_composite_scores,
             model_gauntlet, model_gauntlet_df)
