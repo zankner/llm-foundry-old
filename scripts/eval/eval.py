@@ -9,7 +9,6 @@ from typing import List
 
 import pandas as pd
 import torch
-from composer import Callback
 from composer.loggers import InMemoryLogger, LoggerDestination
 from composer.trainer import Trainer
 from composer.utils import (dist, get_device, reproducibility, ensure_tuple,
@@ -19,7 +18,7 @@ from omegaconf import OmegaConf as om
 from llmfoundry.callbacks import ModelGauntlet, SlackLogger
 from llmfoundry.models.model_registry import COMPOSER_MODEL_REGISTRY
 from llmfoundry.utils.builders import (build_icl_evaluators, build_logger,
-                                       build_callback, build_tokenizer)
+                                       build_tokenizer)
 from llmfoundry.utils.config_utils import process_init_device
 
 
@@ -82,16 +81,11 @@ def evaluate_models(model_cfgs, run_name):
         build_logger(name, logger_cfg)
         for name, logger_cfg in (cfg.get('loggers') or {}).items()
     ]
-    callbacks: List[Callback] = [
-        build_callback(name, callback_cfg)
-        for name, callback_cfg in (cfg.get('callbacks') or {}).items()
-    ]
 
     trainer = Trainer(
         run_name=run_name,
         model=composer_model,
         loggers=loggers,
-        callbacks=callbacks,
         precision=cfg.precision,
         fsdp_config=fsdp_config,
         progress_bar=False,
@@ -140,10 +134,8 @@ def evaluate_models(model_cfgs, run_name):
                 None, to_eval_loggers)
             all_composite_scores.append(composite_scores)
 
-    slack_loggers = [
-        lg for lg in trainer.logger.destinations if isinstance(lg, SlackLogger)
-    ]
-    for slack_logger in slack_loggers:
+    if "slack_logger" in cfg.get("callbacks", {}):
+        slack_logger = SlackLogger(**cfg.callbacks.slack_logger)
         slack_logger.fit_end(trainer.state, trainer.logger)
 
     return (all_in_memory_loggers, logger_keys, all_composite_scores,
