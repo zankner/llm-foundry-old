@@ -2,7 +2,7 @@ import os
 import logging
 
 from composer import Callback, Logger, State
-from composer.utils import MissingConditionalImportError
+from composer.utils import MissingConditionalImportError, dist
 
 log = logging.getLogger(__name__)
 
@@ -21,6 +21,8 @@ class SlackLogger(Callback):
         self.channel_id = os.environ.get('SLACK_LOGGING_CHANNEL_ID', None)
 
     def fit_end(self, state: State, logger: Logger):
+        if dist.get_global_rank() != 0:
+            return
         message = f"QUICK THE TOKEN TRAIN IS LEAVING THE STATION\nRun finished: {state.run_name}"
         try:
             self.client.chat_postMessage(token=self.slack_logging_api_key,
