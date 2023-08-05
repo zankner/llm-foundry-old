@@ -23,7 +23,10 @@ class SlackLogger(Callback):
     def fit_end(self, state: State, logger: Logger):
         if dist.get_global_rank() != 0:
             return
-        message = f"QUICK THE TOKEN TRAIN IS LEAVING THE STATION\nRun finished: {state.run_name}"
+        run_name = state.run_name
+        if "sd" not in run_name:
+            run_name = f"{run_name}-sd-{state.rank_zero_seed}"
+        message = f"QUICK THE TOKEN TRAIN IS LEAVING THE STATION\nRun finished: {run_name}"
         try:
             self.client.chat_postMessage(token=self.slack_logging_api_key,
                                          channel=self.channel_id,

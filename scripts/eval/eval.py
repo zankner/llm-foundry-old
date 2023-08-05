@@ -1,4 +1,4 @@
-# Copyright 2022 MosaicML LLM Foundry authors
+scripts/eval/eval.py# Copyright 2022 MosaicML LLM Foundry authors
 # SPDX-License-Identifier: Apache-2.0
 
 import os
@@ -20,6 +20,12 @@ from llmfoundry.models.model_registry import COMPOSER_MODEL_REGISTRY
 from llmfoundry.utils.builders import (build_icl_evaluators, build_logger,
                                        build_tokenizer)
 from llmfoundry.utils.config_utils import process_init_device
+
+
+class DummyState(object):
+
+    def __init__(self, run_name):
+        self.run_name = run_name
 
 
 def load_model(model_cfg, tokenizer, fsdp_config, num_retries=1):
@@ -136,7 +142,8 @@ def evaluate_models(model_cfgs, run_name):
 
     if "slack_logger" in cfg.get("callbacks", {}):
         slack_logger = SlackLogger(**cfg.callbacks.slack_logger)
-        slack_logger.fit_end(trainer.state, trainer.logger)
+        state = DummyState(run_name)
+        slack_logger.fit_end(state, trainer.logger)
 
     return (all_in_memory_loggers, logger_keys, all_composite_scores,
             model_gauntlet, model_gauntlet_df)
