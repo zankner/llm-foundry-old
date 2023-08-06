@@ -118,7 +118,7 @@ if __name__ == "__main__":
     parser.add_argument("--holdout-num-tokens",
                         type=str,
                         required=True,
-                        choices=["2B", "5B", "20B", "26B"])
+                        choices=["2B", "5B", "20B", "26B", "130B"])
     parser.add_argument("--upstream-batch-size", type=int, default=512)
 
     # Tokenization args

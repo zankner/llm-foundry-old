@@ -75,6 +75,8 @@ def set_common_args(args,
         duration_tokens = 20_000_000_000
     elif duration == "26B":
         duration_tokens = 26_000_000_000
+    elif duration == "130B":
+        duration_tokens = 130_000_000_000
     duration_tokens *= token_multiplier
     base_run.parameters["max_duration"] = f"{duration_tokens}tok"
 

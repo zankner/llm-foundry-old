@@ -22,7 +22,7 @@ if __name__ == "__main__":
     parser.add_argument("--ref-model-size", type=str, choices=["125M", "250M"])
     parser.add_argument("--ref-num-tokens",
                         type=str,
-                        choices=["2B", "5B", "20B", "26B"])
+                        choices=["2B", "5B", "20B", "26B", "130B"])
 
     # Proxy args
     parser.add_argument("--proxy-model-size",
@@ -30,7 +30,7 @@ if __name__ == "__main__":
                         choices=["125M", "250M", "1B"])
     parser.add_argument("--proxy-num-tokens",
                         type=str,
-                        choices=["2B", "5B", "20B", "26B"])
+                        choices=["2B", "5B", "20B", "26B", "130B"])
     parser.add_argument(
         "--full-batch-size",
         help="Batch size for points to be labeled that will then be pruned",
@@ -51,7 +51,7 @@ if __name__ == "__main__":
     parser.add_argument("--final-num-tokens",
                         type=str,
                         required=True,
-                        choices=["2B", "5B", "20B", "26B"])
+                        choices=["2B", "5B", "20B", "26B", "130B"])
 
     # Data args
     parser.add_argument("--dataset", type=str, default="pile", choices=["pile"])
@@ -59,7 +59,7 @@ if __name__ == "__main__":
     parser.add_argument("--holdout-num-tokens",
                         type=str,
                         required=True,
-                        choices=["2B", "5B", "20B", "26B"])
+                        choices=["2B", "5B", "20B", "26B", "130B"])
 
     args = parser.parse_args()
 
