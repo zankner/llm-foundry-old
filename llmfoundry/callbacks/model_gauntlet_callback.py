@@ -120,8 +120,10 @@ class ModelGauntlet(Callback):
                 "Couldn't find InMemoryLogger in logger destinations!")
 
         composite_scores = {}
+        normalized_composite_scores = {}
         for category in self.categories:
             composite_scores[category['name']] = []
+            normalized_composite_scores[category['name']] = []
             for benchmark in category['benchmarks']:
                 key_pat = re.compile(
                     f"metrics/{benchmark['name']}/{benchmark['num_fewshot']}-shot/.*Accuracy"
@@ -138,35 +140,54 @@ class ModelGauntlet(Callback):
                 else:
                     score = new_metrics[matching_key[0]]
 
-                    if self.subtract_random_baseline:
-                        score -= benchmark['random_baseline']
+                    normalized_score = (score - benchmark["random_baseline"]
+                                       ) / (1.0 - benchmark["random_baseline"])
+                    #if self.subtract_random_baseline:
+                    #score -= benchmark['random_baseline']
 
-                    if self.rescale_accuracy and self.subtract_random_baseline:
-                        score /= 1.0 - benchmark['random_baseline']
+                    #if self.rescale_accuracy and self.subtract_random_baseline:
+                    #score /= 1.0 - benchmark['random_baseline']
 
                     composite_scores[category['name']].append({
                         'name': benchmark['name'],
                         'score': score,
                         'weighting': benchmark['weighting']
                     })
+                    normalized_composite_scores[category['name']].append({
+                        'name': benchmark['name'],
+                        'score': normalized_score,
+                        'weighting': benchmark['weighting']
+                    })
+
             total_weight = sum(
                 k['weighting'] for k in composite_scores[category['name']])
             composite_scores[category['name']] = sum(
                 k['score'] * (k['weighting'] / total_weight)
                 for k in composite_scores[category['name']])
+            normalized_composite_scores[category['name']] = sum(
+                k['score'] * (k['weighting'] / total_weight)
+                for k in normalized_composite_scores[category['name']])
 
         composite_scores = {
             f'metrics/model_gauntlet/{k}': v
             for k, v in composite_scores.items()
         }
+        normalized_composite_scores = {
+            f'metrics/normalized_model_gauntlet/{k}': v
+            for k, v in normalized_composite_scores.items()
+        }
 
         composite_scores['metrics/model_gauntlet/category-average'] = sum(
             composite_scores.values()) / len(composite_scores.values())
+        normalized_composite_scores[
+            'metrics/normalized_model_gauntlet/category-average'] = sum(
+                normalized_composite_scores.values()) / len(
+                    normalized_composite_scores.values())
 
         composite_scores['metrics/model_gauntlet/task-average'] = sum(
             new_metrics.values()) / len(new_metrics)
 
         for lg in logger:
-            lg.log_metrics(composite_scores)
+            lg.log_metrics({**composite_scores, **normalized_composite_scores})
 
         return composite_scores
