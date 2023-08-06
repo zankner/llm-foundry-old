@@ -19,7 +19,7 @@ if __name__ == "__main__":
     parser.add_argument("--ref-num-tokens",
                         type=str,
                         required=True,
-                        choices=["2B", "5B", "26B"])
+                        choices=["2B", "5B", "20B", "26B"])
     parser.add_argument("--holdout-num-tokens",
                         type=str,
                         required=True,

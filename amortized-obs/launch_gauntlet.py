@@ -214,7 +214,10 @@ if __name__ == "__main__":
     elif args.eval_type == "sweep":
         assert num_tokens is not None
 
-        if num_tokens == "26B":
+        if num_tokens == "20B":
+            start_step = 1_000
+            end_step = 19_000
+        elif num_tokens == "26B":
             start_step = 1_000
             end_step = 24_000
         else:
