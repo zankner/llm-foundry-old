@@ -5,7 +5,7 @@
 
 import os
 from itertools import islice
-from typing import Any, Callable, Dict, List, Optional, Sequence, Union
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Union
 
 import numpy as np
 import torch
@@ -157,6 +157,17 @@ class StreamingTextDataset(StreamingDataset):
         sample = super().__getitem__(idx)
         if 'text' in sample:
             token_sample = self._tokenize(sample)
+        elif 'ref_loss' in sample:
+            token_sample = {
+                "tokens": self._read_binary_tokenized_sample(sample),
+                "ref_loss": sample["ref_loss"],
+                "idx": sample["idx"]
+            }
+        elif 'idx' in sample:
+            token_sample = {
+                "tokens": self._read_binary_tokenized_sample(sample),
+                "idx": sample["idx"]
+            }
         elif 'tokens' in sample:
             token_sample = self._read_binary_tokenized_sample(sample)
         else:
@@ -194,8 +205,18 @@ class ConcatenatedSequenceCollatorWrapper:
             self.bos_mode = True
 
     def __call__(self, examples: List[Any]) -> Dict[str, torch.Tensor]:
-        batch = self.base_collator(examples)
+        if isinstance(examples[0], Mapping):
+            batch = self.base_collator(
+                [example["tokens"] for example in examples])
+        else:
+            batch = self.base_collator(examples)
         batch['sequence_id'] = self.get_sequence_id_from_batch(batch)
+        if isinstance(examples[0], Mapping):
+            batch["idx"] = torch.tensor(
+                [example["idx"] for example in examples])
+            if "ref_loss" in examples[0]:
+                batch["ref_loss"] = torch.tensor(
+                    [example["ref_loss"] for example in examples])
         return batch
 
     def get_sequence_id_from_batch(

@@ -16,7 +16,7 @@ Tokenizer = Union[PreTrainedTokenizer, PreTrainedTokenizerFast]
 class AverageICLLogger(Callback):
 
     def run_event(self, event: Event, state: State, logger: Logger):
-        if event != Event.FIT_START and event != Event.EVAL_AFTER_ALL:
+        if event != Event.EVAL_AFTER_ALL:
             return
 
         eval_metrics = copy.deepcopy(state.eval_metrics)

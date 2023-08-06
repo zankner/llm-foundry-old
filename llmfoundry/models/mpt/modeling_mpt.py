@@ -31,6 +31,8 @@ from transformers.modeling_outputs import (BaseModelOutputWithPast,
 from llmfoundry.models.layers.attention import attn_bias_shape, build_attn_bias
 from llmfoundry.models.layers.blocks import MPTBlock
 from llmfoundry.models.layers.custom_embedding import SharedEmbedding
+from llmfoundry.models.layers.fc import FC_CLASS_REGISTRY
+from llmfoundry.models.layers.ffn import FFN_CLASS_REGISTRY, MPTMLP, build_ffn
 from llmfoundry.models.layers.norm import NORM_CLASS_REGISTRY
 from llmfoundry.models.mpt.configuration_mpt import MPTConfig
 
@@ -80,6 +82,8 @@ class MPTModel(MPTPreTrainedModel):
         self.alibi = config.attn_config['alibi']
         self.alibi_bias_max = config.attn_config['alibi_bias_max']
 
+        self.learned_pos_emb = config.learned_pos_emb
+
         if config.init_device == 'mixed':
             if dist.get_local_rank() == 0:
                 config.init_device = 'cpu'
@@ -100,7 +104,7 @@ class MPTModel(MPTPreTrainedModel):
         self.wte = SharedEmbedding(config.vocab_size,
                                    config.d_model,
                                    device=config.init_device)
-        if not self.alibi:
+        if self.learned_pos_emb:
             self.wpe = torch.nn.Embedding(config.max_seq_len,
                                           config.d_model,
                                           device=config.init_device)
@@ -219,8 +223,8 @@ class MPTModel(MPTPreTrainedModel):
                 # clamp to 0 necessary for torch 2.0 compile()
                 _s_k = max(0, attn_bias.size(-1) - s_k)
                 attn_bias = attn_bias[:, :, :, _s_k:]
-            if prefix_mask is not None and (attention_mask.shape !=
-                                            prefix_mask.shape):
+            if prefix_mask is not None and (attention_mask.shape
+                                            != prefix_mask.shape):
                 raise ValueError(
                     f'attention_mask shape={attention_mask.shape} ' +
                     f'and prefix_mask shape={prefix_mask.shape} are not equal.')
@@ -356,9 +360,7 @@ class MPTModel(MPTPreTrainedModel):
         ), f'Cannot forward input with seq_len={S}, this model only supports seq_len<={self.config.max_seq_len}'
 
         tok_emb = self.wte(input_ids)  # type: ignore
-        if self.alibi:
-            x = tok_emb
-        else:
+        if self.learned_pos_emb:
             past_position = 0
             if past_key_values is not None:
                 if len(past_key_values) != self.config.n_layers:
@@ -395,6 +397,9 @@ class MPTModel(MPTPreTrainedModel):
 
             pos_emb = self.wpe(pos)  # type: ignore
             x = tok_emb + pos_emb
+        else:
+            # ALiBi and NoPE use this path (RoPE will also use this path if / when enabled)
+            x = tok_emb
 
         if self.embedding_fraction == 1:
             x = self.emb_drop(x)  # type: ignore
@@ -711,6 +716,8 @@ class ComposerMPTCausalLM(HuggingFaceModel):
                 if hf_config.verbose > 1:
                     warnings.warn('Using Fused Cross Entropy Loss.')
                 self.loss_fn = FusedCrossEntropyLoss(ignore_index=-100)
+                self.proxy_loss_fn = FusedCrossEntropyLoss(ignore_index=-100,
+                                                           reduction="none")
             except:
                 raise ValueError(
                     'Fused Cross Entropy is not installed. Either (1) have a CUDA-compatible GPU '
@@ -719,6 +726,8 @@ class ComposerMPTCausalLM(HuggingFaceModel):
                 )
         elif loss_fn_config == 'torch_crossentropy':
             self.loss_fn = nn.CrossEntropyLoss(ignore_index=-100)
+            self.proxy_loss_fn = nn.CrossEntropyLoss(ignore_index=-100,
+                                                     reduction="none")
         else:
             raise ValueError(
                 f'Specified loss_fn={self.loss_fn} not recognized. `loss_fn` must be one of [`fused_crossentropy`, `torch_crossentropy`].'
@@ -758,3 +767,79 @@ class ComposerMPTCausalLM(HuggingFaceModel):
                               (self.model.config.d_model * (msl**2)))
 
         return (params_flops_per_seq + attn_flops_per_seq) * 3 * bs
+
+
+class ComposerMPTProxyLM(ComposerMPTCausalLM):
+
+    def compute_domain_wise_excess_loss(self,
+                                        outputs,
+                                        batch,
+                                        domain_weights,
+                                        non_zero_excess=False):
+        # TODO: Implement in a more efficient way
+        proxy_logits = outputs.logits
+        b, seq_len, _ = proxy_logits.shape
+        device = proxy_logits.device
+        # Compute the excess loss for the given inputs
+        num_tokens = torch.sum(
+            batch["input_ids"] != -100, dim=-1
+        )  # Might not have attention mask, prob just get ignore toke (-100)
+        targets = self.get_targets(batch)
+
+        proxy_loss = self.proxy_loss_fn(
+            proxy_logits.view(-1, proxy_logits.size(-1)),
+            targets.view(-1)).view(b, seq_len)
+        ref_loss = batch["ref_losses"]
+        excess_loss = proxy_loss - ref_loss
+
+        if non_zero_excess:
+            excess_loss = torch.maximum(
+                excess_loss, torch.zeros_like(proxy_loss))  # DRO gauruntees
+
+        proxy_loss = torch.sum(proxy_loss, dim=-1)
+        ref_loss = torch.sum(ref_loss, dim=-1)
+        excess_loss = torch.sum(excess_loss, dim=-1)
+
+        # Compute domain wise loss and normalization
+        ref_loss = torch.scatter_reduce(torch.zeros_like(domain_weights,
+                                                         device=device,
+                                                         dtype=ref_loss.dtype),
+                                        0,
+                                        batch["domain_idx"],
+                                        ref_loss,
+                                        reduce="sum")
+        # Compute domain wise loss and normalization
+        proxy_loss = torch.scatter_reduce(torch.zeros_like(
+            domain_weights, device=device, dtype=proxy_loss.dtype),
+                                          0,
+                                          batch["domain_idx"],
+                                          proxy_loss,
+                                          reduce="sum")
+
+        # Compute domain wise loss and normalization
+        domain_excess_loss = torch.scatter_reduce(torch.zeros_like(
+            domain_weights, device=device, dtype=excess_loss.dtype),
+                                                  0,
+                                                  batch["domain_idx"],
+                                                  excess_loss,
+                                                  reduce="sum")
+        seq_len_normalization = torch.scatter_reduce(torch.zeros_like(
+            domain_weights, device=device, dtype=batch["domain_idx"].dtype),
+                                                     0,
+                                                     batch["domain_idx"],
+                                                     num_tokens,
+                                                     reduce="sum")
+
+        return domain_excess_loss, ref_loss, proxy_loss, seq_len_normalization
+
+    def loss(self, outputs, batch):
+        domain_excess_loss, _, _, seq_len_normalization = self.compute_domain_wise_excess_loss(
+            outputs, batch, batch["domain_weights"], non_zero_excess=False)
+
+        seq_len_normalization = torch.maximum(
+            seq_len_normalization, torch.ones_like(
+                seq_len_normalization))  # Avoid changing unused domain weights
+
+        weighted_domain_excess_loss = batch[
+            "domain_weights"] * domain_excess_loss / seq_len_normalization
+        return torch.sum(weighted_domain_excess_loss)

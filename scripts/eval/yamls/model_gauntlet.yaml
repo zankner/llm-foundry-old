@@ -1,7 +1,7 @@
 model_gauntlet:
   weighting: EQUAL
-  subtract_random_baseline: true
-  rescale_accuracy: true
+  subtract_random_baseline: false
+  rescale_accuracy: false
   categories:
   - name: world_knowledge
     benchmarks:

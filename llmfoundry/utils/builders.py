@@ -5,12 +5,14 @@ import os
 from typing import Union
 
 from composer import algorithms
-from composer.callbacks import (LRMonitor, MemoryMonitor, OptimizerMonitor,
-                                RuntimeEstimator, SpeedMonitor)
+from composer.callbacks import (EarlyStopper, LRMonitor, MemoryMonitor,
+                                OptimizerMonitor, RuntimeEstimator,
+                                SpeedMonitor)
 from composer.core import Evaluator
 from composer.datasets.in_context_learning_evaluation import \
     get_icl_task_dataloader
-from composer.loggers import TensorboardLogger, WandBLogger
+from composer.loggers import (TensorboardLogger, WandBLogger,
+                              RemoteUploaderDownloader)
 from composer.optim import DecoupledAdamW
 from composer.optim.scheduler import (ConstantWithWarmupScheduler,
                                       CosineAnnealingWithWarmupScheduler,
@@ -21,10 +23,10 @@ from omegaconf import OmegaConf as om
 from transformers import (AutoTokenizer, PreTrainedTokenizer,
                           PreTrainedTokenizerFast)
 
-from llmfoundry.callbacks import (FDiffMetrics, AverageICLLogger, Generate,
-                                  GlobalLRScaling, LayerFreezing,
-                                  MonolithicCheckpointSaver,
-                                  ScheduledGarbageCollector)
+from llmfoundry.callbacks import (FDiffMetrics, Generate, AverageICLLogger,
+                                  LogDomainLoss, GpuHourLogger, GlobalLRScaling,
+                                  LayerFreezing, MonolithicCheckpointSaver,
+                                  ScheduledGarbageCollector, SlackLogger)
 from llmfoundry.optim import (DecoupledAdaLRLion, DecoupledClipLion,
                               DecoupledLionW)
 
@@ -44,6 +46,8 @@ def build_callback(name, kwargs):
                                 'gpu_flops_available', None))
     elif name == 'fdiff':
         return FDiffMetrics(**kwargs)
+    elif name == 'log_domain_loss':
+        return LogDomainLoss(**kwargs)
     elif name == 'runtime_estimator':
         return RuntimeEstimator()
     elif name == 'optimizer_monitor':
@@ -54,12 +58,18 @@ def build_callback(name, kwargs):
         return Generate(prompts=list(prompts), **kwargs)
     elif name == 'global_lr_scaling':
         return GlobalLRScaling(**kwargs)
+    elif name == 'gpu_hour_logger':
+        return GpuHourLogger()
     elif name == 'layer_freezing':
         return LayerFreezing(**kwargs)
     elif name == 'mono_ckpt_saver':
         return MonolithicCheckpointSaver(**kwargs)
     elif name == 'scheduled_gc':
         return ScheduledGarbageCollector(**kwargs)
+    elif name == 'slack_logger':
+        return SlackLogger(**kwargs)
+    elif name == 'early_stopper':
+        return EarlyStopper(**kwargs)
     else:
         raise ValueError(f'Not sure how to build callback: {name}')
 
@@ -69,6 +79,8 @@ def build_logger(name, kwargs):
         return WandBLogger(**kwargs)
     elif name == 'tensorboard':
         return TensorboardLogger(**kwargs)
+    elif name == 'remote_uploader':
+        return RemoteUploaderDownloader(**kwargs)
     else:
         raise ValueError(f'Not sure how to build logger: {name}')
 
