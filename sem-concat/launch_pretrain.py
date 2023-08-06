@@ -16,7 +16,10 @@ if __name__ == "__main__":
     parser.add_argument("--local-debug", action="store_true")
 
     # Model args
-    parser.add_argument("--model-size", type=str, default="1B", choices=["1B"])
+    parser.add_argument("--model-size",
+                        type=str,
+                        required=True,
+                        choices=["125M", "250M", "1B"])
     parser.add_argument("--device-batch-size", type=int, default=8)
     parser.add_argument("--no-packing", action="store_true")
 
