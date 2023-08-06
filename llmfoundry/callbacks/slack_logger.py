@@ -26,7 +26,7 @@ class SlackLogger(Callback):
         run_name = state.run_name
         if "sd" not in run_name:
             run_name = f"{run_name}-sd-{state.rank_zero_seed}"
-        message = f"QUICK THE TOKEN TRAIN IS LEAVING THE STATION\nRun finished: {run_name}"
+        message = f"QUICK THE TOKEN TRAIN IS LEAVING THE STATION\n{run_name}"
         try:
             self.client.chat_postMessage(token=self.slack_logging_api_key,
                                          channel=self.channel_id,
