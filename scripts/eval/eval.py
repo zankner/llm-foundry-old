@@ -24,8 +24,9 @@ from llmfoundry.utils.config_utils import process_init_device
 
 class DummyState(object):
 
-    def __init__(self, run_name):
+    def __init__(self, run_name, rank_zero_seed):
         self.run_name = run_name
+        self.rank_zero_seed = rank_zero_seed
 
 
 def load_model(model_cfg, tokenizer, fsdp_config, num_retries=1):
@@ -142,7 +143,7 @@ def evaluate_models(model_cfgs, run_name):
 
     if "slack_logger" in cfg.get("callbacks", {}):
         slack_logger = SlackLogger(**cfg.callbacks.slack_logger)
-        state = DummyState(run_name)
+        state = DummyState(run_name, trainer.state.rank_zero_seed)
         slack_logger.fit_end(state, trainer.logger)
 
     return (all_in_memory_loggers, logger_keys, all_composite_scores,
