@@ -116,7 +116,7 @@ if __name__ == "__main__":
     parser.add_argument("--reduction-rate",
                         type=float,
                         required=True,
-                        choices=[1 / 2, 1 / 4, 1 / 8])
+                        choices=[0.5, 0.25, 0.125])
 
     # Misc
     parser.add_argument("--no-wandb", action="store_true")
