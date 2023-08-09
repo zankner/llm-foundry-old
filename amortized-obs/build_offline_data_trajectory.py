@@ -133,18 +133,18 @@ if __name__ == "__main__":
                                     dataset=args.dataset)
     upload_remote = os.path.join(
         upload_base, "pruned",
-        f"{args.final_num_tokens}-final-tokens-pruned-from-{upload_name}-sd-{args.seed}"
+        f"{args.final_num_tokens}-final-tokens-pruned-from-offline-{upload_name}-sd-{args.seed}"
     )
 
     print(f"Uploading samples to {upload_remote}")
-    #with MDSWriter(
-            #columns=columns,
-            #out=os.path.join(upload_remote, "train"),
-            #compression="zstd",
-            #max_workers=args.num_workers,
-    #) as streaming_writer:
-        #for step, sample in enumerate(
-                #tqdm(samples, desc="prune", total=num_samples, leave=True)):
-            #streaming_writer.write(sample)
-            #if use_wandb and step % 1_000 == 0:
-                #wandb.log(({'step': step, 'progress': step / num_samples}))
+    with MDSWriter(
+            columns=columns,
+            out=os.path.join(upload_remote, "train"),
+            compression="zstd",
+            max_workers=args.num_workers,
+    ) as streaming_writer:
+        for step, sample in enumerate(
+                tqdm(samples, desc="prune", total=num_samples, leave=True)):
+            streaming_writer.write(sample)
+            if use_wandb and step % 1_000 == 0:
+                wandb.log(({'step': step, 'progress': step / num_samples}))
