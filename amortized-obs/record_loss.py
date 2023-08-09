@@ -62,28 +62,8 @@ def generate_samples(
             if truncate_num_samples is not None and n_samples == truncate_num_samples:
                 return
             n_samples += 1
-            sample = {k: v[idx] for k, v in batch.items()}
+            sample = {"ref_loss": batch["ref_loss"][idx].item(), "idx": batch["idx"][idx].item()}
             yield sample
-
-
-class RefLossDataset(IterableDataset):
-    """An IterableDataset that returns concatenated token samples for MDSWriter.
-
-    Returns dicts of {'tokens': bytes, 'domain_idx': int}
-
-    """
-
-    def __init__(
-        self,
-        dataset: StreamingDataset,
-    ):
-        self.dataset = dataset
-
-    def __getitem__(self, idx: int):
-        ref_loss = self.dataset[idx]["ref_loss"]
-        idx = self.dataset[idx]["idx"]
-        return {"ref_loss": ref_loss, "idx": idx}
-
 
 if __name__ == "__main__":
 
@@ -155,17 +135,18 @@ if __name__ == "__main__":
         final_num_tokens_tokens = 130_000_000_000
     final_num_tokens_tokens *= (1 / args.reduction_rate)
 
-    num_samples = -(-final_num_tokens_tokens // 2048)  # Assuming fixed seq len
+    num_samples = int(-(-final_num_tokens_tokens // 2048))  # Assuming fixed seq len
 
-    streaming_data = StreamingDataset(
+    dataset = StreamingDataset(
         remote=data_remote,
         local=args.download_local,
         split="train",
         shuffle=True,
         shuffle_algo="py1b",
     )
+    dataloader = build_dataloader(dataset, 512, args.num_workers)
 
-    samples = generate_samples(streaming_data, truncate_num_samples=num_samples)
+    samples = generate_samples(dataloader, truncate_num_samples=num_samples)
 
     ref_losses = []
     indices = []
