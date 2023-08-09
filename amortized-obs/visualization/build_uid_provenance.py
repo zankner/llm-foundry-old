@@ -69,8 +69,8 @@ def generate_samples(
                 return
             n_samples += 1
             sample = {
-                "uid": batch["ref_loss"][idx].item(),
-                "pile_set_name": PILE_DATA_SOURCES[batch["pile_set_name"]]
+                "uid": batch["uid"][idx].item(),
+                "provenance": PILE_DATA_SOURCES[batch["provenance"][idx].item()]
             }
             yield sample
 
@@ -100,7 +100,7 @@ if __name__ == "__main__":
 
     parser = ArgumentParser()
     # Dataset args
-    parser.add_argument("--download_remote", type=str, default="pile")
+    parser.add_argument("--download-remote", type=str, default="pile")
     parser.add_argument("--download-local", type=str, required=True)
     parser.add_argument("--num-workers", type=int, default=64)
 
