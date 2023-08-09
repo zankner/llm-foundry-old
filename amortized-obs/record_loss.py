@@ -65,6 +65,23 @@ def generate_samples(
             sample = {"ref_loss": batch["ref_loss"][idx].item(), "idx": batch["idx"][idx].item()}
             yield sample
 
+class RefLossDataset(IterableDataset):
+    """An IterableDataset that returns concatenated token samples for MDSWriter.
+
+    Returns dicts of {'tokens': bytes, 'domain_idx': int}
+
+    """
+
+    def __init__(
+        self,
+        dataset: StreamingDataset,
+    ):
+        self.dataset = dataset
+
+    def __iter__(self) -> Iterable[Dict[str, bytes]]:
+        for sample in self.dataset:
+            yield {"ref_loss": sample["ref_loss"], "idx": sample["idx"]}
+
 if __name__ == "__main__":
 
     parser = ArgumentParser()
@@ -97,6 +114,9 @@ if __name__ == "__main__":
                         type=float,
                         required=True,
                         choices=[0.5, 0.25, 0.125])
+
+    # Sorting args
+    parser.add_argument("--easy-mine", action="store_true")
 
     # Misc
     parser.add_argument("--no-wandb", action="store_true")
@@ -137,13 +157,15 @@ if __name__ == "__main__":
 
     num_samples = int(-(-final_num_tokens_tokens // 2048))  # Assuming fixed seq len
 
-    dataset = StreamingDataset(
+    streaming_dataset = StreamingDataset(
         remote=data_remote,
         local=args.download_local,
         split="train",
         shuffle=True,
+        shuffle_seed=args.seed,
         shuffle_algo="py1b",
     )
+    dataset = RefLossDataset(streaming_dataset)
     dataloader = build_dataloader(dataset, 512, args.num_workers)
 
     samples = generate_samples(dataloader, truncate_num_samples=num_samples)
@@ -156,7 +178,22 @@ if __name__ == "__main__":
         indices.append(sample["idx"])
         if use_wandb and step % 1_000 == 0:
             wandb.log(({'step': step, 'progress': step / num_samples}))
+    
+    print("Starting sorting of losses ...")
+    # Sorting and selecting the losses
+    joint_loss_idx = zip(ref_losses, indices)
+    joint_loss_idx = sorted(joint_loss_idx)
+    ref_losses, indices = zip(*joint_loss_idx)
 
+    if args.easy_mine:
+        ref_losses = ref_losses[:len(ref_losses)//2]
+        indices = indices[:len(indices)//2]
+    else:
+        ref_losses = ref_losses[len(ref_losses)//2:]
+        indices = indices[len(indices)//2:]
+
+
+    print("Saving losses and indices ...")
     joint_loss_idx = {"ref_losses": ref_losses, "indices": indices}
     with open("joint_loss_idx.pkl", "wb") as f:
         pickle.dump(joint_loss_idx, f)
