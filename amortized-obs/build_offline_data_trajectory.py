@@ -78,7 +78,7 @@ if __name__ == "__main__":
 
     # Selection method
     parser.add_argument("--score-method", type=str, required=True, choices=["llm", "ngram"])
-    parser.add_argument("--easy-mine", action="store_true")
+    parser.add_argument("--mine-type", type=str, required=True, choices=["easy", "mid", "hard"])
     parser.add_argument("--reduction-rate", type=float, required=True, choices=[0.5, 0.25, 0.125])
 
     # Misc
@@ -95,8 +95,7 @@ if __name__ == "__main__":
                    project="pre-process-data",
                    entity="mosaic-ml")
 
-    mine_type = "easy" if args.easy_mine else "hard"
-    offline_base = f"{args.final_num_tokens}-final-tokens-{mine_type}-mine-reduction-{args.reduction_rate}"
+    offline_base = f"{args.final_num_tokens}-final-tokens-{args.mine_type}-mine-reduction-{args.reduction_rate}"
     # Building proxy run name
     if args.score_method == "llm":
         assert args.ref_num_tokens is not None and args.ref_model_size is not None
@@ -108,9 +107,9 @@ if __name__ == "__main__":
                                 f"{run_name}-sd-{args.seed}", offline_base,
                                 "joint_loss_idx.pkl")
         
-        upload_name = f"{mine_type}-mine-reduction-{args.reduction_rate}-{ref_run_base}"
+        upload_name = f"{args.mine_type}-mine-reduction-{args.reduction_rate}-{ref_run_base}"
     else:
-        upload_name = f"{mine_type}-mine-reduction-{args.reduction_rate}-ngram"
+        upload_name = f"{args.mine_type}-mine-reduction-{args.reduction_rate}-ngram"
         pass
 
     print(f"Loading samples from {offline_samples_path}")
