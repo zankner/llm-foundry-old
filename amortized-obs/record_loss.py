@@ -62,8 +62,12 @@ def generate_samples(
             if truncate_num_samples is not None and n_samples == truncate_num_samples:
                 return
             n_samples += 1
-            sample = {"ref_loss": batch["ref_loss"][idx].item(), "idx": batch["idx"][idx].item()}
+            sample = {
+                "ref_loss": batch["ref_loss"][idx].item(),
+                "idx": batch["idx"][idx].item()
+            }
             yield sample
+
 
 class RefLossDataset(IterableDataset):
     """An IterableDataset that returns concatenated token samples for MDSWriter.
@@ -81,6 +85,7 @@ class RefLossDataset(IterableDataset):
     def __iter__(self) -> Iterable[Dict[str, bytes]]:
         for sample in self.dataset:
             yield {"ref_loss": sample["ref_loss"], "idx": sample["idx"]}
+
 
 if __name__ == "__main__":
 
@@ -113,10 +118,13 @@ if __name__ == "__main__":
     parser.add_argument("--reduction-rate",
                         type=float,
                         required=True,
-                        choices=[0.5, 0.25, 0.125])
+                        choices=[0, 9, 0.75, 0.5, 0.25, 0.125])
 
     # Sorting args
-    parser.add_argument("--easy-mine", action="store_true")
+    parser.add_argument("--mine-type",
+                        type=str,
+                        required=True,
+                        choices=["hard", "mid", "easy"])
 
     # Misc
     parser.add_argument("--no-wandb", action="store_true")
@@ -155,7 +163,8 @@ if __name__ == "__main__":
         final_num_tokens_tokens = 130_000_000_000
     final_num_tokens_tokens *= (1 / args.reduction_rate)
 
-    num_samples = int(-(-final_num_tokens_tokens // 2048))  # Assuming fixed seq len
+    num_samples = int(
+        -(-final_num_tokens_tokens // 2048))  # Assuming fixed seq len
 
     streaming_dataset = StreamingDataset(
         remote=data_remote,
@@ -178,20 +187,25 @@ if __name__ == "__main__":
         indices.append(sample["idx"])
         if use_wandb and step % 1_000 == 0:
             wandb.log(({'step': step, 'progress': step / num_samples}))
-    
+
     print("Starting sorting of losses ...")
     # Sorting and selecting the losses
     joint_loss_idx = zip(ref_losses, indices)
     joint_loss_idx = sorted(joint_loss_idx)
     ref_losses, indices = zip(*joint_loss_idx)
 
-    if args.easy_mine:
-        ref_losses = ref_losses[:len(ref_losses)//2]
-        indices = indices[:len(indices)//2]
+    if args.mine_type == "easy":
+        to_keep = int(len(ref_losses) * args.reduction_rate)
+        ref_losses = ref_losses[:to_keep]
+        indices = indices[:to_keep]
+    elif args.mine_type == "mid":
+        exclude_count = int(len(ref_losses) * (1 - args.reduction_rate) / 2)
+        ref_losses = ref_losses[exclude_count:-exclude_count]
+        indices = indices[exclude_count:-exclude_count]
     else:
-        ref_losses = ref_losses[len(ref_losses)//2:]
-        indices = indices[len(indices)//2:]
-
+        to_keep = int(len(ref_losses) * args.reduction_rate)
+        ref_losses = ref_losses[:-to_keep]
+        indices = indices[:-to_keep]
 
     print("Saving losses and indices ...")
     joint_loss_idx = {"ref_losses": ref_losses, "indices": indices}
