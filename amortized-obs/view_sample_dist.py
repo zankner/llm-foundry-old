@@ -57,17 +57,31 @@ def generate_samples(
     Yields:
         Sample dicts.
     """
+    #n_samples = 0
+    #for sample_idx in data_trajectory:
+        #if truncate_num_samples is not None and n_samples == truncate_num_samples:
+            #return
+        #n_samples += 1
+        #sample = dataset[sample_idx]
+        #print(sample)
+        #sample_idx = sample["idx"]
+        #sample = {"uids": sample["uids"]}
+        #if sample_idx != sample["idx"]:
+            #raise ValueError("All sample indices should be the same")
+        #yield sample
+    
     n_samples = 0
-    for sample_idx in data_trajectory:
-        if truncate_num_samples is not None and n_samples == truncate_num_samples:
-            return
-        n_samples += 1
-        sample = dataset[sample_idx]
-        sample_idx = sample["idx"]
-        sample = {"uids": sample["uids"]}
-        if sample_idx != sample["idx"]:
-            raise ValueError("All sample indices should be the same")
-        yield sample
+    for batch in data_trajectory:
+        for sample_idx in batch:
+            if truncate_num_samples is not None and n_samples == truncate_num_samples:
+                return
+            n_samples += 1
+            sample = dataset[sample_idx]
+            stored_sample_idx = sample["idx"]
+            sample = {"uids": sample["uids"]}
+            if sample_idx != stored_sample_idx:
+                raise ValueError("All sample indices should be the same")
+            yield sample
 
 
 def fetch_data_trajectory(proxy_ckpt: str):
@@ -171,8 +185,9 @@ if __name__ == "__main__":
     print(f"Loading proxy ckpt from {proxy_ckpt}")
 
     data_trajectory = fetch_data_trajectory(proxy_ckpt)
-    data_trajectory = random.sample(data_trajectory, args.visualize_num_sample)
+    data_trajectory = random.sample(data_trajectory, args.visualize_num_samples)
     num_samples = len(data_trajectory) * len(data_trajectory[0])
+    print(f"Getting sampling probs for {num_samples} samples")
 
     streaming_data = StreamingDataset(
         local=args.download_local,
@@ -193,8 +208,9 @@ if __name__ == "__main__":
         for uid in sample["uids"]:
             provenance_counts[uid_to_provenance[uid]] += 1
 
+    total_uids = sum(provenance_counts.values())
     provenance_counts = {
-        k: v / num_samples for k, v in provenance_counts.items()
+        k: v / total_uids for k, v in provenance_counts.items()
     }
     # Sort the dictionary by value in descending order
     sorted_data = sorted(provenance_counts.items(),
@@ -210,11 +226,18 @@ if __name__ == "__main__":
     plt.bar(names, og_counts, alpha=0.5, label="Original")
 
     # Label the axes
-    plt.xlabel('Dataset Proportion')
-    plt.ylabel('Provenance')
+    plt.ylabel('Dataset Proportion')
+    plt.xlabel('Provenance')
+    plt.xticks(rotation=90)
+    plt.title(run_name)
 
     # Add legend
     plt.legend()
 
     # Show the plot
-    plt.show()
+    plt.tight_layout()
+    plt.savefig("sample-vis.png")
+
+    # Printing out sampling probs
+    dict_counts = {name: count for name, count in zip(names, pruned_counts)}
+    print(dict_counts)

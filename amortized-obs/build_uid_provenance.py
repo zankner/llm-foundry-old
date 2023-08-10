@@ -100,7 +100,7 @@ if __name__ == "__main__":
 
     parser = ArgumentParser()
     # Dataset args
-    parser.add_argument("--download-remote", type=str, default="pile")
+    #parser.add_argument("--download-remote", type=str, default="pile")
     parser.add_argument("--download-local", type=str, required=True)
     parser.add_argument("--num-workers", type=int, default=64)
 
@@ -118,7 +118,7 @@ if __name__ == "__main__":
                    entity="mosaic-ml")
 
     streaming_dataset = StreamingDataset(
-        remote=args.download_remote,
+        #remote=args.download_remote,
         local=args.download_local,
         split="train",
     )
@@ -136,5 +136,5 @@ if __name__ == "__main__":
             wandb.log(({'step': step, 'progress': step / num_samples}))
 
     print("Saving uid and provenance ...")
-    with open("uid_to_provenance.pkl", "wb") as f:
+    with open("/mnt/datateam/zack/uid_to_provenance.pkl", "wb") as f:
         pickle.dump(uid_to_provenance, f)
