@@ -165,7 +165,7 @@ if __name__ == "__main__":
 
     num_samples = int(
         -(-final_num_tokens_tokens // 2048))  # Assuming fixed seq len
-
+    
     streaming_dataset = StreamingDataset(
         remote=data_remote,
         local=args.download_local,
@@ -204,10 +204,10 @@ if __name__ == "__main__":
         indices = indices[exclude_count:-exclude_count]
     else:
         to_keep = int(len(ref_losses) * args.reduction_rate)
-        ref_losses = ref_losses[:-to_keep]
-        indices = indices[:-to_keep]
+        ref_losses = ref_losses[-to_keep:]
+        indices = indices[-to_keep:]
 
-    print("Saving losses and indices ...")
+    print(f"Saving {len(ref_losses)} losses and indices ...")
     joint_loss_idx = {"ref_losses": ref_losses, "indices": indices}
     with open("joint_loss_idx.pkl", "wb") as f:
         pickle.dump(joint_loss_idx, f)
