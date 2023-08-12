@@ -118,7 +118,7 @@ if __name__ == "__main__":
     parser.add_argument("--reduction-rate",
                         type=float,
                         required=True,
-                        choices=[0, 9, 0.75, 0.5, 0.25, 0.125])
+                        choices=[0.9, 0.75, 0.5, 0.25, 0.125])
 
     # Sorting args
     parser.add_argument("--mine-type",

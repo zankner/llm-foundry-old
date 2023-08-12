@@ -65,7 +65,7 @@ def generate_samples(
             yield sample
 
 
-class RefLossDataset(IterableDataset):
+class TokensDataset(IterableDataset):
     """An IterableDataset that returns concatenated token samples for MDSWriter.
 
     Returns dicts of {'tokens': bytes, 'domain_idx': int}
@@ -118,7 +118,7 @@ if __name__ == "__main__":
 
     download_base = build_remote_base(
         dataset=args.dataset,
-        num_tokens=args.holdout_num_tokens,
+        num_holdout_tokens=args.holdout_num_tokens,
     )
     download_remote = os.path.join(download_base, "train", "base")
     streaming_data = StreamingDataset(
@@ -127,6 +127,9 @@ if __name__ == "__main__":
         split="train",
         shuffle=False,
     )
+    dataset = TokensDataset(streaming_data) 
+
+    dataloader = build_dataloader(dataset, 512, args.num_workers)
 
     if args.available_num_tokens == "13B":
         available_num_tokens = 13_000_000_000
@@ -137,23 +140,23 @@ if __name__ == "__main__":
             f"Invalid holdout num tokens: {args.available_num_tokens}")
     num_samples = int(-(-available_num_tokens // 2048))
 
-    samples = generate_samples(streaming_data, truncate_num_samples=num_samples)
+    samples = generate_samples(dataloader, truncate_num_samples=num_samples)
     columns = {'tokens': 'bytes', 'idx': 'int'}
 
     upload_base = build_remote_base(num_holdout_tokens=args.holdout_num_tokens,
                                     dataset=args.dataset)
     upload_remote = os.path.join(
-        upload_base, f"{args.available_num_tokens}-available-tokens", "train")
+        upload_base,"train", f"{args.available_num_tokens}-available-tokens", "train")
 
-    # print(f"Uploading {num_samples} samples to {upload_remote}")
-    # with MDSWriter(
-    #         columns=columns,
-    #         out=os.path.join(upload_remote, "train"),
-    #         compression="zstd",
-    #         max_workers=args.num_workers,
-    # ) as streaming_writer:
-    #     for step, sample in enumerate(
-    #             tqdm(samples, desc="subsample", total=num_samples, leave=True)):
-    #         streaming_writer.write(sample)
-    #         if use_wandb and step % 1_000 == 0:
-    #             wandb.log(({'step': step, 'progress': step / num_samples}))
+    print(f"Uploading {num_samples} samples to {upload_remote}")
+    with MDSWriter(
+            columns=columns,
+            out=os.path.join(upload_remote, "train"),
+            compression="zstd",
+            max_workers=args.num_workers,
+    ) as streaming_writer:
+        for step, sample in enumerate(
+                tqdm(samples, desc="subsample", total=num_samples, leave=True)):
+            streaming_writer.write(sample)
+            if use_wandb and step % 1_000 == 0:
+                wandb.log(({'step': step, 'progress': step / num_samples}))
