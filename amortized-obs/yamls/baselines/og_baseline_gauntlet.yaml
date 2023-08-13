@@ -1,0 +1,85 @@
+run_name: eval-final-debug-20B-baseline
+name: eval-final-debug-20B-baseline
+gpu_type: h100_80gb
+gpu_num: 16 
+cpus: null
+platform: null
+cluster: r9z1
+image: mosaicml/llm-foundry:2.0.1_cu118-latest
+partitions: null
+optimization_level: null
+integrations:
+- integration_type: git_repo
+  git_repo: zankner/llm-foundry
+  git_branch: ablate-obs
+  pip_install: -e ".[gpu]"
+  ssh_clone: false
+- integration_type: pip_packages
+  packages:
+  - oci-cli
+  - slack-sdk
+env_variables: []
+scheduling: {}
+compute:
+  cluster: null
+  gpu_type: null
+metadata: {}
+command: '
+
+  cd llm-foundry/scripts
+
+  composer eval/eval.py /mnt/config/parameters.yaml
+
+  '
+parameters:
+  dist_timeout: 6000
+  seed: 17
+  max_seq_len: 2048
+  device_eval_batch_size: 8
+  precision: amp_bf16
+  loggers:
+    wandb:
+      project: ablate-amortized-selection
+      group: eval-final-debug-20B-baseline
+      tags:
+      - fp-1B
+      - ft-20B
+      - debug
+      - final
+  callbacks:
+    slack_logger: {}
+  models:
+  - model_name: eval-final-debug-20B-baseline
+    load_path: oci://mosaicml-internal-checkpoints/zack/rho/final/final-pile-1B-fp-20B-ft-baseline-sd-17/ckpts/latest-rank0.pt.symlink
+  fsdp_config:
+    activation_checkpointing: false
+    activation_checkpointing_reentrant: false
+    activation_cpu_offload: false
+    limit_all_gathers: true
+    mixed_precision: PURE
+    sharding_strategy: FULL_SHARD
+    state_dict_type: full
+    verbose: false
+  icl_tasks: eval/yamls/tasks.yaml
+  model_gauntlet: eval/yamls/model_gauntlet.yaml
+  run_name: eval-final-debug-20B-baseline
+  tokenizer:
+    name: EleutherAI/gpt-neox-20b
+    kwargs:
+      model_max_length: ${max_seq_len}
+  model:
+    name: mpt_causal_lm
+    init_device: meta
+    max_seq_len: ${max_seq_len}
+    vocab_size: 50432
+    expansion_ratio: 4
+    no_bias: true
+    attn_config:
+      alibi: true
+      attn_impl: triton
+      clip_qkv: 6
+      attn_use_sequence_id: true
+    d_model: 2048
+    n_heads: 16
+    n_layers: 24
+entrypoint: ''
