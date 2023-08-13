@@ -4,7 +4,7 @@ import os
 from mcli import RunConfig
 
 from pretrain_utils import (CKPT_BASE, set_common_args, launch_run,
-                            build_remote_base, build_proxy_base,
+                            build_remote_base, build_proxy_base, build_ref_base,
                             build_final_base)
 
 if __name__ == "__main__":
@@ -37,11 +37,12 @@ if __name__ == "__main__":
         type=int,
         choices=[1024, 2048, 4096])
     parser.add_argument("--num-pplx-filter", type=int, default=0)
-    parser.add_argument("--selection-algo",
-                        type=str,
-                        required=True,
-                        choices=["rho", "hard-mine", "easy-mine", "baseline"
-                                ])  # Treat baseline as a selection algo
+    parser.add_argument(
+        "--selection-algo",
+        type=str,
+        required=True,
+        choices=["offline", "rho", "hard-mine", "easy-mine",
+                 "baseline"])  # Treat baseline as a selection algo
 
     # Final args
     parser.add_argument("--final-model-size",
@@ -52,6 +53,17 @@ if __name__ == "__main__":
                         type=str,
                         required=True,
                         choices=["2B", "5B", "20B", "26B", "130B"])
+
+    # Offline pruning args
+    parser.add_argument("--final-offline-score-method",
+                        type=str,
+                        choices=["llm", "ngram"])
+    parser.add_argument("--final-offline-mine-type",
+                        type=str,
+                        choices=["easy", "mid", "hard"])
+    parser.add_argument("--final-offline-reduction-rate",
+                        type=float,
+                        choices=[0.9, 0.75, 0.5, 0.25, 0.125])
 
     # Data args
     parser.add_argument("--dataset", type=str, default="pile", choices=["pile"])
@@ -67,6 +79,18 @@ if __name__ == "__main__":
                                       args.final_model_size)
     if args.selection_algo == "baseline":
         run_name = f"final-{args.dataset}-baseline-{final_run_base}-holdt-{args.holdout_num_tokens}"
+    elif args.selection_algo == "offline":
+        assert (args.final_offline_score_method is not None and
+                args.final_offline_reduction_rate is not None)
+        if args.final_offline_score_method == "llm":
+            assert args.ref_num_tokens is not None and args.ref_model_size is not None
+
+            ref_run_base = build_ref_base(args.ref_num_tokens,
+                                          args.ref_model_size)
+            run_name = f"final-{args.dataset}-off-{args.final_offline_mine_type}-red-{args.final_offline_reduction_rate}-{ref_run_base}-{final_run_base}-holdt-{args.holdout_num_tokens}"
+        else:
+            upload_name = f"{args.final_offline_mine_type}-mine-reduction-{args.final_offline_reduction_rate}-ngram"
+            pass
     else:
         proxy_run_base = build_proxy_base(
             args.selection_algo, args.proxy_num_tokens, args.proxy_model_size,
@@ -91,6 +115,18 @@ if __name__ == "__main__":
                 "train",
                 "base",
             )
+        elif args.selection_algo == "offline":
+            if args.final_offline_score_method == "llm":
+                remote_base = build_remote_base(
+                    num_holdout_tokens=args.holdout_num_tokens,
+                    dataset=args.dataset)
+                offline_name = f"{args.final_offline_mine_type}-mine-reduction-{args.final_offline_reduction_rate}-{ref_run_base}"
+                data_remote = os.path.join(
+                    remote_base, "pruned",
+                    f"{args.final_num_tokens}-final-tokens-pruned-from-offline-{offline_name}-sd-{seed}"
+                )
+            else:
+                pass
         else:
             remote_base = build_remote_base(
                 num_holdout_tokens=args.holdout_num_tokens,
@@ -124,7 +160,10 @@ if __name__ == "__main__":
             f"holdt-{args.holdout_num_tokens}", f"refp-{args.ref_model_size}",
             f"reft-{args.ref_num_tokens}", f"proxp-{args.proxy_model_size}",
             f"proxt-{args.proxy_num_tokens}", f"fb-{args.full_batch_size}",
-            f"fillpplx-{args.num_pplx_filter}", args.selection_algo
+            f"fillpplx-{args.num_pplx_filter}", args.selection_algo,
+            f"final-off-score-{args.final_offline_score_method}",
+            f"final-{args.final_offline_mine_type}-mine",
+            f"final-off-reduction-{args.final_offline_reduction_rate}"
         ]
 
         launch_run(base_run, args.local_debug, seed)

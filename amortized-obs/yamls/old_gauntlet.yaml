@@ -1,0 +1,57 @@
+integrations:
+- integration_type: git_repo
+  git_repo: zankner/llm-foundry
+  git_branch: ablate-obs
+  pip_install: -e ".[gpu]"
+  ssh_clone: false # Should be true if using a private repo
+
+command: |
+  cd llm-foundry/scripts
+  python inference/convert_composer_to_hf.py --composer_path {model_ckpt} --hf_output_path /tmp/model/ --output_precision bf16
+  composer eval/eval.py /mnt/config/parameters.yaml
+
+# Mosaic Cloud will use run_name (with a unique suffix) to populate the env var $RUN_NAME
+run_name: # Set in launch script
+gpu_num: 8 
+compute:
+  cluster: # Set in launch script
+  gpu_type: # Set in launch script
+
+image: # Set in launch script
+
+# The below is injected as a YAML file: /mnt/config/parameters.yaml
+parameters:
+  dist_timeout: 6000
+  seed: 1
+  max_seq_len: 2048
+  device_eval_batch_size: # Set in launch script 
+  precision: amp_bf16
+
+  models:
+  -
+    model_name: # Set in launch script
+    # Tokenizer
+    tokenizer:
+      name: EleutherAI/gpt-neox-20b
+      kwargs:
+        model_max_length: ${max_seq_len}
+    model:
+      name: hf_causal_lm
+      pretrained_model_name_or_path: /tmp/model/
+      device: cpu
+      pretrained: true
+      use_auth_token: false
+
+  # FSDP config for model sharding
+  fsdp_config:
+    activation_checkpointing: false
+    activation_checkpointing_reentrant: false
+    activation_cpu_offload: false
+    limit_all_gathers: true
+    mixed_precision: PURE
+    sharding_strategy: FULL_SHARD
+    state_dict_type: full
+    verbose: false
+
+  icl_tasks: 'eval/yamls/tasks.yaml'
+  model_gauntlet: 'eval/yamls/model_gauntlet.yaml'

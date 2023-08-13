@@ -5,7 +5,7 @@ from mcli import RunConfig, create_run
 from omegaconf import OmegaConf as om
 
 from pretrain_utils import (CKPT_BASE, build_model_arch, build_final_base,
-                            build_proxy_base)
+                            build_proxy_base, build_ref_base)
 
 
 def build_ckpt_base(run_name, run_type, dataset, seed):
@@ -19,6 +19,7 @@ def build_ckpt_path(run_name, run_type, step, dataset, seed):
         step_fmt = "latest-rank0.pt.symlink"
     else:
         prefix = "/tmp/models/zack/amortized-obs"
+        prefix = CKPT_BASE
         step_fmt = f"ba{step}/rank0.pt"
     return os.path.join(prefix, dataset, run_type, f"{run_name}-sd-{seed}",
                         "ckpts", step_fmt)
@@ -54,12 +55,13 @@ if __name__ == "__main__":
                         type=str,
                         required=True,
                         choices=["final", "sweep"])
-    parser.add_argument(
-        "--selection-algo",
-        type=str,
-        required=True,
-        choices=["baseline", "rho", "hard-mine", "easy-mine",
-                 "baseline"])  # Treat baseline as a selection algo
+    parser.add_argument("--selection-algo",
+                        type=str,
+                        required=True,
+                        choices=[
+                            "offline", "baseline", "rho", "hard-mine",
+                            "easy-mine", "baseline"
+                        ])  # Treat baseline as a selection algo
 
     # Reference args
     parser.add_argument("--ref-model-size", type=str, choices=["125M", "250M"])
@@ -89,6 +91,18 @@ if __name__ == "__main__":
                         type=str,
                         choices=["2B", "5B", "20B", "26B", "130B"])
 
+    # Offline pruning args
+    parser.add_argument("--final-offline-score-method",
+                        type=str,
+                        choices=["llm", "ngram"])
+    parser.add_argument("--final-offline-mine-type",
+                        type=str,
+                        required=True,
+                        choices=["easy", "mid", "hard"])
+    parser.add_argument("--final-offline-reduction-rate",
+                        type=float,
+                        choices=[0.75, 0.5, 0.25, 0.125])
+
     # Misc
     parser.add_argument("--holdout-num-tokens",
                         type=str,
@@ -112,6 +126,18 @@ if __name__ == "__main__":
                                       args.final_model_size)
         if args.selection_algo == "baseline":
             run_name = f"final-{args.dataset}-baseline-{final_base}-holdt-{args.holdout_num_tokens}"
+        elif args.selection_algo == "offline":
+            assert (args.final_offline_score_method is not None and
+                    args.final_offline_reduction_rate is not None)
+            if args.final_offline_score_method == "llm":
+                assert args.ref_num_tokens is not None and args.ref_model_size is not None
+
+                ref_run_base = build_ref_base(args.ref_num_tokens,
+                                              args.ref_model_size)
+                run_name = f"final-{args.dataset}-off-{args.final_offline_mine_type}-red-{args.final_offline_reduction_rate}-{ref_run_base}-{final_base}-holdt-{args.holdout_num_tokens}"
+            else:
+                upload_name = f"{args.final_offline_mine_type}-mine-reduction-{args.final_offline_reduction_rate}-ngram-holdt-{args.holdout_num_tokens}"
+                pass
         else:
             proxy_run_base = build_proxy_base(
                 args.selection_algo, args.proxy_num_tokens,
@@ -201,6 +227,9 @@ if __name__ == "__main__":
         f"eval-{args.eval_type}",
         f"seed-{args.seed}",
         args.run_type,
+        f"final-off-score-{args.final_offline_score_method}",
+        f"final-{args.final_offline_mine_type}-mine",
+        f"final-off-reduction-{args.final_offline_reduction_rate}",
     ]
     base_run.parameters["loggers"]["wandb"] = build_wandb_logger(
         run_name, model_tags)
@@ -217,21 +246,26 @@ if __name__ == "__main__":
         if num_tokens == "20B":
             start_step = 1_000
             end_step = 19_000
+            step = 1_000
         elif num_tokens == "26B":
             start_step = 1_000
             end_step = 24_000
+            step = 1_000
+        elif num_tokens == "130B":
+            start_step = 5_000
+            end_step = 1230_000
+            step = 5_000
         else:
             raise ValueError("need to define steps for given token count")
 
         # Fixing to be eval every 1k batches for now
-        steps = list(range(start_step, end_step + 1, 1_000))
+        steps = list(range(start_step, end_step + 1, step))
 
-        download_prefix = os.path.join("zack", "amortized-obs", args.dataset,
-                                       args.run_type,
-                                       f"{run_name}-sd-{args.seed}", "ckpts")
-        download_cmd = f"oci os object bulk-download -bn mosaicml-internal-checkpoints --prefix {download_prefix} --dest-dir /tmp/models/ --parallel-operations-count 128"
-        base_run.command = base_run.command.replace("{download_cmd}",
-                                                    download_cmd)
+        #download_prefix = os.path.join("zack", "amortized-obs", args.dataset,
+        #args.run_type,
+        #f"{run_name}-sd-{args.seed}", "ckpts")
+        #download_cmd = f"oci os object bulk-download -bn mosaicml-internal-checkpoints --prefix {download_prefix} --dest-dir /tmp/models/ --parallel-operations-count 128"
+        base_run.command = base_run.command.replace("{download_cmd}", "")
 
         models = [
             build_model_cfg(run_name, step, args.run_type, args.dataset,

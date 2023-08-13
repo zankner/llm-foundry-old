@@ -43,6 +43,8 @@ if __name__ == "__main__":
                         required=True,
                         choices=["rho", "hard-mine", "easy-mine"])
 
+    # Offline pruning args
+
     # Data args
     parser.add_argument("--dataset", type=str, default="pile")
     parser.add_argument("--device-batch-size", type=int, default=32)
