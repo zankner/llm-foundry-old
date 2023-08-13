@@ -1,0 +1,213 @@
+name: mpt-1b-params-16b-tokens-2x-epoch-raw-proportion
+
+integrations:
+  - integration_type: git_repo
+    git_branch: zack/mpt-over-sampling
+    git_repo: zankner/llm-foundry
+    pip_install: .[gpu]
+    ssh_clone: true
+  - integration_type: wandb
+    entity: mosaic-ml
+    project: mpt-over-sampling
+  - integration_type: "pip_packages"
+    packages:
+      - slack-sdk
+
+image: mosaicml/llm-foundry:2.0.1_cu118-latest
+cluster: r9z1 # Set in launch script
+gpu_num: 32 # Set in launch script
+gpu_type: h100_80gb
+
+command: |-
+  cd llm-foundry/scripts
+  composer train/train.py /mnt/config/parameters.yaml || (echo "Command failed - killing python" && pkill python && exit 1)
+
+parameters:
+  global_seed: 17 # Set in launch script
+  max_seq_len: 2048 # max tokens per sequence during training
+
+  run_name: mpt-1b-params-16b-tokens-2x-epoch-raw-proportion #Set in launch script
+
+  # Model
+  model:
+    name: mpt_causal_lm
+    init_device: meta
+    d_model: 2048
+    n_heads: 16
+    n_layers: 24
+    expansion_ratio: 4
+    max_seq_len: ${max_seq_len}
+    vocab_size: 50432 # update for hero run with custom tokenizer
+    no_bias: true
+    attn_config:
+      alibi: true
+      attn_impl: triton
+      clip_qkv: 6
+      attn_uses_sequence_id: true
+
+  # Tokenizer
+  tokenizer:
+    name: EleutherAI/gpt-neox-20b # default tokenizer used for MPT
+    kwargs:
+      model_max_length: ${max_seq_len}
+
+  # Optimization
+  global_train_batch_size: 1024 
+  max_duration: 26_000_000_000tok
+
+  optimizer:
+    name: decoupled_lionw
+    lr: 2.0e-4
+    betas:
+      - 0.9
+      - 0.95
+    weight_decay: 2.0e-4
+
+  scheduler:
+    name: cosine_with_warmup
+    t_warmup: 0.06dur
+    alpha_f: 0.1
+
+  # System
+  seed: ${global_seed}
+  precision: amp_bf16
+  device_train_microbatch_size: 4
+  device_eval_batch_size: 4
+
+
+  # FSDP
+  fsdp_config:
+    activation_checkpointing: false
+    activation_checkpointing_reentrant: false
+    activation_cpu_offload: false
+    limit_all_gathers: true
+    mixed_precision: PURE
+    sharding_strategy: FULL_SHARD
+    state_dict_type: full
+    verbose: false
+
+  # Logging
+  eval_first: true
+  eval_interval: 2000ba
+  log_to_console: true
+  console_log_interval: 100ba
+  progress_bar: false
+  python_log_level: DEBUG
+  loggers:
+    wandb:
+      project: mpt-over-sampling
+      tags:
+        - seed-${global_seed}
+      group: ${run_name}
+
+  # Checkpointing
+  autoresume: true
+  save_filename: ba{batch}/rank{rank}.pt
+  save_folder: oci://mosaicml-internal-checkpoints/zack/mpt-oversample/${run_name}-sd-${global_seed}
+  save_interval: 500ba # update for hero run, e.g. 2000ba
+  save_num_checkpoints_to_keep: 1
+
+  # Algos and Callbacks
+  algorithms:
+    gradient_clipping:
+      clipping_threshold: 1
+      clipping_type: norm
+
+  callbacks:
+    lr_monitor: {}
+    average_icl_logger: {}
+    memory_monitor: {}
+    runtime_estimator: {}
+    scheduled_gc:
+      batch_interval: 2000
+    speed_monitor:
+      window_size: 1
+    gpu_hour_logger: {}
+    slack_logger: {}
+
+  # Dataloaders
+  eos_token_id: 0 # update for hero run with custom tokenizer
+  num_canonical_nodes: 128 # update for hero run, must be codivisible by # physical nodes
+
+  # Eval loader
+  eval_loader:
+    name: text
+    drop_last: false
+    num_workers: 8
+    dataset:
+      eos_token_id: ${eos_token_id}
+      max_seq_len: ${max_seq_len}
+      num_canonical_nodes: ${num_canonical_nodes}
+      shuffle: false
+      shuffle_algo: py1b
+      shuffle_seed: ${global_seed}
+      local: /tmp/dataset/val
+      remote: oci://mosaicml-internal-dataset-pile/pre-concat/gpt-neox-20b-seqlen-2048
+      split: val
+
+  # In-context-learning tasks
+  icl_tasks: eval/yamls/tasks_light.yaml
+
+  # Train loader
+  train_loader:
+    name: text
+    drop_last: true
+    num_workers: 1
+    dataset:
+      eos_token_id: ${eos_token_id}
+      max_seq_len: ${max_seq_len}
+      num_canonical_nodes: ${num_canonical_nodes}
+      shuffle: true
+      shuffle_algo: py1b
+      shuffle_seed: ${global_seed}
+      streams:
+        c4:
+          local: /tmp/dataset/c4/train
+          remote: oci://mosaicml-internal-dataset-mpt-oversample/13B-available-tokens/c4
+          split: train
+          proportion: null
+        markdown:
+          local: /tmp/dataset/c4/train
+          remote: oci://mosaicml-internal-dataset-mpt-oversample/13B-available-tokens/markdown
+          split: train
+          proportion: null
+        mc4:
+          local: /tmp/dataset/c4/train
+          remote: oci://mosaicml-internal-dataset-mpt-oversample/13B-available-tokens/mc4
+          split: train
+          proportion: null
+        redpajama:
+          local: /tmp/dataset/c4/train
+          remote: oci://mosaicml-internal-dataset-mpt-oversample/13B-available-tokens/redpajama
+          split: train
+          proportion: null
+        redpajama-arxiv:
+          local: /tmp/dataset/c4/train
+          remote: oci://mosaicml-internal-dataset-mpt-oversample/13B-available-tokens/redpajama-arxiv
+          split: train
+          proportion: null
+        redpajama-books:
+          local: /tmp/dataset/c4/train
+          remote: oci://mosaicml-internal-dataset-mpt-oversample/13B-available-tokens/redpajama-books
+          split: train
+          proportion: null
+        redpajama-stackexchange:
+          local: /tmp/dataset/c4/train
+          remote: oci://mosaicml-internal-dataset-mpt-oversample/13B-available-tokens/redpajama-stackexchange
+          split: train
+          proportion: null
+        redpajama-wiki:
+          local: /tmp/dataset/c4/train
+          remote: oci://mosaicml-internal-dataset-mpt-oversample/13B-available-tokens/redpajama-wiki
+          split: train
+          proportion: null
+        s2:
+          local: /tmp/dataset/c4/train
+          remote: oci://mosaicml-internal-dataset-mpt-oversample/13B-available-tokens/s2
+          split: train
+          proportion: null
+        stack:
+          local: /tmp/dataset/c4/train
+          remote: oci://mosaicml-internal-dataset-mpt-oversample/13B-available-tokens/stack
+          split: train
+          proportion: null
