@@ -79,7 +79,7 @@ if __name__ == "__main__":
     # Selection method
     parser.add_argument("--score-method", type=str, required=True, choices=["llm", "ngram"])
     parser.add_argument("--mine-type", type=str, required=True, choices=["easy", "mid", "hard"])
-    parser.add_argument("--reduction-rate", type=float, required=True, choices=[0.5, 0.25, 0.125])
+    parser.add_argument("--reduction-rate", type=float, required=True, choices=[0.9, 0.75, 0.5, 0.25, 0.125])
 
     # Misc
     parser.add_argument("--no-wandb", action="store_true")
