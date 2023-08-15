@@ -1,4 +1,4 @@
-name: mpt-1b-params-16b-tokens-2x-epoch-raw-proportion
+name: mpt-1b-params-16b-tokens-2x-epoch-over-sample
 
 integrations:
   - integration_type: git_repo
@@ -30,7 +30,7 @@ parameters:
   global_seed: 17 # Set in launch script
   max_seq_len: 2048 # max tokens per sequence during training
 
-  run_name: mpt-1b-params-16b-tokens-2x-epoch-raw-proportion #Set in launch script
+  run_name: mpt-1b-params-16b-tokens-2x-epoch-over-sample
 
   # Model
   model:
@@ -169,49 +169,49 @@ parameters:
           local: /tmp/dataset/c4/train
           remote: oci://mosaicml-internal-dataset-mpt-oversample/13B-available-tokens/c4
           split: train
-          proportion: null
+          proportion: 0.299
         markdown:
           local: /tmp/dataset/markdown/train
           remote: oci://mosaicml-internal-dataset-mpt-oversample/13B-available-tokens/markdown
           split: train
-          proportion: null
+          proportion: 0.045
         mc4:
           local: /tmp/dataset/mc4/train
           remote: oci://mosaicml-internal-dataset-mpt-oversample/13B-available-tokens/mc4
           split: train
-          proportion: null
+          proportion: 0.335
         redpajama:
           local: /tmp/dataset/redpajam/train
           remote: oci://mosaicml-internal-dataset-mpt-oversample/13B-available-tokens/redpajama
           split: train
-          proportion: null
+          proportion: 0.085
         redpajama-arxiv:
           local: /tmp/dataset/redpajama-arxiv/train
           remote: oci://mosaicml-internal-dataset-mpt-oversample/13B-available-tokens/redpajama-arxiv
           split: train
-          proportion: null
+          proportion: 0.019
         redpajama-books:
           local: /tmp/dataset/redpajama-books/train
           remote: oci://mosaicml-internal-dataset-mpt-oversample/13B-available-tokens/redpajama-books
           split: train
-          proportion: null
+          proportion: 0.03
         redpajama-stackexchange:
           local: /tmp/dataset/redpajama-stackexchange/train
           remote: oci://mosaicml-internal-dataset-mpt-oversample/13B-available-tokens/redpajama-stackexchange
           split: train
-          proportion: null
+          proportion: 0.014
         redpajama-wiki:
           local: /tmp/dataset/redpajama-wiki/train
           remote: oci://mosaicml-internal-dataset-mpt-oversample/13B-available-tokens/redpajama-wiki
           split: train
-          proportion: null
+          proportion: 0.04
         s2:
           local: /tmp/dataset/s2/train
           remote: oci://mosaicml-internal-dataset-mpt-oversample/13B-available-tokens/s2
           split: train
-          proportion: null
+          proportion: 0.033
         stack:
           local: /tmp/dataset/stack/train
           remote: oci://mosaicml-internal-dataset-mpt-oversample/13B-available-tokens/stack
           split: train
-          proportion: null
+          proportion: 0.1
