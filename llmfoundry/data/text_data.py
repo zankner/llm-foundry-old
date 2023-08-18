@@ -90,6 +90,7 @@ class StreamingTextDataset(StreamingDataset):
                  shuffle_algo: str = 'py1b',
                  shuffle_seed: int = 9176,
                  shuffle_block_size: int = 1 << 18,
+                 sampling_method: str = 'balanced',
                  **kwargs: Dict[str, Any]):
 
         group_method = kwargs.pop('group_method', None)
@@ -132,6 +133,7 @@ class StreamingTextDataset(StreamingDataset):
             shuffle_algo=shuffle_algo,
             shuffle_block_size=shuffle_block_size,
             shuffle_seed=shuffle_seed,
+            sampling_method=sampling_method,
         )
         self.tokenizer = tokenizer
         self.max_seq_len = max_seq_len
