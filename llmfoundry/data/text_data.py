@@ -130,6 +130,7 @@ class StreamingTextDataset(StreamingDataset):
             batch_size=batch_size,
             shuffle=shuffle,
             shuffle_algo=shuffle_algo,
+            shuffle_block_size=shuffle_block_size,
             shuffle_seed=shuffle_seed,
         )
         self.tokenizer = tokenizer
