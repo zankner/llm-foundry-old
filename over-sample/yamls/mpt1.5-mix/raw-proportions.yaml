@@ -1,0 +1,218 @@
+name: mpt1.5-3b-params-52b-tokens-2.5x-epoch-raw-proportion # Effectively 2.5 passes to reach 10T
+
+integrations:
+  - integration_type: git_repo
+    git_branch: zack/mpt-over-sampling
+    git_repo: zankner/llm-foundry
+    pip_install: .[gpu]
+    ssh_clone: true
+  - integration_type: wandb
+    entity: mosaic-ml
+    project: mpt-over-sampling
+  - integration_type: "pip_packages"
+    packages:
+      - slack-sdk
+
+image: mosaicml/llm-foundry:2.0.1_cu118-latest
+cluster: r9z1 # Set in launch script
+gpu_num: 32 # Set in launch script
+gpu_type: h100_80gb
+
+scheduling:
+  resumable: true
+  priority: medium
+
+command: |-
+  cd llm-foundry/scripts
+  composer train/train.py /mnt/config/parameters.yaml || (echo "Command failed - killing python" && pkill python && exit 1)
+
+parameters:
+  global_seed: 17 # Set in launch script
+  max_seq_len: 2048 # max tokens per sequence during training
+
+  run_name: mpt-1b-params-16b-tokens-2x-epoch-raw-proportion #Set in launch script
+
+  # Model
+  model:
+    name: mpt_causal_lm
+    init_device: meta
+    d_model: 2560
+    n_heads: 32
+    n_layers: 32
+    expansion_ratio: 4
+    max_seq_len: ${max_seq_len}
+    vocab_size: 50368 # update for hero run with custom tokenizer
+    no_bias: true
+    attn_config:
+      alibi: true
+      attn_impl: triton
+      clip_qkv: 6
+      attn_uses_sequence_id: false
+
+  # Tokenizer
+  tokenizer:
+    name: EleutherAI/gpt-neox-20b # default tokenizer used for MPT
+    kwargs:
+      model_max_length: ${max_seq_len}
+
+  # Optimization
+  global_train_batch_size: 1024 
+  max_duration: 52000000000tok
+
+  optimizer:
+    name: decoupled_lionw
+    lr: 0.00016
+    betas:
+      - 0.9
+      - 0.95
+    weight_decay: 0.00016
+
+  scheduler:
+    name: cosine_with_warmup
+    t_warmup: 0.06dur
+    alpha_f: 0.1
+
+  # System
+  seed: ${global_seed}
+  precision: amp_bf16
+  device_train_microbatch_size: 8
+  device_eval_batch_size: 8
+
+
+  # FSDP
+  fsdp_config:
+    activation_checkpointing: false
+    activation_checkpointing_reentrant: false
+    activation_cpu_offload: false
+    limit_all_gathers: true
+    mixed_precision: PURE
+    sharding_strategy: FULL_SHARD
+    state_dict_type: full
+    verbose: false
+
+  # Logging
+  eval_first: true
+  eval_interval: 1000ba
+  log_to_console: true
+  console_log_interval: 100ba
+  progress_bar: false
+  python_log_level: DEBUG
+  loggers:
+    wandb:
+      project: mpt-over-sampling
+      tags:
+        - seed-${global_seed}
+        - mpt1.5-mix
+        - 2x-pass
+      group: ${run_name}
+
+  # Checkpointing
+  autoresume: true
+  save_filename: ba{batch}/rank{rank}.pt
+  save_folder: oci://mosaicml-internal-checkpoints/zack/mpt-oversample/${run_name}-sd-${global_seed}
+  save_interval: 500ba # update for hero run, e.g. 2000ba
+  save_num_checkpoints_to_keep: 1
+
+  # Algos and Callbacks
+  algorithms:
+    gradient_clipping:
+      clipping_threshold: 1
+      clipping_type: norm
+
+  callbacks:
+    lr_monitor: {}
+    average_icl_logger: {}
+    memory_monitor: {}
+    runtime_estimator: {}
+    scheduled_gc:
+      batch_interval: 2000
+    speed_monitor:
+      window_size: 1
+    gpu_hour_logger: {}
+    slack_logger: {}
+
+  # Dataloaders
+  eos_token_id: 0 # update for hero run with custom tokenizer
+  num_canonical_nodes: 32 # update for hero run, must be codivisible by # physical nodes
+
+  # Eval loader
+  eval_loader:
+    name: text
+    drop_last: false
+    num_workers: 8
+    dataset:
+      eos_token_id: ${eos_token_id}
+      max_seq_len: ${max_seq_len}
+      num_canonical_nodes: ${num_canonical_nodes}
+      shuffle: false
+      shuffle_algo: py1b
+      shuffle_seed: ${global_seed}
+      local: /tmp/dataset/val
+      remote: oci://mosaicml-internal-dataset-pile/pre-concat/gpt-neox-20b-seqlen-2048
+      split: val
+
+  # In-context-learning tasks
+  icl_tasks: eval/yamls/tasks_light.yaml
+
+  # Train loader
+  train_loader:
+    name: text
+    drop_last: true
+    num_workers: 1
+    dataset:
+      eos_token_id: ${eos_token_id}
+      max_seq_len: ${max_seq_len}
+      num_canonical_nodes: ${num_canonical_nodes}
+      predownload: 120
+      sampling_method: fixed
+      epoch_size: 10156250 # important for oversampling
+      shuffle: true
+      shuffle_block_size: 4194304
+      shuffle_algo: py1b
+      shuffle_seed: ${global_seed}
+      streams:
+        c4:
+          local: /tmp/dataset/c4/
+          proportion: 0.0265
+          remote: oci://mosaicml-internal-dataset-c4/sem-dedupe/23-04-05/dataset/pretokencat/EleutherAI-gpt-neox-20b/0pt8/
+          split: train
+        markdown:
+          local: /tmp/dataset/markdown/
+          proportion: 0.0282
+          remote: oci://mosaicml-internal-datasets/new-stack/neox/markdown/
+          split: null
+        mc4:
+          local: /tmp/dataset/mc4/
+          proportion: 0.6377
+          remote: oci://mosaicml-internal-dataset-mc4/filtered/en/filter2-gptneox-tok/
+          split: null
+        refined_web:
+          local: /tmp/datasets/redpajama
+          proportion: 0.1582
+          remote: oci://mosaicml-internal-datasets/refinedweb/neox/
+          split: null
+        redpajama-arxiv:
+          local: /tmp/datasets/redpajama-arxiv
+          proportion: 0.0074
+          remote: oci://mosaicml-internal-dataset-red-pajama/arxiv/gptneox-tok/
+          split: null
+        redpajama-stackexchange:
+          local: /tmp/datasets/redpajama-stackexchange
+          proportion: 0.0054
+          remote: oci://mosaicml-internal-dataset-red-pajama/stackexchange/gptneox-tok/
+          split: null
+        redpajama-wiki:
+          local: /tmp/datasets/redpajama-wiki
+          proportion: 0.0013
+          remote: oci://mosaicml-internal-dataset-red-pajama/wikipedia/gptneox-tok/en/
+          split: null
+        s2:
+          local: /tmp/dataset/s2/
+          proportion: 0.0129
+          remote: oci://mosaicml-internal-datasets/pres2o/neox
+          split: null
+        stack:
+          local: /tmp/dataset/stack/
+          proportion: 0.1223
+          remote: oci://mosaicml-internal-datasets/new-stack/neox/
+          split: null
