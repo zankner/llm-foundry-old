@@ -30,7 +30,7 @@ parameters:
   global_seed: 17 # Set in launch script
   max_seq_len: 2048 # max tokens per sequence during training
 
-  run_name: mpt-1b-params-16b-tokens-2x-epoch-raw-proportion #Set in launch script
+  run_name: mpt1.5-3b-params-52b-tokens-2.5x-epoch-raw-proportion #Set in launch script
 
   # Model
   model:
@@ -164,8 +164,6 @@ parameters:
       max_seq_len: ${max_seq_len}
       num_canonical_nodes: ${num_canonical_nodes}
       predownload: 120
-      sampling_method: fixed
-      epoch_size: 10156250 # important for oversampling
       shuffle: true
       shuffle_block_size: 4194304
       shuffle_algo: py1b
