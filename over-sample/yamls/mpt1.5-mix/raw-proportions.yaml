@@ -18,6 +18,10 @@ cluster: r9z1 # Set in launch script
 gpu_num: 32 # Set in launch script
 gpu_type: h100_80gb
 
+env_variables:
+  - key: AWS_PROFILE
+    value: data-force-one
+
 scheduling:
   resumable: true
   priority: medium
@@ -103,7 +107,7 @@ parameters:
       tags:
         - seed-${global_seed}
         - mpt1.5-mix
-        - 2x-pass
+        - 2.5x-pass
       group: ${run_name}
 
   # Checkpointing
@@ -169,48 +173,48 @@ parameters:
       shuffle_algo: py1b
       shuffle_seed: ${global_seed}
       streams:
-        c4:
-          local: /tmp/dataset/c4/
-          proportion: 0.0265
-          remote: oci://mosaicml-internal-dataset-c4/sem-dedupe/23-04-05/dataset/pretokencat/EleutherAI-gpt-neox-20b/0pt8/
+        arxiv:
+          local: /tmp/dataset/train/arxiv
+          proportion: null
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/52B-train-tokens-from-2.5-passes/arxiv
           split: train
-        markdown:
-          local: /tmp/dataset/markdown/
-          proportion: 0.0282
-          remote: oci://mosaicml-internal-datasets/new-stack/neox/markdown/
-          split: null
+        c4:
+          local: /tmp/dataset/train/c4
+          proportion: null
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/52B-train-tokens-from-2.5-passes/c4
+          split: train
+        markdown-dedup:
+          local: /tmp/dataset/train/markdown-dedup
+          proportion: null
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/52B-train-tokens-from-2.5-passes/markdown-dedup
+          split: train
         mc4:
-          local: /tmp/dataset/mc4/
-          proportion: 0.6377
-          remote: oci://mosaicml-internal-dataset-mc4/filtered/en/filter2-gptneox-tok/
-          split: null
-        refined_web:
-          local: /tmp/datasets/redpajama
-          proportion: 0.1582
-          remote: oci://mosaicml-internal-datasets/refinedweb/neox/
-          split: null
-        redpajama-arxiv:
-          local: /tmp/datasets/redpajama-arxiv
-          proportion: 0.0074
-          remote: oci://mosaicml-internal-dataset-red-pajama/arxiv/gptneox-tok/
-          split: null
-        redpajama-stackexchange:
-          local: /tmp/datasets/redpajama-stackexchange
-          proportion: 0.0054
-          remote: oci://mosaicml-internal-dataset-red-pajama/stackexchange/gptneox-tok/
-          split: null
-        redpajama-wiki:
-          local: /tmp/datasets/redpajama-wiki
-          proportion: 0.0013
-          remote: oci://mosaicml-internal-dataset-red-pajama/wikipedia/gptneox-tok/en/
-          split: null
-        s2:
-          local: /tmp/dataset/s2/
-          proportion: 0.0129
-          remote: oci://mosaicml-internal-datasets/pres2o/neox
-          split: null
-        stack:
-          local: /tmp/dataset/stack/
-          proportion: 0.1223
-          remote: oci://mosaicml-internal-datasets/new-stack/neox/
-          split: null
+          local: /tmp/dataset/train/mc4
+          proportion: null
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/52B-train-tokens-from-2.5-passes/mc4
+          split: train
+        peS20:
+          local: /tmp/dataset/train/peS20
+          proportion: null
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/52B-train-tokens-from-2.5-passes/peS20
+          split: train
+        refined-web:
+          local: /tmp/dataset/train/refined-web
+          proportion: null
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/52B-train-tokens-from-2.5-passes/refined-web
+          split: train
+        stack-dedup:
+          local: /tmp/dataset/train/stack-dedup
+          proportion: null
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/52B-train-tokens-from-2.5-passes/stack-dedup
+          split: train
+        stack_exchange:
+          local: /tmp/dataset/train/stack_exchange
+          proportion: null
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/52B-train-tokens-from-2.5-passes/stack_exchange
+          split: train
+        wikipedia:
+          local: /tmp/dataset/train/wikipedia
+          proportion: null
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/52B-train-tokens-from-2.5-passes/wikipedia
+          split: train
