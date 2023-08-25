@@ -14,13 +14,13 @@ integrations:
       - slack-sdk
 
 image: mosaicml/llm-foundry:2.0.1_cu118-latest
-cluster: r9z1 # Set in launch script
+cluster: r14z2 # Set in launch script
 gpu_num: 32 # Set in launch script
 gpu_type: h100_80gb
 
 scheduling:
   resumable: true
-  priority: low
+  priority: lowest
 
 command: |-
   cd llm-foundry/scripts

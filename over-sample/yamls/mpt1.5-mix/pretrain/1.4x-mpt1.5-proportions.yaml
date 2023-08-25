@@ -1,4 +1,4 @@
-name: mpt-1b-params-16b-tokens-2x-epoch-raw-proportion
+name: mpt1.5-3b-params-52b-tokens-1.4x-epoch-mpt1.5-proportion # Effectively 1.4 passes to reach 10T
 
 integrations:
   - integration_type: git_repo
@@ -18,6 +18,10 @@ cluster: r14z2 # Set in launch script
 gpu_num: 32 # Set in launch script
 gpu_type: h100_80gb
 
+env_variables:
+  - key: AWS_PROFILE
+    value: data-force-one
+
 scheduling:
   resumable: true
   priority: lowest
@@ -30,24 +34,24 @@ parameters:
   global_seed: 17 # Set in launch script
   max_seq_len: 2048 # max tokens per sequence during training
 
-  run_name: mpt-1b-params-16b-tokens-2x-epoch-raw-proportion #Set in launch script
+  run_name: mpt1.5-3b-params-52b-tokens-1.4x-epoch-mpt1.5-proportion #Set in launch script
 
   # Model
   model:
     name: mpt_causal_lm
     init_device: meta
-    d_model: 2048
-    n_heads: 16
-    n_layers: 24
+    d_model: 2560
+    n_heads: 32
+    n_layers: 32
     expansion_ratio: 4
     max_seq_len: ${max_seq_len}
-    vocab_size: 50432 # update for hero run with custom tokenizer
+    vocab_size: 50368 # update for hero run with custom tokenizer
     no_bias: true
     attn_config:
       alibi: true
       attn_impl: triton
       clip_qkv: 6
-      attn_uses_sequence_id: true
+      attn_uses_sequence_id: false
 
   # Tokenizer
   tokenizer:
@@ -57,15 +61,15 @@ parameters:
 
   # Optimization
   global_train_batch_size: 1024 
-  max_duration: 26000000000tok
+  max_duration: 52000000000tok
 
   optimizer:
     name: decoupled_lionw
-    lr: 2.0e-4
+    lr: 0.00016
     betas:
       - 0.9
       - 0.95
-    weight_decay: 2.0e-4
+    weight_decay: 0.00016
 
   scheduler:
     name: cosine_with_warmup
@@ -92,7 +96,7 @@ parameters:
 
   # Logging
   eval_first: true
-  eval_interval: 2000ba
+  eval_interval: 1000ba
   log_to_console: true
   console_log_interval: 100ba
   progress_bar: false
@@ -102,6 +106,8 @@ parameters:
       project: mpt-over-sampling
       tags:
         - seed-${global_seed}
+        - mpt1.5-mix
+        - 1.4x-pass
       group: ${run_name}
 
   # Checkpointing
@@ -131,7 +137,7 @@ parameters:
 
   # Dataloaders
   eos_token_id: 0 # update for hero run with custom tokenizer
-  num_canonical_nodes: 128 # update for hero run, must be codivisible by # physical nodes
+  num_canonical_nodes: 32 # update for hero run, must be codivisible by # physical nodes
 
   # Eval loader
   eval_loader:
@@ -161,57 +167,54 @@ parameters:
       eos_token_id: ${eos_token_id}
       max_seq_len: ${max_seq_len}
       num_canonical_nodes: ${num_canonical_nodes}
+      predownload: 120
       shuffle: true
+      shuffle_block_size: 4194304
       shuffle_algo: py1b
       shuffle_seed: ${global_seed}
       streams:
+        arxiv:
+          local: /tmp/dataset/train/arxiv
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/52B-train-tokens-from-1.4-passes/arxiv
+          repeat: 4.086
+          split: train
         c4:
-          local: /tmp/dataset/c4/train
-          remote: oci://mosaicml-internal-dataset-mpt-oversample/13B-available-tokens/c4
+          local: /tmp/dataset/train/c4
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/52B-train-tokens-from-1.4-passes/c4
+          repeat: 6.752
           split: train
-          proportion: null
-        markdown:
-          local: /tmp/dataset/markdown/train
-          remote: oci://mosaicml-internal-dataset-mpt-oversample/13B-available-tokens/markdown
+        markdown-dedup:
+          local: /tmp/dataset/train/markdown-dedup
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/52B-train-tokens-from-1.4-passes/markdown-dedup
+          repeat: 12.756
           split: train
-          proportion: null
         mc4:
-          local: /tmp/dataset/mc4/train
-          remote: oci://mosaicml-internal-dataset-mpt-oversample/13B-available-tokens/mc4
+          local: /tmp/dataset/train/mc4
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/52B-train-tokens-from-1.4-passes/mc4
+          repeat: 0.489
           split: train
-          proportion: null
-        redpajama:
-          local: /tmp/dataset/redpajam/train
-          remote: oci://mosaicml-internal-dataset-mpt-oversample/13B-available-tokens/redpajama
+        peS20:
+          local: /tmp/dataset/train/peS20
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/52B-train-tokens-from-1.4-passes/peS20
+          repeat: 2.794
           split: train
-          proportion: null
-        redpajama-arxiv:
-          local: /tmp/dataset/redpajama-arxiv/train
-          remote: oci://mosaicml-internal-dataset-mpt-oversample/13B-available-tokens/redpajama-arxiv
+        refined-web:
+          local: /tmp/dataset/train/refined-web
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/52B-train-tokens-from-1.4-passes/refined-web
+          repeat: 2.46
           split: train
-          proportion: null
-        redpajama-books:
-          local: /tmp/dataset/redpajama-books/train
-          remote: oci://mosaicml-internal-dataset-mpt-oversample/13B-available-tokens/redpajama-books
+        stack-dedup:
+          local: /tmp/dataset/train/stack-dedup
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/52B-train-tokens-from-1.4-passes/stack-dedup
+          repeat: 5.448
           split: train
-          proportion: null
-        redpajama-stackexchange:
-          local: /tmp/dataset/redpajama-stackexchange/train
-          remote: oci://mosaicml-internal-dataset-mpt-oversample/13B-available-tokens/redpajama-stackexchange
+        stack_exchange:
+          local: /tmp/dataset/train/stack_exchange
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/52B-train-tokens-from-1.4-passes/stack_exchange
+          repeat: 3.324
           split: train
-          proportion: null
-        redpajama-wiki:
-          local: /tmp/dataset/redpajama-wiki/train
-          remote: oci://mosaicml-internal-dataset-mpt-oversample/13B-available-tokens/redpajama-wiki
+        wikipedia:
+          local: /tmp/dataset/train/wikipedia
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/52B-train-tokens-from-1.4-passes/wikipedia
+          repeat: 1.571
           split: train
-          proportion: null
-        s2:
-          local: /tmp/dataset/s2/train
-          remote: oci://mosaicml-internal-dataset-mpt-oversample/13B-available-tokens/s2
-          split: train
-          proportion: null
-        stack:
-          local: /tmp/dataset/stack/train
-          remote: oci://mosaicml-internal-dataset-mpt-oversample/13B-available-tokens/stack
-          split: train
-          proportion: null

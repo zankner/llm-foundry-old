@@ -1,4 +1,4 @@
-name: mpt1.5-3b-params-52b-tokens-2.5x-epoch-raw-proportion # Effectively 2.5 passes to reach 10T
+name: mpt1.5-3b-params-52b-tokens-2.5x-epoch-mpt1.5-proportion # Effectively 2.5 passes to reach 10T
 
 integrations:
   - integration_type: git_repo
@@ -14,7 +14,7 @@ integrations:
       - slack-sdk
 
 image: mosaicml/llm-foundry:2.0.1_cu118-latest
-cluster: r9z1 # Set in launch script
+cluster: r14z2 # Set in launch script
 gpu_num: 32 # Set in launch script
 gpu_type: h100_80gb
 
@@ -24,7 +24,7 @@ env_variables:
 
 scheduling:
   resumable: true
-  priority: medium
+  priority: lowest
 
 command: |-
   cd llm-foundry/scripts
@@ -34,7 +34,7 @@ parameters:
   global_seed: 17 # Set in launch script
   max_seq_len: 2048 # max tokens per sequence during training
 
-  run_name: mpt1.5-3b-params-52b-tokens-2.5x-epoch-raw-proportion #Set in launch script
+  run_name: mpt1.5-3b-params-52b-tokens-2.5x-epoch-mpt1.5-proportion #Set in launch script
 
   # Model
   model:
@@ -175,46 +175,46 @@ parameters:
       streams:
         arxiv:
           local: /tmp/dataset/train/arxiv
-          proportion: null
           remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/52B-train-tokens-from-2.5-passes/arxiv
+          repeat: 7.296
           split: train
         c4:
           local: /tmp/dataset/train/c4
-          proportion: null
           remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/52B-train-tokens-from-2.5-passes/c4
+          repeat: 12.057
           split: train
         markdown-dedup:
           local: /tmp/dataset/train/markdown-dedup
-          proportion: null
           remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/52B-train-tokens-from-2.5-passes/markdown-dedup
+          repeat: 22.778
           split: train
         mc4:
           local: /tmp/dataset/train/mc4
-          proportion: null
           remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/52B-train-tokens-from-2.5-passes/mc4
+          repeat: 0.873
           split: train
         peS20:
           local: /tmp/dataset/train/peS20
-          proportion: null
           remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/52B-train-tokens-from-2.5-passes/peS20
+          repeat: 4.99
           split: train
         refined-web:
           local: /tmp/dataset/train/refined-web
-          proportion: null
           remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/52B-train-tokens-from-2.5-passes/refined-web
+          repeat: 4.392
           split: train
         stack-dedup:
           local: /tmp/dataset/train/stack-dedup
-          proportion: null
           remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/52B-train-tokens-from-2.5-passes/stack-dedup
+          repeat: 9.729
           split: train
         stack_exchange:
           local: /tmp/dataset/train/stack_exchange
-          proportion: null
           remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/52B-train-tokens-from-2.5-passes/stack_exchange
+          repeat: 5.936
           split: train
         wikipedia:
           local: /tmp/dataset/train/wikipedia
-          proportion: null
           remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/52B-train-tokens-from-2.5-passes/wikipedia
-          split: train
+          repeat: 2.805
+          split: train 
