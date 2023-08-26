@@ -1,0 +1,220 @@
+name: mpt1.5-3b-params-520b-tokens-4.3x-epoch-raw-proportion # Effectively 4.3 passes to reach 10T
+
+integrations:
+  - integration_type: git_repo
+    git_branch: zack/mpt-over-sampling
+    git_repo: zankner/llm-foundry
+    pip_install: .[gpu]
+    ssh_clone: true
+  - integration_type: wandb
+    entity: mosaic-ml
+    project: mpt-over-sampling
+  - integration_type: "pip_packages"
+    packages:
+      - slack-sdk
+
+image: mosaicml/llm-foundry:2.0.1_cu118-latest
+cluster: r14z2 # Set in launch script
+gpu_num: 32 # Set in launch script
+gpu_type: h100_80gb
+
+env_variables:
+  - key: AWS_PROFILE
+    value: data-force-one
+
+scheduling:
+  resumable: true
+  priority: lowest
+
+command: |-
+  cd llm-foundry/scripts
+  composer train/train.py /mnt/config/parameters.yaml || (echo "Command failed - killing python" && pkill python && exit 1)
+
+parameters:
+  global_seed: 17 # Set in launch script
+  max_seq_len: 2048 # max tokens per sequence during training
+
+  run_name: mpt1.5-3b-params-520b-tokens-4.3x-epoch-raw-proportion #Set in launch script
+
+  # Model
+  model:
+    name: mpt_causal_lm
+    init_device: meta
+    d_model: 2560
+    n_heads: 32
+    n_layers: 32
+    expansion_ratio: 4
+    max_seq_len: ${max_seq_len}
+    vocab_size: 50368 # update for hero run with custom tokenizer
+    no_bias: true
+    attn_config:
+      alibi: true
+      attn_impl: triton
+      clip_qkv: 6
+      attn_uses_sequence_id: false
+
+  # Tokenizer
+  tokenizer:
+    name: EleutherAI/gpt-neox-20b # default tokenizer used for MPT
+    kwargs:
+      model_max_length: ${max_seq_len}
+
+  # Optimization
+  global_train_batch_size: 1024
+  max_duration: 520000000000tok
+
+  optimizer:
+    name: decoupled_lionw
+    lr: 0.00016
+    betas:
+      - 0.9
+      - 0.95
+    weight_decay: 0.00016
+
+  scheduler:
+    name: cosine_with_warmup
+    t_warmup: 0.06dur
+    alpha_f: 0.1
+
+  # System
+  seed: ${global_seed}
+  precision: amp_bf16
+  device_train_microbatch_size: 4
+  device_eval_batch_size: 4
+
+  # FSDP
+  fsdp_config:
+    activation_checkpointing: false
+    activation_checkpointing_reentrant: false
+    activation_cpu_offload: false
+    limit_all_gathers: true
+    mixed_precision: PURE
+    sharding_strategy: FULL_SHARD
+    state_dict_type: full
+    verbose: false
+
+  # Logging
+  eval_first: true
+  eval_interval: 1000ba
+  log_to_console: true
+  console_log_interval: 100ba
+  progress_bar: false
+  python_log_level: DEBUG
+  loggers:
+    wandb:
+      project: mpt-over-sampling
+      tags:
+        - seed-${global_seed}
+        - mpt1.5-mix
+        - 4.3x-pass
+        - 520b-tokens
+      group: ${run_name}
+
+  # Checkpointing
+  autoresume: true
+  save_filename: ba{batch}/rank{rank}.pt
+  save_folder: oci://mosaicml-internal-checkpoints/zack/mpt-oversample/${run_name}-sd-${global_seed}
+  save_interval: 500ba # update for hero run, e.g. 2000ba
+  save_num_checkpoints_to_keep: 1
+
+  # Algos and Callbacks
+  algorithms:
+    gradient_clipping:
+      clipping_threshold: 1
+      clipping_type: norm
+
+  callbacks:
+    lr_monitor: {}
+    average_icl_logger: {}
+    memory_monitor: {}
+    runtime_estimator: {}
+    scheduled_gc:
+      batch_interval: 2000
+    speed_monitor:
+      window_size: 1
+    gpu_hour_logger: {}
+    slack_logger: {}
+
+  # Dataloaders
+  eos_token_id: 0 # update for hero run with custom tokenizer
+  num_canonical_nodes: 32 # update for hero run, must be codivisible by # physical nodes
+
+  # Eval loader
+  eval_loader:
+    name: text
+    drop_last: false
+    num_workers: 8
+    dataset:
+      eos_token_id: ${eos_token_id}
+      max_seq_len: ${max_seq_len}
+      num_canonical_nodes: ${num_canonical_nodes}
+      shuffle: false
+      shuffle_algo: py1b
+      shuffle_seed: ${global_seed}
+      local: /tmp/dataset/val
+      remote: oci://mosaicml-internal-dataset-pile/pre-concat/gpt-neox-20b-seqlen-2048
+      split: val
+
+  # In-context-learning tasks
+  icl_tasks: eval/yamls/tasks_light.yaml
+
+  # Train loader
+  train_loader:
+    name: text
+    drop_last: true
+    num_workers: 1
+    dataset:
+      eos_token_id: ${eos_token_id}
+      max_seq_len: ${max_seq_len}
+      num_canonical_nodes: ${num_canonical_nodes}
+      predownload: 120
+      shuffle: true
+      shuffle_block_size: 4194304
+      shuffle_algo: py1b
+      shuffle_seed: ${global_seed}
+      streams:
+        arxiv:
+          local: /tmp/dataset/train/arxiv
+          proportion: null
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/520b-train-tokens-from-4.3-passes/arxiv
+          split: train
+        c4:
+          local: /tmp/dataset/train/c4
+          proportion: null
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/520b-train-tokens-from-4.3-passes/c4
+          split: train
+        markdown-dedup:
+          local: /tmp/dataset/train/markdown-dedup
+          proportion: null
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/520b-train-tokens-from-4.3-passes/markdown-dedup
+          split: train
+        mc4:
+          local: /tmp/dataset/train/mc4
+          proportion: null
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/520b-train-tokens-from-4.3-passes/mc4
+          split: train
+        peS20:
+          local: /tmp/dataset/train/peS20
+          proportion: null
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/520b-train-tokens-from-4.3-passes/peS20
+          split: train
+        refined-web:
+          local: /tmp/dataset/train/refined-web
+          proportion: null
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/520b-train-tokens-from-4.3-passes/refined-web
+          split: train
+        stack-dedup:
+          local: /tmp/dataset/train/stack-dedup
+          proportion: null
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/520b-train-tokens-from-4.3-passes/stack-dedup
+          split: train
+        stack_exchange:
+          local: /tmp/dataset/train/stack_exchange
+          proportion: null
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/520b-train-tokens-from-4.3-passes/stack_exchange
+          split: train
+        wikipedia:
+          local: /tmp/dataset/train/wikipedia
+          proportion: null
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/520b-train-tokens-from-4.3-passes/wikipedia
+          split: train
