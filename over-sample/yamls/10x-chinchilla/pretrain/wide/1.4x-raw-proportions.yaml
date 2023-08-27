@@ -9,13 +9,13 @@ integrations:
   - integration_type: wandb
     entity: mosaic-ml
     project: mpt-over-sampling
-  - integration_type: "pip_packages"
-    packages:
-      - slack-sdk
+  # - integration_type: "pip_packages"
+  #   packages:
+  #     - slack-sdk
 
 image: mosaicml/llm-foundry:2.0.1_cu118-latest
 cluster: r14z2 # Set in launch script
-gpu_num: 32 # Set in launch script
+gpu_num: 128 # Set in launch script
 gpu_type: h100_80gb
 
 env_variables:
@@ -32,7 +32,7 @@ command: |-
 
 parameters:
   global_seed: 17 # Set in launch script
-  max_seq_len: 4096 # max tokens per sequence during training
+  max_seq_len: 2048 # max tokens per sequence during training
 
   run_name: mpt1.5-3b-params-700b-tokens-1.4x-epoch-mpt1.5-proportion #Set in launch script
 
@@ -186,45 +186,45 @@ parameters:
         arxiv:
           local: /tmp/dataset/train/arxiv
           proportion: null
-          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/700b-train-tokens-from-1.4-passes/arxiv
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/700B-train-tokens-from-1.4-passes/arxiv/
           split: train
         c4:
           local: /tmp/dataset/train/c4
           proportion: null
-          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/700b-train-tokens-from-1.4-passes/c4
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/700b-train-tokens-from-1.4-passes/c4/
           split: train
         markdown-dedup:
           local: /tmp/dataset/train/markdown-dedup
           proportion: null
-          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/700b-train-tokens-from-1.4-passes/markdown-dedup
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/700b-train-tokens-from-1.4-passes/markdown-dedup/
           split: train
         mc4:
           local: /tmp/dataset/train/mc4
           proportion: null
-          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/700b-train-tokens-from-1.4-passes/mc4
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/700b-train-tokens-from-1.4-passes/mc4/
           split: train
         peS20:
           local: /tmp/dataset/train/peS20
           proportion: null
-          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/700b-train-tokens-from-1.4-passes/peS20
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/700b-train-tokens-from-1.4-passes/peS20/
           split: train
         refined-web:
           local: /tmp/dataset/train/refined-web
           proportion: null
-          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/700b-train-tokens-from-1.4-passes/refined-web
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/700b-train-tokens-from-1.4-passes/refined-web/
           split: train
         stack-dedup:
           local: /tmp/dataset/train/stack-dedup
           proportion: null
-          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/700b-train-tokens-from-1.4-passes/stack-dedup
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/700b-train-tokens-from-1.4-passes/stack-dedup/
           split: train
         stack_exchange:
           local: /tmp/dataset/train/stack_exchange
           proportion: null
-          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/700b-train-tokens-from-1.4-passes/stack_exchange
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/700b-train-tokens-from-1.4-passes/stack_exchange/
           split: train
         wikipedia:
           local: /tmp/dataset/train/wikipedia
           proportion: null
-          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/700b-train-tokens-from-1.4-passes/wikipedia
+          remote: s3://data-force-one-datasets/mpt-base-data/gpt-neox-20b-seqlen-2048/700b-train-tokens-from-1.4-passes/wikipedia/
           split: train
