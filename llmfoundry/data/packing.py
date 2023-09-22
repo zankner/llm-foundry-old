@@ -2,10 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import os
-from typing import Callable, Dict, List, Literal, Optional, Tuple
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple
 
 import numpy as np
 import torch
+from omegaconf import DictConfig
+from transformers import PreTrainedTokenizerBase
 
 
 class BinPackWrapper:
@@ -46,11 +48,11 @@ class BinPackWrapper:
         self._leftover_bins: List[Tuple[int, Dict[str, torch.Tensor]]] = []
 
     @property
-    def waste(self):
+    def waste(self) -> float:
         return 1 - (self.n_packed_tokens / self.n_total_tokens)
 
     @property
-    def efficiency(self):
+    def efficiency(self) -> float:
         return self.n_packed_tokens / (self.max_seq_len *
                                        self.n_packed_examples)
 
@@ -98,7 +100,8 @@ class BinPackWrapper:
         return batch
 
 
-def extract_trim_batch_idx(batch: Dict[str, torch.Tensor], idx: int):
+def extract_trim_batch_idx(batch: Dict[str, torch.Tensor],
+                           idx: int) -> Tuple[int, Dict[str, torch.Tensor]]:
     example = {k: v[idx] for k, v in batch.items()}
 
     keep = example['attention_mask'] == 1
@@ -109,8 +112,9 @@ def extract_trim_batch_idx(batch: Dict[str, torch.Tensor], idx: int):
     return size, trim_example
 
 
-def combine_in_place(example: Dict[str, torch.Tensor],
-                     add_on: Dict[str, torch.Tensor]):
+def combine_in_place(
+        example: Dict[str, torch.Tensor],
+        add_on: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
     if 'labels' in add_on:
         # Prevents the last token in example from being trained to
         # predict the first token in add_on, which would make no sense.
@@ -312,7 +316,8 @@ if __name__ == '__main__':
             raise ValueError('`num_packing_ratios` must be a positive integer.')
         return args
 
-    def build_dataloader(cfg, tokenizer, device_batch_size):
+    def build_dataloader(cfg: DictConfig, tokenizer: PreTrainedTokenizerBase,
+                         device_batch_size: int):
         if cfg.name == 'text':
             return build_text_dataloader(cfg, tokenizer, device_batch_size)
         elif cfg.name == 'text_denoising':
@@ -357,7 +362,16 @@ if __name__ == '__main__':
     # build tokenizer
     if 'tokenizer' not in cfg:
         raise ValueError('config must define tokenizer')
-    tokenizer = build_tokenizer(cfg.tokenizer)
+
+    resolved_tokenizer_cfg = om.to_container(cfg.tokenizer, resolve=True)
+    if not isinstance(resolved_tokenizer_cfg, Dict):
+        raise ValueError(
+            'tokenizer config needs to be resolved by omegaconf into a Dict.')
+    tokenizer_cfg: Dict[Any, Any] = resolved_tokenizer_cfg
+
+    tokenizer_name = tokenizer_cfg['name']
+    tokenizer_kwargs = tokenizer_cfg.get('kwargs', {})
+    tokenizer = build_tokenizer(tokenizer_name, tokenizer_kwargs)
 
     # Turn off packing for the dataloader (we want raw, pre-packed examples)
     dataloader_cfg.dataset.packing_ratio = None

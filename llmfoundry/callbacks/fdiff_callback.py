@@ -10,13 +10,15 @@ from composer.loggers import Logger
 
 
 class FDiffMetrics(Callback):
-    """Rate of chage of metrics.
+    """Rate of change of metrics.
 
     tracks and plots the rate of change of metrics effectively taking the
     numerical derivative of the metrics
     """
 
-    def __init__(self, diff_train_metrics=False, diff_eval_metrics=True):
+    def __init__(self,
+                 diff_train_metrics: bool = False,
+                 diff_eval_metrics: bool = True):
         self.diff_train_metrics = diff_train_metrics
         self.diff_eval_metrics = diff_eval_metrics
 
@@ -24,7 +26,7 @@ class FDiffMetrics(Callback):
         self.train_prev_metric = {}
         self.eval_prev_metric = {}
 
-    def batch_end(self, state: State, logger: Logger):
+    def batch_end(self, state: State, logger: Logger) -> None:
         if self.diff_train_metrics:
             if not isinstance(state.loss, torch.Tensor):
                 raise NotImplementedError('Multiple losses not supported yet')
@@ -44,7 +46,7 @@ class FDiffMetrics(Callback):
                 value = state.train_metric_values[k]
                 self.train_prev_metric[k] = value
 
-    def eval_end(self, state: State, logger: Logger):
+    def eval_end(self, state: State, logger: Logger) -> None:
         if self.diff_eval_metrics:
             evaluator = state.dataloader_label
             assert evaluator is not None, 'dataloader should have been set'

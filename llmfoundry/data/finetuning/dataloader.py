@@ -1,15 +1,15 @@
 # Copyright 2022 MosaicML LLM Foundry authors
 # SPDX-License-Identifier: Apache-2.0
-
 import logging
 import os
-from typing import Union
+from typing import Tuple, Union
 
+import datasets as hf_datasets
 import torch
 from composer.utils import dist, get_file, parse_uri
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader
-from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
+from transformers import PreTrainedTokenizerBase
 
 from llmfoundry.data.finetuning.collator import Seq2SeqFinetuningCollator
 from llmfoundry.data.finetuning.tasks import dataset_constructor
@@ -20,10 +20,9 @@ log = logging.getLogger(__name__)
 # HuggingFace hardcodes the ignore index to -100
 _HF_IGNORE_INDEX = -100
 
-Tokenizer = Union[PreTrainedTokenizer, PreTrainedTokenizerFast]
 
-
-def build_finetuning_dataloader(cfg: DictConfig, tokenizer: Tokenizer,
+def build_finetuning_dataloader(cfg: DictConfig,
+                                tokenizer: PreTrainedTokenizerBase,
                                 device_batch_size: int) -> DataLoader:
     """Builds a finetuning dataloader for training or evaluating.
 
@@ -112,24 +111,33 @@ def build_finetuning_dataloader(cfg: DictConfig, tokenizer: Tokenizer,
     _validate_config(cfg.dataset)
 
     # Use EOS as the pad token if none exists
-    if tokenizer.pad_token is None:  # type: ignore
+    if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
+    dataset = None  # for pyright
     if cfg.dataset.get('remote') is not None:
         dataset = dataset_constructor.build_from_streaming(
             tokenizer=tokenizer,
             local=cfg.dataset.local,
             remote=cfg.dataset.get('remote', None),
-            split=cfg.dataset.get('split'),
-            shuffle=cfg.dataset.get('shuffle', False),
-            predownload=cfg.dataset.get('predownload', 100_000),
-            keep_zip=cfg.dataset.get('keep_zip', False),
+            split=cfg.dataset.get('split', None),
             download_retry=cfg.dataset.get('download_retry', 2),
             download_timeout=cfg.dataset.get('download_timeout', 60),
             validate_hash=cfg.dataset.get('validate_hash', None),
-            shuffle_seed=cfg.dataset.get('shuffle_seed', 9176),
-            num_canonical_nodes=cfg.dataset.get('num_canonical_nodes', 128),
+            keep_zip=cfg.dataset.get('keep_zip', False),
+            epoch_size=cfg.dataset.get('epoch_size', None),
+            predownload=cfg.dataset.get('predownload', None),
+            cache_limit=cfg.dataset.get('cache_limit', None),
+            partition_algo=cfg.dataset.get('partition_algo', 'orig'),
+            num_canonical_nodes=cfg.dataset.get('num_canonical_nodes', None),
             batch_size=device_batch_size,
+            shuffle=cfg.dataset.get('shuffle', False),
+            shuffle_algo=cfg.dataset.get('shuffle_algo', 'py1b'),
+            shuffle_seed=cfg.dataset.get('shuffle_seed', 9176),
+            shuffle_block_size=cfg.dataset.get('shuffle_block_size', 1 << 18),
+            sampling_method=cfg.dataset.get('sampling_method', 'balanced'),
+            sampling_granularity=cfg.dataset.get('sampling_granularity', 1),
+            batching_method=cfg.dataset.get('batching_method', 'random'),
         )
 
         collate_fn, dataloader_batch_size = _build_collate_fn(
@@ -166,10 +174,30 @@ def build_finetuning_dataloader(cfg: DictConfig, tokenizer: Tokenizer,
         collate_fn, dataloader_batch_size = _build_collate_fn(
             cfg.dataset, tokenizer, device_batch_size)
 
+        if cfg.drop_last:
+            world_size = dist.get_world_size()
+            minimum_dataset_size = world_size * dataloader_batch_size
+            if hasattr(dataset, '__len__'):
+                full_dataset_size = len(dataset)
+                if full_dataset_size < minimum_dataset_size:
+                    raise ValueError(
+                        f'Your dataset (name={cfg.dataset.hf_name}, split={cfg.dataset.split}) '
+                        +
+                        f'has {full_dataset_size} samples, but your minimum batch size '
+                        +
+                        f'is {minimum_dataset_size} because you are running on {world_size} gpus and '
+                        +
+                        f'your per device batch size is {dataloader_batch_size}. Please increase the number '
+                        +
+                        f'of samples in your dataset to at least {minimum_dataset_size}.'
+                    )
+
+        assert dataset is not None
         return DataLoader(
             dataset,
             collate_fn=collate_fn,
             batch_size=dataloader_batch_size,
+            drop_last=cfg.drop_last,
             sampler=dist.get_sampler(dataset,
                                      drop_last=cfg.drop_last,
                                      shuffle=cfg.dataset.shuffle),
@@ -181,7 +209,7 @@ def build_finetuning_dataloader(cfg: DictConfig, tokenizer: Tokenizer,
         )
 
 
-def _validate_config(dataset_cfg: DictConfig):
+def _validate_config(dataset_cfg: DictConfig) -> None:
     """Validates the dataset configuration.
 
     Makes sure that the dataset is properly configured for either
@@ -235,7 +263,10 @@ def _validate_config(dataset_cfg: DictConfig):
         )
 
 
-def _build_hf_dataset_from_remote(cfg: DictConfig, tokenizer: Tokenizer):
+def _build_hf_dataset_from_remote(
+    cfg: DictConfig, tokenizer: PreTrainedTokenizerBase
+) -> Union[hf_datasets.DatasetDict, hf_datasets.Dataset,
+           hf_datasets.IterableDatasetDict, hf_datasets.IterableDataset]:
     """Builds a dataset from a remote object store.
 
     This function supports 'jsonl', 'csv', and 'parquet' file formats for the dataset. It will attempt to download
@@ -263,28 +294,38 @@ def _build_hf_dataset_from_remote(cfg: DictConfig, tokenizer: Tokenizer):
     """
     supported_extensions = ['jsonl', 'csv', 'parquet']
     finetune_dir = os.path.join(
-        os.path.dirname(os.path.realpath(__file__)),
-        f'downloaded_finetuning_data/{cfg.dataset.split}')
+        os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.realpath(__file__)))),
+        'downloaded_finetuning',
+        cfg.dataset.split if cfg.dataset.split != 'data' else 'data_not',
+    )
     os.makedirs(finetune_dir, exist_ok=True)
     for extension in supported_extensions:
         name = f'{cfg.dataset.hf_name.strip("/")}/{cfg.dataset.split}.{extension}'
         destination = str(
-            os.path.abspath(f'{finetune_dir}/{cfg.dataset.split}.{extension}'))
+            os.path.abspath(
+                os.path.join(
+                    finetune_dir, 'data',
+                    f'{cfg.dataset.split}-00000-of-00001.{extension}')))
         # Since we don't know exactly what the extension will be, since it is one of a list
         # use a signal file to wait for instead of the desired file
         signal_file_path = os.path.join(finetune_dir, '.the_eagle_has_landed')
         if dist.get_local_rank() == 0:
             try:
-                get_file(name, destination, overwrite=True)
+                get_file(path=name, destination=destination, overwrite=True)
             except FileNotFoundError as e:
                 if extension == supported_extensions[-1]:
+                    files_searched = [
+                        f'{cfg.dataset.hf_name}/{cfg.dataset.split}.{ext}'
+                        for ext in supported_extensions
+                    ]
                     raise FileNotFoundError(
-                        f'Could not find a {cfg.dataset.split} file with any of ' + \
+                        f'Could not find a file with any of ' + \
                         f'the supported extensions: {supported_extensions}\n' + \
-                        f'at {cfg.dataset.hf_name}/{cfg.dataset.split}'
+                        f'at {files_searched}'
                     ) from e
                 else:
-                    print(
+                    log.debug(
                         f'Could not find {name}, looking for another extension')
                 continue
 
@@ -304,7 +345,7 @@ def _build_hf_dataset_from_remote(cfg: DictConfig, tokenizer: Tokenizer):
         dist.barrier()
 
         cfg.dataset.hf_name = finetune_dir
-        print(cfg.dataset)
+        log.info(cfg.dataset)
         dataset = dataset_constructor.build_from_hf(
             cfg.dataset,
             max_seq_len=cfg.dataset.max_seq_len,
@@ -313,8 +354,10 @@ def _build_hf_dataset_from_remote(cfg: DictConfig, tokenizer: Tokenizer):
         return dataset
 
 
-def _build_collate_fn(dataset_cfg: DictConfig, tokenizer: Tokenizer,
-                      device_batch_size: int):
+def _build_collate_fn(
+    dataset_cfg: DictConfig, tokenizer: PreTrainedTokenizerBase,
+    device_batch_size: int
+) -> Tuple[Union[Seq2SeqFinetuningCollator, BinPackWrapper], int]:
     collate_fn = Seq2SeqFinetuningCollator(
         tokenizer=tokenizer,
         max_seq_len=dataset_cfg.max_seq_len,
@@ -389,10 +432,9 @@ if __name__ == '__main__':
         'timeout': 0
     })
 
-    tokenizer_cfg = {'name': 'EleutherAI/gpt-neox-20b', 'kwargs': {}}
-    tokenizer_cfg['kwargs'] = {'model_max_length': cfg.dataset.max_seq_len}
-    tokenizer_cfg = om.create(tokenizer_cfg)
-    tokenizer = build_tokenizer(tokenizer_cfg)
+    tokenizer_name = 'EleutherAI/gpt-neox-20b'
+    tokenizer_kwargs = {'model_max_length': cfg.dataset.max_seq_len}
+    tokenizer = build_tokenizer(tokenizer_name, tokenizer_kwargs)
 
     device_batch_size = 2
     dataloader = build_finetuning_dataloader(cfg, tokenizer, device_batch_size)

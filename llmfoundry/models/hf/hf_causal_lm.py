@@ -3,6 +3,7 @@
 
 """Implements a Hugging Causal LM wrapped inside a :class:`.ComposerModel`."""
 
+import logging
 import os
 from typing import Mapping, Union
 
@@ -16,33 +17,33 @@ from composer.metrics.nlp import (InContextLearningLMAccuracy,
                                   LanguageCrossEntropy, LanguagePerplexity)
 from composer.utils import dist
 from omegaconf import DictConfig
-from transformers import (AutoConfig, AutoModelForCausalLM, PreTrainedTokenizer,
-                          PreTrainedTokenizerFast)
+from torch import nn
+from transformers import (AutoConfig, AutoModelForCausalLM,
+                          PreTrainedTokenizerBase)
 
 from llmfoundry.models.hf.hf_fsdp import hf_get_init_device
 from llmfoundry.models.hf.model_wrapper import HuggingFaceModelWithZLoss
+from llmfoundry.models.layers.llama_attention_monkeypatch import \
+    get_llama_attention_patch_fn
 from llmfoundry.models.utils import init_empty_weights
 
 try:
     from peft.peft_model import PeftModel
     model_types = PeftModel, transformers.PreTrainedModel
-    _om_model_config_type = Union[DictConfig, PeftModel,
-                                  transformers.PreTrainedModel]
 
 except ImportError:
     model_types = transformers.PreTrainedModel
-    _om_model_config_type = Union[DictConfig, transformers.PreTrainedModel]
 
 __all__ = ['ComposerHFCausalLM']
 
-Tokenizer = Union[PreTrainedTokenizer, PreTrainedTokenizerFast]
+log = logging.getLogger(__name__)
 
 
 class ComposerHFCausalLM(HuggingFaceModelWithZLoss):
     """Configures a :class:`.HuggingFaceModel` around a Causal LM.
 
     Args:
-        om_model_config (DictConfig | PeftModel | transformers.PreTrainedModel): either n omegaconf dictionary used to configure the model, or an instantiated model object from the peft or transformers library.
+        om_model_config (DictConfig | PeftModel | transformers.PreTrainedModel): either an omegaconf dictionary used to configure the model, or an instantiated model object from the peft or transformers library.
         if DictConfig, the following keys are required:
             cfg.pretrained_model_name_or_path (str): The name of or local path to
                 the HF Causal LM (e.g., `gpt2` to instantiate a GPT2LMHeadModel).
@@ -58,9 +59,10 @@ class ComposerHFCausalLM(HuggingFaceModelWithZLoss):
         tokenizer (PreTrainedTokenizer): The tokenizer that the model will use.
     """
 
-    def __init__(self, om_model_config: _om_model_config_type,
-                 tokenizer: Tokenizer):
-
+    def __init__(self, om_model_config: Union[DictConfig,
+                                              transformers.PreTrainedModel,
+                                              nn.Module],
+                 tokenizer: PreTrainedTokenizerBase):
         # set up training and eval metrics
         train_metrics = [
             LanguageCrossEntropy(),
@@ -78,6 +80,15 @@ class ComposerHFCausalLM(HuggingFaceModelWithZLoss):
 
         # if we are passed a DictConfig, we need to instantiate the model
         if isinstance(om_model_config, DictConfig):
+            if not om_model_config.get('trust_remote_code',
+                                       True) and om_model_config.get(
+                                           'pretrained_model_name_or_path',
+                                           None).startswith('mosaicml/mpt'):
+                raise ValueError(
+                    'trust_remote_code must be set to True for MPT models. Without this, the MPT model code will come from the transformers library, '
+                    +
+                    'which is not significantly slower and not compatible with the LLM foundry training code, rather than the code release by MosaicML.'
+                )
 
             # load the model config
             trust_remote_code = om_model_config.get('trust_remote_code', True)
@@ -102,13 +113,15 @@ class ComposerHFCausalLM(HuggingFaceModelWithZLoss):
                     ]
                     if extra_keys:
                         raise ValueError(
-                            f'Config dict override got unknown keys. '
-                            f'Extra keys: {extra_keys}. '
+                            f'Config dict override got unknown keys. ' +
+                            f'Extra keys: {extra_keys}. ' +
                             f'Expected (a subset of) keys: {list(attr.keys())}.'
                         )
                     getattr(config, k).update(v)
                 else:
                     setattr(config, k, v)
+
+            load_in_8bit = om_model_config.get('load_in_8bit', False)
 
             # below we set up the device to initialize the model on
             init_device = om_model_config.get('init_device', 'cpu')
@@ -129,6 +142,7 @@ class ComposerHFCausalLM(HuggingFaceModelWithZLoss):
                         om_model_config.pretrained_model_name_or_path,
                         trust_remote_code=trust_remote_code,
                         use_auth_token=use_auth_token,
+                        load_in_8bit=load_in_8bit,
                         config=config)
                 else:
                     model = AutoModelForCausalLM.from_config(
@@ -165,6 +179,23 @@ class ComposerHFCausalLM(HuggingFaceModelWithZLoss):
                 os.remove(signal_file_path)
 
             z_loss = om_model_config.get('z_loss', 0.0)
+
+            attention_patch_type = om_model_config.get('attention_patch_type',
+                                                       None)
+            if attention_patch_type is not None:
+                if model.config.model_type != 'llama':
+                    raise ValueError(
+                        f'attention_patch_type is only supported for llama models, but got {model.config.model_type}'
+                    )
+
+                log.debug(
+                    f'Patching llama attention with {attention_patch_type} attention'
+                )
+                from transformers.models.llama.modeling_llama import \
+                    LlamaAttention
+                LlamaAttention.forward = get_llama_attention_patch_fn(
+                    attention_patch_type)
+                model.config.use_cache = False
 
         # elif the model is either a PeftModel or a PreTrainedModel
         elif isinstance(om_model_config, model_types):

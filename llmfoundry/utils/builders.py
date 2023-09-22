@@ -1,40 +1,78 @@
 # Copyright 2022 MosaicML LLM Foundry authors
 # SPDX-License-Identifier: Apache-2.0
 
+import logging
 import os
-from typing import Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
+import torch
 from composer import algorithms
 from composer.callbacks import (EarlyStopper, LRMonitor, MemoryMonitor,
                                 OptimizerMonitor, RuntimeEstimator,
                                 SpeedMonitor)
-from composer.core import Evaluator
+from composer.core import Algorithm, Callback, Evaluator
 from composer.datasets.in_context_learning_evaluation import \
     get_icl_task_dataloader
-from composer.loggers import (TensorboardLogger, WandBLogger,
-                              RemoteUploaderDownloader)
+from composer.loggers import (InMemoryLogger, LoggerDestination, MLFlowLogger,
+                              TensorboardLogger, WandBLogger, RemoteUploaderDownloader)
 from composer.optim import DecoupledAdamW
-from composer.optim.scheduler import (ConstantWithWarmupScheduler,
+from composer.optim.scheduler import (ComposerScheduler,
+                                      ConstantWithWarmupScheduler,
                                       CosineAnnealingWithWarmupScheduler,
                                       LinearWithWarmupScheduler)
 from composer.utils import dist
-from omegaconf import DictConfig
+from omegaconf import DictConfig, ListConfig
 from omegaconf import OmegaConf as om
-from transformers import (AutoTokenizer, PreTrainedTokenizer,
-                          PreTrainedTokenizerFast)
+from torch.optim.optimizer import Optimizer
+from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 from llmfoundry.algorithms import DomainWeightSetter, OnlineBatchSelection
-from llmfoundry.callbacks import (FDiffMetrics, Generate, AverageICLLogger,
-                                  LogDomainLoss, GpuHourLogger, GlobalLRScaling,
+from llmfoundry.callbacks import (EvalGauntlet, FDiffMetrics, Generate, AverageICLLogger,
+                                  LogDomainLoss, GpuHourLogger, GlobalLRScaling, HuggingFaceCheckpointer,
                                   LayerFreezing, MonolithicCheckpointSaver,
                                   ScheduledGarbageCollector, SlackLogger)
 from llmfoundry.optim import (DecoupledAdaLRLion, DecoupledClipLion,
-                              DecoupledLionW)
+                              DecoupledLionW, DecoupledLionW_8bit)
+from llmfoundry.tokenizers.tiktoken import TiktokenTokenizerWrapper
 
-Tokenizer = Union[PreTrainedTokenizer, PreTrainedTokenizerFast]
+log = logging.getLogger(__name__)
 
 
-def build_callback(name, kwargs):
+def build_icl_data_and_gauntlet(
+    icl_tasks_config: Union[str, ListConfig],
+    eval_gauntlet_config: Optional[Union[str, DictConfig]],
+    tokenizer: PreTrainedTokenizerBase,
+    device_eval_batch_size: int,
+    icl_seq_len: int,
+    icl_subset_num_batches: Optional[int] = None
+) -> Tuple[List[Evaluator], List[str], Optional[EvalGauntlet]]:
+    icl_evaluators, logger_keys = build_icl_evaluators(
+        icl_tasks_config,
+        tokenizer,
+        icl_seq_len,
+        device_eval_batch_size,
+        icl_subset_num_batches=icl_subset_num_batches)
+    eval_gauntlet_cb = None
+    if eval_gauntlet_config is not None:
+        if isinstance(eval_gauntlet_config, str):
+            with open(eval_gauntlet_config, 'r') as icl_f:
+                eval_gauntlet_cfg = om.load(icl_f)
+            eval_gauntlet = eval_gauntlet_cfg.eval_gauntlet
+        elif isinstance(eval_gauntlet_config, DictConfig):  # pyright: ignore
+            eval_gauntlet = eval_gauntlet_config
+        else:
+            raise ValueError(
+                f'Got invalid type for eval_gauntlet_config: {type(eval_gauntlet_config)}'
+            )
+        eval_gauntlet.logger_keys = logger_keys
+        eval_gauntlet.benchmark_sizes = {
+            e.label: e.dataloader.num_samples for e in icl_evaluators
+        }
+        eval_gauntlet_cb = EvalGauntlet(**eval_gauntlet)
+    return icl_evaluators, logger_keys, eval_gauntlet_cb
+
+
+def build_callback(name: str, kwargs: Dict[str, Any]) -> Callback:
     if name == 'lr_monitor':
         return LRMonitor()
     elif name == 'average_icl_logger':
@@ -71,22 +109,30 @@ def build_callback(name, kwargs):
         return SlackLogger(**kwargs)
     elif name == 'early_stopper':
         return EarlyStopper(**kwargs)
+    elif name == 'hf_checkpointer':
+        return HuggingFaceCheckpointer(**kwargs)
     else:
         raise ValueError(f'Not sure how to build callback: {name}')
 
 
-def build_logger(name, kwargs):
+def build_logger(name: str, kwargs: Dict[str, Any]) -> LoggerDestination:
     if name == 'wandb':
         return WandBLogger(**kwargs)
     elif name == 'tensorboard':
         return TensorboardLogger(**kwargs)
     elif name == 'remote_uploader':
         return RemoteUploaderDownloader(**kwargs)
+    elif name == 'in_memory_logger':
+        return InMemoryLogger(**kwargs)
+    elif name == 'mlflow':
+        return MLFlowLogger(**kwargs)
+    elif name == 'inmemory':
+        return InMemoryLogger(**kwargs)
     else:
         raise ValueError(f'Not sure how to build logger: {name}')
 
 
-def build_algorithm(name, kwargs):
+def build_algorithm(name: str, kwargs: Dict[str, Any]) -> Algorithm:
     if name == 'gradient_clipping':
         return algorithms.GradientClipping(**kwargs)
     elif name == 'alibi':
@@ -105,87 +151,81 @@ def build_algorithm(name, kwargs):
         raise ValueError(f'Not sure how to build algorithm: {name}')
 
 
-def build_optimizer(cfg, model):
-    if cfg.name == 'decoupled_adamw':
-        return DecoupledAdamW(model.parameters(),
-                              lr=cfg.lr,
-                              betas=cfg.betas,
-                              eps=cfg.eps,
-                              weight_decay=cfg.weight_decay)
-    elif cfg.name == 'decoupled_lionw':
-        return DecoupledLionW(model.parameters(),
-                              lr=cfg.lr,
-                              betas=cfg.betas,
-                              weight_decay=cfg.weight_decay)
-    elif cfg.name == 'clip_lion':
-        return DecoupledClipLion(model.parameters(),
-                                 lr=cfg.lr,
-                                 betas=cfg.betas,
-                                 weight_decay=cfg.weight_decay,
-                                 outlier_threshold=cfg.outlier_threshold)
-    elif cfg.name == 'adalr_lion':
-        return DecoupledAdaLRLion(model.parameters(),
-                                  lr=cfg.lr,
-                                  betas=cfg.betas,
-                                  weight_decay=cfg.weight_decay,
-                                  outlier_threshold=cfg.outlier_threshold,
-                                  timeout=cfg.timeout,
-                                  lr_penalty=cfg.lr_penalty,
-                                  min_scale=cfg.min_scale)
+def build_optimizer(model: torch.nn.Module, name: str,
+                    optimizer_config: Dict[str, Any]) -> Optimizer:
+    if name == 'decoupled_adamw':
+        return DecoupledAdamW(model.parameters(), **optimizer_config)
+    elif name == 'decoupled_lionw':
+        return DecoupledLionW(model.parameters(), **optimizer_config)
+    elif name == 'clip_lion':
+        return DecoupledClipLion(model.parameters(), **optimizer_config)
+    elif name == 'adalr_lion':
+        return DecoupledAdaLRLion(model.parameters(), **optimizer_config)
+    elif name == 'decoupled_lionw_8b':
+        return DecoupledLionW_8bit(model.parameters(), **optimizer_config)
     else:
-        raise ValueError(f'Not sure how to build optimizer: {cfg.name}')
+        raise ValueError(f'Not sure how to build optimizer: {name}')
 
 
-def build_scheduler(cfg):
-    if cfg.name == 'constant_with_warmup':
-        return ConstantWithWarmupScheduler(t_warmup=cfg.t_warmup)
-    elif cfg.name == 'cosine_with_warmup':
-        return CosineAnnealingWithWarmupScheduler(t_warmup=cfg.t_warmup,
-                                                  alpha_f=cfg.alpha_f)
-    elif cfg.name == 'linear_decay_with_warmup':
-        return LinearWithWarmupScheduler(t_warmup=cfg.t_warmup,
-                                         alpha_f=cfg.alpha_f)
+def build_scheduler(name: str,
+                    scheduler_config: Dict[str, Any]) -> ComposerScheduler:
+    if name == 'constant_with_warmup':
+        return ConstantWithWarmupScheduler(**scheduler_config)
+    elif name == 'cosine_with_warmup':
+        return CosineAnnealingWithWarmupScheduler(**scheduler_config)
+    elif name == 'linear_decay_with_warmup':
+        return LinearWithWarmupScheduler(**scheduler_config)
     else:
-        raise ValueError(f'Not sure how to build scheduler: {cfg.name}')
+        raise ValueError(f'Not sure how to build scheduler: {name}')
 
 
-def build_tokenizer(om_tokenizer_config: DictConfig,) -> Tokenizer:
+def build_tokenizer(
+        tokenizer_name: str,
+        tokenizer_kwargs: Dict[str, Any]) -> PreTrainedTokenizerBase:
     os.environ['TRANSFORMERS_NO_ADVISORY_WARNINGS'] = '1'
     os.environ['TOKENIZERS_PARALLELISM'] = 'false'
 
-    resolved_om_tokenizer_config = om.to_container(om_tokenizer_config,
-                                                   resolve=True)
-    tokenizer_kwargs = resolved_om_tokenizer_config.get(  # type: ignore
-        'kwargs', {})
-    tokenizer_name = resolved_om_tokenizer_config['name']  # type: ignore
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name,
-                                              **tokenizer_kwargs)
+    if tokenizer_name.startswith('tiktoken'):
+        tokenizer = TiktokenTokenizerWrapper(**tokenizer_kwargs)
+    else:
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name,
+                                                  **tokenizer_kwargs)
 
-    # HuggingFace does not respect the model_max_length kwarg, and overrides it with
-    # min(kwargs['model_max_length'], original_config['model_max_length']), so we
-    # explicitly set it here
-    tokenizer.model_max_length = tokenizer_kwargs.get(
-        'model_max_length',
-        int(1e30),
-    )
+        # HuggingFace does not respect the model_max_length kwarg, and overrides it with
+        # min(kwargs['model_max_length'], original_config['model_max_length']), so we
+        # explicitly set it here
+        tokenizer.model_max_length = tokenizer_kwargs.get(
+            'model_max_length',
+            int(1e30),
+        )
 
     return tokenizer
 
 
-def build_icl_evaluators(icl_tasks,
-                         tokenizer,
-                         default_max_seq_len,
-                         default_batch_size,
-                         destination_dir=os.getcwd()):
+def build_icl_evaluators(
+    icl_tasks: Union[str, ListConfig],
+    tokenizer: PreTrainedTokenizerBase,
+    default_max_seq_len: int,
+    default_batch_size: int,
+    destination_dir: Optional[str] = None,
+    icl_subset_num_batches: Optional[int] = None,
+) -> Tuple[List[Evaluator], List[str]]:
+    if destination_dir is None:
+        destination_dir = os.getcwd()
+
     evaluators = []
     logger_keys = []
+
+    icl_tasks_list = None
     if isinstance(icl_tasks, str):
-        print(f'Extracting ICL task config from path: {icl_tasks}')
+        log.info(f'Extracting ICL task config from path: {icl_tasks}')
         with open(icl_tasks, 'r') as icl_f:
             icl_task_cfg = om.load(icl_f)
-        icl_tasks = icl_task_cfg.icl_tasks
+        icl_tasks_list = icl_task_cfg.icl_tasks
+    else:
+        icl_tasks_list = icl_tasks
 
-    def _validate_cfg(icl_cfg):
+    def _validate_cfg(icl_cfg: DictConfig):
         assert 'label' in icl_cfg
         assert 'dataset_uri' in icl_cfg and icl_cfg.dataset_uri is not None
         assert 'icl_task_type' in icl_cfg
@@ -220,7 +260,8 @@ def build_icl_evaluators(icl_tasks,
         if 'batch_size' not in icl_cfg:
             icl_cfg.batch_size = default_batch_size
 
-    for icl_cfg in icl_tasks:
+    for icl_cfg in icl_tasks_list:
+        assert isinstance(icl_cfg, DictConfig)
         _validate_cfg(icl_cfg)
         for num_fewshot in list(icl_cfg.num_fewshot):
             if tokenizer.pad_token_id is None:
@@ -268,6 +309,7 @@ def build_icl_evaluators(icl_tasks,
                 evaluators.append(
                     Evaluator(label=label,
                               dataloader=dataloaders,
-                              metric_names=metric_names),)
+                              metric_names=metric_names,
+                              subset_num_batches=icl_subset_num_batches))
 
     return evaluators, logger_keys

@@ -8,7 +8,8 @@ Inspired by https://github.com/karpathy/minGPT/blob/master/mingpt/model.py
 
 import math
 import warnings
-from typing import List, Optional, Tuple, Union
+from typing import (Any, Dict, List, Mapping, MutableMapping, Optional, Tuple,
+                    Union)
 
 import torch
 import torch.nn as nn
@@ -23,16 +24,18 @@ from composer.models import HuggingFaceModel
 from composer.utils import dist
 from omegaconf import DictConfig
 from omegaconf import OmegaConf as om
-from transformers import (PreTrainedModel, PreTrainedTokenizer,
-                          PreTrainedTokenizerFast)
+from transformers import PreTrainedModel, PreTrainedTokenizerBase
 from transformers.modeling_outputs import (BaseModelOutputWithPast,
                                            CausalLMOutputWithPast)
 
 from llmfoundry.models.layers.attention import attn_bias_shape, build_attn_bias
 from llmfoundry.models.layers.blocks import MPTBlock
 from llmfoundry.models.layers.custom_embedding import SharedEmbedding
-from llmfoundry.models.layers.fc import FC_CLASS_REGISTRY
-from llmfoundry.models.layers.ffn import FFN_CLASS_REGISTRY, MPTMLP, build_ffn
+from llmfoundry.models.layers.fc import FC_CLASS_REGISTRY as FC_CLASS_REGISTRY
+from llmfoundry.models.layers.ffn import \
+    FFN_CLASS_REGISTRY as FFN_CLASS_REGISTRY
+from llmfoundry.models.layers.ffn import MPTMLP as MPTMLP
+from llmfoundry.models.layers.ffn import build_ffn as build_ffn
 from llmfoundry.models.layers.norm import NORM_CLASS_REGISTRY
 from llmfoundry.models.mpt.configuration_mpt import MPTConfig
 
@@ -56,12 +59,14 @@ from llmfoundry.models.utils.param_init_fns import (
 )
 
 try:
-    from llmfoundry.models.layers.flash_attn_triton import flash_attn_func
+    from llmfoundry.models.layers.flash_attn_triton import flash_attn_func as flash_attn_func
 except:
     pass
 # isort: on
 
-Tokenizer = Union[PreTrainedTokenizer, PreTrainedTokenizerFast]
+import logging
+
+log = logging.getLogger(__name__)
 
 
 class MPTPreTrainedModel(PreTrainedModel):
@@ -118,8 +123,8 @@ class MPTModel(MPTPreTrainedModel):
         self.norm_f = norm_class(config.d_model, device=config.init_device)
 
         if config.init_device != 'meta':
-            print(
-                f'You are using {config.init_device=}, but you can also use config.init_device="meta" with Composer + FSDP for fast initialization.'
+            log.info(
+                f'We recommend using config.init_device="meta" with Composer + FSDP for faster initialization.'
             )
             self.apply(self.param_init_fn)
 
@@ -142,35 +147,27 @@ class MPTModel(MPTPreTrainedModel):
             for module in self.modules():
                 if hasattr(module, 'bias') and isinstance(
                         module.bias, nn.Parameter):
-                    if config.verbose:
-                        warnings.warn(
-                            f'Removing bias ({module.bias}) from {module}.')
+                    log.info(f'Removing bias ({module.bias}) from {module}.')
                     module.register_parameter('bias', None)
 
-        # Print verbose info
-        if config.verbose and config.verbose > 2:
-            print(self)
-        if 'verbose' not in self.config.init_config:
-            self.config.init_config['verbose'] = self.config.verbose
-        if self.config.init_config['verbose'] > 1:
-            init_fn_name = self.config.init_config['name']
-            warnings.warn(f'Using {init_fn_name} initialization.')
+        log.debug(self)
+        log.debug(f'Using {self.config.init_config["name"]} initialization.')
 
-    def get_input_embeddings(self):
+    def get_input_embeddings(self) -> nn.Embedding:
         return self.wte
 
-    def set_input_embeddings(self, value: nn.Embedding):
+    def set_input_embeddings(self, value: nn.Embedding) -> None:
         self.wte = value
 
     @torch.no_grad()
     def _attn_bias(
         self,
-        device,
-        dtype,
+        device: torch.device,
+        dtype: torch.dtype,
         attention_mask: Optional[torch.ByteTensor] = None,
         prefix_mask: Optional[torch.ByteTensor] = None,
         sequence_id: Optional[torch.LongTensor] = None,
-    ):
+    ) -> Tuple[Optional[torch.Tensor], Optional[torch.ByteTensor]]:
         if not self._attn_bias_initialized:
             if self.attn_bias_shape:
                 self.attn_bias = torch.zeros(self.attn_bias_shape,
@@ -194,7 +191,7 @@ class MPTModel(MPTPreTrainedModel):
 
         if self.attn_bias is not None:
             # .to(*args, **kwargs) is a no-op if tensor is already on
-            # specified device or of specificed dtype
+            # specified device or of specified dtype
             self.attn_bias = self.attn_bias.to(dtype=dtype, device=device)
 
         attn_bias = self.attn_bias
@@ -235,7 +232,7 @@ class MPTModel(MPTPreTrainedModel):
         return attn_bias, None
 
     def _apply_prefix_mask(self, attn_bias: torch.Tensor,
-                           prefix_mask: torch.Tensor):
+                           prefix_mask: torch.Tensor) -> torch.Tensor:
         s_k, s_q = attn_bias.shape[-2:]
         if (s_k != self.config.max_seq_len) or (s_q != self.config.max_seq_len):
             raise ValueError(
@@ -266,7 +263,7 @@ class MPTModel(MPTPreTrainedModel):
         return attn_bias
 
     def _apply_sequence_id(self, attn_bias: torch.Tensor,
-                           sequence_id: torch.LongTensor):
+                           sequence_id: torch.LongTensor) -> torch.Tensor:
         seq_len = sequence_id.shape[-1]
         if seq_len > self.config.max_seq_len:
             raise ValueError(
@@ -300,17 +297,17 @@ class MPTModel(MPTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         use_cache: Optional[bool] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
-    ):
+    ) -> BaseModelOutputWithPast:
         return_dict = (return_dict
                        if return_dict is not None else self.config.return_dict)
         use_cache = (use_cache
                      if use_cache is not None else self.config.use_cache)
 
         if attention_mask is not None:
-            attention_mask = attention_mask.bool()
+            attention_mask = attention_mask.bool()  # type: ignore
 
         if prefix_mask is not None:
-            prefix_mask = prefix_mask.bool()
+            prefix_mask = prefix_mask.bool()  # type: ignore
 
         # These args are passed in by keyword in huggingface's generate function
         # https://github.com/huggingface/transformers/blob/68287689f2f0d8b7063c400230b3766987abf18d/src/transformers/generation/utils.py#L2201-L2206
@@ -324,9 +321,8 @@ class MPTModel(MPTPreTrainedModel):
                     'output_attentions is not implemented for MPT when using attn_impl `flash` or `triton`.'
                 )
 
-        if (attention_mask is not None and
-                attention_mask[:, 0].sum() != attention_mask.shape[0] and
-                self.training):
+        if (self.training and attention_mask is not None and
+                attention_mask[:, 0].sum() != attention_mask.shape[0]):
             raise NotImplementedError(
                 'MPT does not support training with left padding.')
 
@@ -359,7 +355,7 @@ class MPTModel(MPTPreTrainedModel):
             S <= self.config.max_seq_len
         ), f'Cannot forward input with seq_len={S}, this model only supports seq_len<={self.config.max_seq_len}'
 
-        tok_emb = self.wte(input_ids)  # type: ignore
+        tok_emb = self.wte(input_ids)
         if self.learned_pos_emb:
             past_position = 0
             if past_key_values is not None:
@@ -379,6 +375,7 @@ class MPTModel(MPTPreTrainedModel):
             if S + past_position > self.config.max_seq_len:
                 raise ValueError(
                     f'Cannot forward input with past sequence length {past_position} and current sequence length '
+                    +
                     f'{S + 1}, this model only supports total sequence length <= {self.config.max_seq_len}.'
                 )
             pos = torch.arange(
@@ -395,14 +392,14 @@ class MPTModel(MPTPreTrainedModel):
                     min=0,
                 )
 
-            pos_emb = self.wpe(pos)  # type: ignore
+            pos_emb = self.wpe(pos)
             x = tok_emb + pos_emb
         else:
             # ALiBi and NoPE use this path (RoPE will also use this path if / when enabled)
             x = tok_emb
 
         if self.embedding_fraction == 1:
-            x = self.emb_drop(x)  # type: ignore
+            x = self.emb_drop(x)
         else:
             # this implementation is proposed on page 7 of the GLM-130B paper https://arxiv.org/abs/2210.02414
             x_shrunk = (x * self.embedding_fraction) + (
@@ -425,7 +422,7 @@ class MPTModel(MPTPreTrainedModel):
 
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        for b_idx, block in enumerate(self.blocks):  # type: ignore
+        for b_idx, block in enumerate(self.blocks):
             if output_hidden_states:
                 assert all_hidden_states is not None  # pyright
                 all_hidden_states = all_hidden_states + (x,)
@@ -437,6 +434,7 @@ class MPTModel(MPTPreTrainedModel):
                 attn_bias=attn_bias,
                 attention_mask=attention_mask,
                 is_causal=self.is_causal,
+                output_attentions=bool(output_attentions),
             )
             if past_key_values is not None:
                 past_key_values[b_idx] = past_key_value
@@ -445,7 +443,7 @@ class MPTModel(MPTPreTrainedModel):
                 assert all_self_attns is not None  # pyright
                 all_self_attns = all_self_attns + (attn_weights,)
 
-        x = self.norm_f(x)  # type: ignore
+        x = self.norm_f(x)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
@@ -460,7 +458,7 @@ class MPTModel(MPTPreTrainedModel):
         )
 
     # Param Initialization, needed for device='meta' fast initialization
-    def param_init_fn(self, module):
+    def param_init_fn(self, module: nn.Module) -> None:
         init_fn_name = self.config.init_config['name']
         MODEL_INIT_REGISTRY[init_fn_name](
             module=module,
@@ -470,11 +468,11 @@ class MPTModel(MPTPreTrainedModel):
         )
 
     # FSDP Wrap function
-    def fsdp_wrap_fn(self, module):
+    def fsdp_wrap_fn(self, module: nn.Module) -> bool:
         return isinstance(module, MPTBlock)
 
     # Activation Checkpointing
-    def activation_checkpointing_fn(self, module):
+    def activation_checkpointing_fn(self, module: nn.Module) -> bool:
         return isinstance(module, MPTBlock)
 
 
@@ -486,7 +484,7 @@ class MPTForCausalLM(MPTPreTrainedModel):
             raise ValueError(
                 'MPTForCausalLM only supports tied word embeddings')
 
-        print(f'Instantiating an MPTForCausalLM model from {__file__}')
+        log.info(f'Instantiating an MPTForCausalLM model from {__file__}')
 
         self.transformer: MPTModel = MPTModel(config)
 
@@ -510,22 +508,24 @@ class MPTForCausalLM(MPTPreTrainedModel):
                     )
             self.logit_scale = logit_scale
 
-    def get_input_embeddings(self):
+    def get_input_embeddings(self) -> nn.Embedding:
         return self.transformer.wte
 
-    def set_input_embeddings(self, value):
+    def set_input_embeddings(
+            self, value: Union[SharedEmbedding, nn.Embedding]) -> None:
         self.transformer.wte = value
 
-    def get_output_embeddings(self):
+    def get_output_embeddings(self) -> nn.Embedding:
         return self.transformer.wte
 
-    def set_output_embeddings(self, new_embeddings):
+    def set_output_embeddings(
+            self, new_embeddings: Union[SharedEmbedding, nn.Embedding]) -> None:
         self.transformer.wte = new_embeddings
 
-    def set_decoder(self, decoder):
+    def set_decoder(self, decoder: MPTModel) -> None:
         self.transformer = decoder
 
-    def get_decoder(self):
+    def get_decoder(self) -> MPTModel:
         return self.transformer
 
     def forward(
@@ -541,7 +541,7 @@ class MPTForCausalLM(MPTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         use_cache: Optional[bool] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-    ):
+    ) -> CausalLMOutputWithPast:
         return_dict = (return_dict
                        if return_dict is not None else self.config.return_dict)
         use_cache = (use_cache
@@ -596,7 +596,7 @@ class MPTForCausalLM(MPTPreTrainedModel):
         )
 
     # Param Initialization, needed for device='meta' fast initialization
-    def param_init_fn(self, module):
+    def param_init_fn(self, module: nn.Module) -> None:
         init_fn_name = self.config.init_config['name']
         MODEL_INIT_REGISTRY[init_fn_name](
             module=module,
@@ -606,20 +606,21 @@ class MPTForCausalLM(MPTPreTrainedModel):
         )
 
     # FSDP Wrap function
-    def fsdp_wrap_fn(self, module):
+    def fsdp_wrap_fn(self, module: nn.Module) -> bool:
         return isinstance(module, MPTBlock)
 
     # Activation Checkpointing
-    def activation_checkpointing_fn(self, module):
+    def activation_checkpointing_fn(self, module: nn.Module) -> bool:
         return isinstance(module, MPTBlock)
 
     def prepare_inputs_for_generation(
         self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        **kwargs,
-    ):
+        input_ids: torch.Tensor,
+        past_key_values: Optional[List[Tuple[torch.Tensor,
+                                             torch.Tensor]]] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        **kwargs: Any,
+    ) -> Dict[str, Any]:
         if inputs_embeds is not None:
             raise NotImplementedError(
                 'inputs_embeds is not implemented for MPT yet')
@@ -657,7 +658,9 @@ class MPTForCausalLM(MPTPreTrainedModel):
         }
 
     @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
+    def _reorder_cache(
+            past_key_values: List[Tuple[torch.Tensor, torch.Tensor]],
+            beam_idx: torch.LongTensor) -> List[Tuple[torch.Tensor, ...]]:
         """Used by HuggingFace generate when using beam search with kv-caching.
 
         See https://github.com/huggingface/transformers/blob/3ec7a47664ebe40c40f4b722f6bb1cd30c3821ec/src/transformers/models/gpt2/modeling_gpt2.py#L1122-L1133
@@ -678,7 +681,7 @@ class ComposerMPTCausalLM(HuggingFaceModel):
     def __init__(
         self,
         om_model_config: DictConfig,
-        tokenizer: Optional[Tokenizer] = None,
+        tokenizer: Optional[PreTrainedTokenizerBase] = None,
     ):
         resolved_om_model_config = om.to_container(om_model_config,
                                                    resolve=True)
@@ -711,17 +714,18 @@ class ComposerMPTCausalLM(HuggingFaceModel):
         loss_fn_config = om_model_config.get('loss_fn', 'fused_crossentropy')
         if loss_fn_config == 'fused_crossentropy':
             try:
-                from flash_attn.losses.cross_entropy import CrossEntropyLoss as FusedCrossEntropyLoss  # type: ignore # isort: skip
+                from flash_attn.losses.cross_entropy import \
+                    CrossEntropyLoss as FusedCrossEntropyLoss
 
-                if hf_config.verbose > 1:
-                    warnings.warn('Using Fused Cross Entropy Loss.')
                 self.loss_fn = FusedCrossEntropyLoss(ignore_index=-100)
                 self.proxy_loss_fn = FusedCrossEntropyLoss(ignore_index=-100,
                                                            reduction="none")
             except:
                 raise ValueError(
                     'Fused Cross Entropy is not installed. Either (1) have a CUDA-compatible GPU '
+                    +
                     'and `pip install .[gpu]` if installing from source or `pip install xentropy-cuda-lib@git+https://github.com/HazyResearch/flash-attention.git@v1.0.3#subdirectory=csrc/xentropy` '
+                    +
                     'if installing from pypi, or (2) set your config model.loss_fn=torch_crossentropy.'
                 )
         elif loss_fn_config == 'torch_crossentropy':
@@ -733,12 +737,12 @@ class ComposerMPTCausalLM(HuggingFaceModel):
                 f'Specified loss_fn={self.loss_fn} not recognized. `loss_fn` must be one of [`fused_crossentropy`, `torch_crossentropy`].'
             )
 
-    def get_targets(self, batch):
+    def get_targets(self, batch: Mapping) -> torch.Tensor:
         targets = torch.roll(batch['labels'], shifts=-1)
         targets[:, -1] = -100
         return targets
 
-    def forward(self, batch):
+    def forward(self, batch: MutableMapping) -> CausalLMOutputWithPast:
         if self.model.transformer.prefix_lm:
             add_bidirectional_mask_if_missing(batch)
         # Note: prefix_mask is only used if model.prefix_lm is True
@@ -750,12 +754,13 @@ class ComposerMPTCausalLM(HuggingFaceModel):
             inputs_embeds=batch.get('inputs_embeds', None),
         )
 
-    def loss(self, outputs, batch):
+    def loss(self, outputs: CausalLMOutputWithPast,
+             batch: Mapping) -> torch.Tensor:
         targets = self.get_targets(batch)
         return self.loss_fn(outputs.logits.view(-1, outputs.logits.size(-1)),
                             targets.view(-1))
 
-    def flops_per_batch(self, batch):
+    def flops_per_batch(self, batch: Mapping) -> int:
         # Note: this computation does not take into account padding, and assumes
         # that the dataset has been constructed without padding. Additionally, we
         # assume the backward pass is approximately 2x the forward pass

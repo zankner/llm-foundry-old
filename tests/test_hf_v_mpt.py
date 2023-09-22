@@ -1,7 +1,7 @@
 # Copyright 2022 MosaicML LLM Foundry authors
 # SPDX-License-Identifier: Apache-2.0
-
 import warnings
+from typing import Optional
 
 import pytest
 import torch
@@ -40,7 +40,8 @@ from llmfoundry import COMPOSER_MODEL_REGISTRY
     ('torch', 0.0, False, None, True),
     ('triton', 0.0, False, None, True),
 ])
-def test_compare_hf_v_mpt(attn_impl, dropout, alibi, mask_val, no_attn_mask):
+def test_compare_hf_v_mpt(attn_impl: str, dropout: float, alibi: bool,
+                          mask_val: Optional[int], no_attn_mask: bool):
     warnings.filterwarnings(
         action='ignore',
         message='Torchmetrics v0.9 introduced a new argument class property')
@@ -144,6 +145,7 @@ def test_compare_hf_v_mpt(attn_impl, dropout, alibi, mask_val, no_attn_mask):
                                                    model_cfg.max_seq_len),
                                              dtype=torch.int64).to(device)
         # mask out some tokens
+        assert mask_val is not None
         batch['attention_mask'][:, model_cfg.max_seq_len // 2:] = mask_val
         kpm = batch['attention_mask'].view(*batch['attention_mask'].shape, 1)
 
@@ -163,7 +165,7 @@ def test_compare_hf_v_mpt(attn_impl, dropout, alibi, mask_val, no_attn_mask):
     print(f'{hf_model_fwd.mean().item() = }\n{model_fwd.mean().item() = }')
     if hf_model_fwd.mean().allclose(model_fwd.mean()):
         warn_msg = f'WARNING: model_fwd ({model_fwd}) and hf_model_fwd ({hf_model_fwd}) are very close at init.'
-        raise warnings.warn(warn_msg)  # type: ignore
+        raise RuntimeError(warn_msg)
 
     hf_model_statedict = hf_model.state_dict()
 

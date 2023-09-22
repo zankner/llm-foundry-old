@@ -2,12 +2,13 @@
 # SPDX-License-Identifier: Apache-2.0
 
 try:
+    from llmfoundry.callbacks.eval_gauntlet_callback import EvalGauntlet
     from llmfoundry.callbacks.fdiff_callback import FDiffMetrics
     from llmfoundry.callbacks.generate_callback import Generate
     from llmfoundry.callbacks.log_average_icl import AverageICLLogger
     from llmfoundry.callbacks.gpu_hours_logger import GpuHourLogger
     from llmfoundry.callbacks.log_domain_loss import LogDomainLoss
-    from llmfoundry.callbacks.model_gauntlet_callback import ModelGauntlet
+    from llmfoundry.callbacks.hf_checkpointer import HuggingFaceCheckpointer
     from llmfoundry.callbacks.monolithic_ckpt_callback import \
         MonolithicCheckpointSaver
     from llmfoundry.callbacks.resumption_callbacks import (GlobalLRScaling,
@@ -31,5 +32,7 @@ __all__ = [
     'LayerFreezing',
     'ScheduledGarbageCollector',
     'SlackLogger',
+    'EvalGauntlet',
     'ModelGauntlet',
+    'HuggingFaceCheckpointer',
 ]
