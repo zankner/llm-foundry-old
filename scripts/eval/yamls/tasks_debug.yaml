@@ -1,0 +1,5 @@
+icl_tasks:
+  - label: winograd
+    dataset_uri: eval/local_data/language_understanding/winograd_wsc.jsonl # ADD YOUR OWN DATASET URI
+    num_fewshot: [0]
+    icl_task_type: schema
