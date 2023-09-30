@@ -125,6 +125,7 @@ class EvalGauntlet(Callback):
         if len(new_metrics) == 0:
             return {}
         composite_scores = {}
+        raw_composite_scores = {}
 
         for category in self.categories:
             missing_metrics = []
@@ -145,7 +146,15 @@ class EvalGauntlet(Callback):
                     if self.rescale_accuracy and self.subtract_random_baseline:
                         score /= 1.0 - benchmark['random_baseline']
 
+                    normalized_score = (score - benchmark["random_baseline"]
+                                       ) / (1.0 - benchmark["random_baseline"])
+
                     composite_scores[category['name']].append({
+                        'name': benchmark['name'],
+                        'score': normalized_score,
+                        'weighting': benchmark['weighting']
+                    })
+                    raw_composite_scores[category['name']].append({
                         'name': benchmark['name'],
                         'score': score,
                         'weighting': benchmark['weighting']
@@ -162,16 +171,30 @@ class EvalGauntlet(Callback):
             composite_scores[category['name']] = sum(
                 k['score'] * (k['weighting'] / total_weight)
                 for k in composite_scores[category['name']])
+            raw_composite_scores[category['name']] = sum(
+                k['score'] * (k['weighting'] / total_weight)
+                for k in raw_composite_scores[category['name']])
 
         composite_scores = {
             f'icl/metrics/eval_gauntlet/{k}': v
             for k, v in composite_scores.items()
         }
+        raw_composite_scores = {
+            f'icl/metrics/raw_eval_gauntlet/{k}': v
+            for k, v in raw_composite_scores.items()
+        }
 
         composite_scores['icl/metrics/eval_gauntlet/average'] = sum(
             composite_scores.values()) / len(composite_scores.values()) if len(
                 composite_scores.values()) > 0 else 0
+
+        raw_composite_scores['icl/metrics/raw_eval_gauntlet/average'] = sum(
+            raw_composite_scores.values()) / len(
+                raw_composite_scores.values()) if len(
+                    raw_composite_scores.values()) > 0 else 0
+
         if logger is not None:
-            logger.log_metrics(composite_scores)
+            combined_scores = {**composite_scores, **raw_composite_scores}
+            logger.log_metrics(combined_scores)
 
         return composite_scores
