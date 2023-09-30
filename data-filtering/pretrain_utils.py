@@ -3,7 +3,7 @@ import os
 from omegaconf import OmegaConf as om
 from mcli import create_run
 
-CKPT_BASE = "oci://mosaicml-internal-checkpoints/zack/amortized-obs/"
+CKPT_BASE = "oci://mosaicml-internal-checkpoints/zack/data-filtering/"
 
 
 def set_common_args(args,
@@ -105,9 +105,9 @@ def build_model_arch(model_size):
     return model_cfg
 
 
-def build_remote_base(num_holdout_tokens, dataset):
-    return os.path.join("oci://mosaicml-internal-amortized-obs", dataset,
-                        f"{num_holdout_tokens}-holdout-tokens")
+def build_dataset_base(dataset: str, tokenizer_name: str, seq_len: int,
+                       num_tokens: int, num_passes: str, holdout: bool):
+    return f"s3://data-force-one-datasets/selection-via-proxy/{dataset}/{tokenizer_name}-seqlen-{seq_len}/52B-total-available-holdout-tokens-partition-sd-17/{'holdout' if holdout else 'train'}/{num_tokens}-tokens-from-{num_passes}-passes/combined/mds"
 
 
 def build_ref_base(num_tokens, num_params):

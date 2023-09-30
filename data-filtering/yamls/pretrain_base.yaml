@@ -1,17 +1,24 @@
-name: rho
+name: # set by launch script
+
+env_variables:
+  - key: AWS_PROFILE
+    value: data-force-one
+  - key: NCCL_IB_PCI_RELAXED_ORDERING
+    value: 1
 
 integrations:
   - integration_type: git_repo
-    git_branch: zack/amortized-selection
+    git_branch: zack/data-filtering
     git_repo: zankner/llm-foundry
     pip_install: .[gpu]
     ssh_clone: true
   - integration_type: wandb
     entity: mosaic-ml
-    project: amortized-selection
+    project: neural-data-filtering
   - integration_type: "pip_packages"
     packages:
       - slack-sdk
+      - tiktoken
 
 image: # Set in launch script
 cluster: # Set in launch script
@@ -23,7 +30,7 @@ command: |-
 
 parameters:
   global_seed: # Set in launch script
-  max_seq_len: 2048 # max tokens per sequence during training
+  max_seq_len: 4096 # max tokens per sequence during training
 
   run_name: #Set in launch script
 
@@ -36,31 +43,40 @@ parameters:
     n_layers: # Set in launch script
     expansion_ratio: 4
     max_seq_len: ${max_seq_len}
-    vocab_size: 50432 # update for hero run with custom tokenizer
+    vocab_size: 100352 # update for hero run with custom tokenizer
+    tokenizer_name: ${tokenizer_name}
     no_bias: true
+    norm_type: low_precision_layernorm
+    emb_pdrop: 0
+    resid_pdrop: 0
+    init_config:
+      init_nonlinearity: relu
+      name: kaiming_normal_
     attn_config:
       alibi: true
       attn_impl: triton
       clip_qkv: 6
-      attn_uses_sequence_id: true
+      attn_uses_sequence_id: false
+      attn_pdrop: 0
 
   # Tokenizer
+  tokenizer_name: tiktoken
   tokenizer:
-    name: EleutherAI/gpt-neox-20b # default tokenizer used for MPT
+    name: ${tokenizer_name} # default tokenizer used for MPT
     kwargs:
-      model_max_length: ${max_seq_len}
+      model_name: gpt-4
 
   # Optimization
-  global_train_batch_size: 512 
+  global_train_batch_size: 1024
   max_duration: # Set by launch script
 
   optimizer:
     name: decoupled_lionw
-    lr: 2.0e-4
+    lr: 0.00016
     betas:
       - 0.9
       - 0.95
-    weight_decay: 2.0e-4
+    weight_decay: 0.00016
 
   scheduler:
     name: cosine_with_warmup
@@ -72,7 +88,6 @@ parameters:
   precision: amp_bf16
   device_train_microbatch_size: # Set in launch script
   device_eval_batch_size: # Set in launch script
-
 
   # FSDP
   fsdp_config:
@@ -87,14 +102,14 @@ parameters:
 
   # Logging
   eval_first: true
-  eval_interval: 2000ba
+  eval_interval: 0.1dur
   log_to_console: true
   console_log_interval: 100ba
   progress_bar: false
   python_log_level: DEBUG
   loggers:
     wandb:
-      project: amortized-selection
+      project: neural-data-filtering
       tags:
         - seed-${global_seed}
       group: ${run_name}
@@ -114,7 +129,6 @@ parameters:
 
   callbacks:
     lr_monitor: {}
-    average_icl_logger: {}
     memory_monitor: {}
     runtime_estimator: {}
     scheduled_gc:
@@ -128,24 +142,27 @@ parameters:
   eos_token_id: 0 # update for hero run with custom tokenizer
   num_canonical_nodes: 128 # update for hero run, must be codivisible by # physical nodes
 
-  # Eval loader
-  eval_loader:
-    name: text
-    drop_last: false
-    num_workers: 8
-    dataset:
-      eos_token_id: ${eos_token_id}
-      max_seq_len: ${max_seq_len}
-      num_canonical_nodes: ${num_canonical_nodes}
-      shuffle: false
-      shuffle_algo: py1b
-      shuffle_seed: ${global_seed}
-      local: /tmp/dataset/val
-      remote: oci://mosaicml-internal-dataset-pile/pre-concat/gpt-neox-20b-seqlen-2048
-      split: val
+  # TMP NOT EVALUATING TEST PPLX
+  # # Eval loader
+  # eval_loader:
+  #   name: text
+  #   drop_last: false
+  #   num_workers: 8
+  #   dataset:
+  #     eos_token_id: ${eos_token_id}
+  #     max_seq_len: ${max_seq_len}
+  #     num_canonical_nodes: ${num_canonical_nodes}
+  #     shuffle: false
+  #     shuffle_algo: py1b
+  #     shuffle_seed: ${global_seed}
+  #     local: /tmp/dataset/val
+  #     remote: oci://mosaicml-internal-dataset-pile/pre-concat/gpt-neox-20b-seqlen-2048
+  #     split: val
 
   # In-context-learning tasks
-  icl_tasks: eval/yamls/tasks_light.yaml
+  icl_tasks: eval/yamls/tasks.yaml
+  eval_gauntlet: eval/yamls/eval_gauntlet.yaml
+  icl_seq_len: 2048
 
   # Train loader
   train_loader:
@@ -153,14 +170,16 @@ parameters:
     drop_last: true
     num_workers: 1
     dataset:
+      cache_limit: 2tb
+      download_timeout: 360
       eos_token_id: ${eos_token_id}
       max_seq_len: ${max_seq_len}
       num_canonical_nodes: ${num_canonical_nodes}
       shuffle: true
-      shuffle_algo: py1b
+      shuffle_algo: py1br
       predownload: 16777216
       shuffle_block_size: 16777216
       shuffle_seed: ${global_seed}
       local: /tmp/dataset/train
       remote: # Set by launch script
-      split: train
+      split: null

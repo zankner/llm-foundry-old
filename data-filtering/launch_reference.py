@@ -4,7 +4,7 @@ import os
 from mcli import RunConfig
 
 from pretrain_utils import (CKPT_BASE, set_common_args, launch_run,
-                            build_remote_base, build_ref_base)
+                            build_dataset_base)
 
 if __name__ == "__main__":
     # System args
@@ -25,30 +25,29 @@ if __name__ == "__main__":
     parser.add_argument("--ref-num-tokens",
                         type=str,
                         required=True,
-                        choices=["2B", "5B", "20B", "26B", "130B"])
+                        choices=["2B", "5B", "20B", "26B", "52B", "130B"])
     parser.add_argument("--device-batch-size", type=int, default=32)
 
     # Data args
-    parser.add_argument("--dataset", type=str, default="pile")
-    parser.add_argument("--holdout-num-tokens",
-                        type=str,
-                        required=True,
-                        choices=["2B", "5B", "20B", "26B", "130B"])
+    parser.add_argument("--tokenizer", type=str, default="gpt4-tiktoken")
+    parser.add_argument("--seq-len", type=int, default=4096)
+    parser.add_argument("--dataset", type=str, default="mpt")
+    parser.add_argument("--num-passes", type=str, required=True)
 
     args = parser.parse_args()
 
-    run_base = build_ref_base(args.ref_num_tokens, args.ref_model_size)
-    run_name = f"ref-{args.dataset}-{run_base}-holdt-{args.holdout_num_tokens}"
+    run_name = f"{args.dataset}-passes-{args.num_passes}-ref-{args.ref_model_size}-{args.ref_num_tokens}"
 
     for seed in args.seeds:
         base_run = RunConfig.from_file(
-            f"amortized-obs/yamls/pretrain_base.yaml")
+            f"data-filtering/yamls/pretrain_base.yaml")
 
-        data_remote = os.path.join(
-            build_remote_base(
-                num_holdout_tokens=args.holdout_num_tokens,
-                dataset=args.dataset,
-            ), "holdout")
+        data_remote = build_dataset_base(args.dataset,
+                                         args.tokenizer,
+                                         args.seq_len,
+                                         args.ref_num_tokens,
+                                         args.num_passes,
+                                         holdout=True)
 
         save_folder = os.path.join(CKPT_BASE, args.dataset, "reference",
                                    f"{run_name}-sd-{seed}", "ckpts")
@@ -57,8 +56,9 @@ if __name__ == "__main__":
                         args.ref_model_size, args.ref_num_tokens, seed)
 
         base_run.parameters["loggers"]["wandb"]["tags"] += [
-            "ref", f"holdt-{args.holdout_num_tokens}",
-            f"refp-{args.ref_model_size}", f"reft-{args.ref_num_tokens}"
+            "ref", f"ref-params-{args.ref_model_size}",
+            f"ref-tok-{args.ref_num_tokens}", f"ref-passes-{args.num_passes}",
+            f"tokenizer-{args.tokenizer}", f"seq-len-{args.seq_len}"
         ]
 
         launch_run(base_run, args.local_debug, seed)
