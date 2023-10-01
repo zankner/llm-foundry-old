@@ -130,6 +130,7 @@ class EvalGauntlet(Callback):
         for category in self.categories:
             missing_metrics = []
             composite_scores[category['name']] = []
+            raw_composite_scores[category['name']] = []
             for benchmark in category['benchmarks']:
                 key = f"{benchmark['name']}/{benchmark['num_fewshot']}-shot"
 
@@ -165,6 +166,7 @@ class EvalGauntlet(Callback):
                     f"Removing category `{category['name']}` from scores because benchmarks were missing: {missing_metrics}"
                 )
                 del composite_scores[category['name']]
+                del raw_composite_scores[category['name']]
                 continue
             total_weight = sum(
                 k['weighting'] for k in composite_scores[category['name']])
