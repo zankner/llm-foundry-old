@@ -233,8 +233,9 @@ class ConcatenatedSequenceCollatorWrapper:
             batch = self.base_collator(examples)
         batch['sequence_id'] = self.get_sequence_id_from_batch(batch)
         if isinstance(examples[0], Mapping):
-            batch["idx"] = torch.tensor(
-                [example["idx"] for example in examples])
+            if "uid" in examples[0]:
+                batch["uid"] = torch.tensor(
+                    [example["uid"] for example in examples])
             if "ref_loss" in examples[0]:
                 batch["ref_loss"] = torch.tensor(
                     [example["ref_loss"] for example in examples])
