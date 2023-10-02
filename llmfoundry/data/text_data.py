@@ -181,12 +181,12 @@ class StreamingTextDataset(StreamingDataset):
             token_sample = {
                 "tokens": self._read_binary_tokenized_sample(sample),
                 "ref_loss": sample["ref_loss"],
-                "idx": sample["idx"]
+                "uid": sample["uid"]
             }
-        elif 'idx' in sample:
+        elif 'uid' in sample:
             token_sample = {
                 "tokens": self._read_binary_tokenized_sample(sample),
-                "idx": sample["idx"]
+                "uid": sample["uid"]
             }
         elif 'tokens' in sample:
             token_sample = self._read_binary_tokenized_sample(sample)
