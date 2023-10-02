@@ -52,7 +52,8 @@ class ReferenceLossCallback(Callback):
             for loss, uid in zip(all_losses, all_uid):
                 loss = loss.cpu().item()
                 uid = uid.cpu().item()
-                self.streaming_writer.write({"ref_loss": loss, "uid": uid})
+                self.data["losses"].append(loss)
+                self.data["uid"].append(uid)
         dist.barrier()
 
     def eval_end(self, state: State, logger: Logger) -> None:
@@ -192,8 +193,8 @@ def main(args):
     remote_download = build_dataset_base(args.dataset, args.tokenizer,
                                          args.seq_len, args.final_num_tokens,
                                          args.num_passes, False)
-    reference_run_data_suffix = f"{args.final_num_tokens}tokens-from-{args.num_passes}-passes-ref-{args.ref_model_size}-{args.ref_num_tokens}-sd-{args.train_seed}"
-    remote_upload = os.path.join(*remote_download.split("/")[:-3],
+    reference_run_data_suffix = f"{args.final_num_tokens}-tokens-from-{args.num_passes}-passes-ref-{args.ref_model_size}-{args.ref_num_tokens}-sd-{args.train_seed}"
+    remote_upload = os.path.join(*remote_download.replace("s3://", "").split("/")[:-3],
                                  reference_run_data_suffix, "heuristic.parquet")
     print(f"Uploading losses to: {remote_upload}")
 
@@ -281,7 +282,7 @@ if __name__ == "__main__":
     parser.add_argument("--final-num-tokens",
                         type=str,
                         required=True,
-                        choices=["52B"])
+                        choices=["52B", "DEBUG"])
 
     # Data args
     parser.add_argument("--device-batch-size", type=int, default=256)
