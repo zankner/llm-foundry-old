@@ -1,40 +1,41 @@
 import argparse
+import os
 
 from omegaconf import OmegaConf
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from composer import State, Trainer, Callback
-from composer.loggers import Logger, WandBLogger
+from composer.loggers import Logger
 from composer.metrics.nlp import LanguageCrossEntropy
 import composer.utils.dist as dist
-from streaming import MDSWriter
 import transformers
-from transformers import AutoTokenizer
+import pandas as pd
+import s3fs
 
 from llmfoundry.data.text_data import (ConcatenatedSequenceCollatorWrapper,
                                        StreamingTextDataset)
 from llmfoundry.models.mpt import ComposerMPTCausalLM
+from llmfoundry.utils.builders import build_tokenizer
+
+from pretrain_utils import build_dataset_base
 
 
 class ReferenceLossCallback(Callback):
 
-    def __init__(self, streaming_writer_path: str) -> None:
+    def __init__(self, ref_losses_path: str) -> None:
         super().__init__()
-        streaming_writer = None
+        data = None
         if dist.get_global_rank() == 0:
-            columns = {"tokens": "bytes", "ref_loss": "float32", "idx": "int"}
-            streaming_writer = MDSWriter(columns=columns,
-                                         out=streaming_writer_path,
-                                         compression="zstd")
-        self.streaming_writer = streaming_writer
+            data = {"losses": [], "uid": []}
+        self.data = data
+        self.ref_losses_path = ref_losses_path
         self.proxy_loss_fn = nn.CrossEntropyLoss(ignore_index=-100,
                                                  reduction="none")
 
     def eval_after_forward(self, state: State, logger: Logger) -> None:
         ref_logits = state.outputs.logits
-        tokens = state.batch["input_ids"]
-        idx = state.batch["idx"]
+        uid = state.batch["uid"]
         targets = state.model.get_targets(state.batch)
         _, seq_len, vocab_size = ref_logits.shape
 
@@ -46,23 +47,19 @@ class ReferenceLossCallback(Callback):
         losses = torch.sum(losses, dim=-1)
 
         all_losses = torch.vstack(dist.all_gather(losses)).view(-1)
-        all_tokens = torch.vstack(dist.all_gather(tokens))
-        all_idx = torch.vstack(dist.all_gather(idx)).view(-1)
+        all_uid = torch.vstack(dist.all_gather(uid)).view(-1)
         if dist.get_global_rank() == 0:
-            for losses, tokens, idxs in zip(all_losses, all_tokens, all_idx):
-                losses = losses.cpu().item()
-                byte_tokens = tokens.cpu().numpy().tobytes()
-                ind_idx = idxs.cpu().item()
-                self.streaming_writer.write({
-                    "tokens": byte_tokens,
-                    "ref_loss": losses,
-                    "idx": ind_idx
-                })
+            for loss, uid in zip(all_losses, all_uid):
+                loss = loss.cpu().item()
+                uid = uid.cpu().item()
+                self.streaming_writer.write({"ref_loss": loss, "uid": uid})
         dist.barrier()
 
     def eval_end(self, state: State, logger: Logger) -> None:
         if dist.get_global_rank() == 0:
-            self.streaming_writer.finish()
+            data_df = pd.DataFrame(self.data)
+            with s3fs.S3FileSystem().open(self.ref_losses_path, 'wb') as f:
+                data_df.to_parquet(f, engine="pyarrow")
         dist.barrier()
 
 
@@ -82,7 +79,7 @@ def build_model(model_size, tokenizer, max_seq_len):
                 "alibi": True,
                 "attn_impl": "triton",
                 "clip_qkv": 6,
-                "attn_uses_sequence_id": True
+                "attn_uses_sequence_id": False
             }
         })
         fsdp_cfg = OmegaConf.create({
@@ -111,7 +108,7 @@ def build_model(model_size, tokenizer, max_seq_len):
                 "alibi": True,
                 "attn_impl": "triton",
                 "clip_qkv": 6,
-                "attn_uses_sequence_id": True
+                "attn_uses_sequence_id": False
             }
         })
         fsdp_cfg = OmegaConf.create({
@@ -140,7 +137,7 @@ def build_model(model_size, tokenizer, max_seq_len):
                 "alibi": True,
                 "attn_impl": "triton",
                 "clip_qkv": 6,
-                "attn_uses_sequence_id": True
+                "attn_uses_sequence_id": False
             }
         })
         fsdp_cfg = OmegaConf.create({
@@ -158,11 +155,30 @@ def build_model(model_size, tokenizer, max_seq_len):
         raise ValueError(f"Unkown model size: {model_size}")
 
 
+def build_tokenizer_kwargs(tokenizer_name: str):
+    if tokenizer_name == "gpt4-tiktoke":
+        return {"model_name": "gpt-4"}
+    else:
+        raise ValueError(f"Unknown tokenizer: {tokenizer_name}")
+
+
 def main(args):
+
+    # Building the remote name
+    remote_download = build_dataset_base(args.dataset, args.tokenizer,
+                                         args.seq_len, args.ref_num_tokens,
+                                         args.num_passes, False)
+    reference_run_name = f"{args.final_num_tokens}tokens-from-{args.num_passes}-passes-ref-{args.ref_model_size}-{args.ref_num_tokens}"
+    remote_upload = os.path.join(*remote_download.split("/")[:-3],
+                                 reference_run_name, "heuristic.parquet")
+    print(f"Uploading losses to: {remote_upload}")
+
     global_batch_size = args.device_batch_size * dist.get_world_size()
     print(f"Global batch size: {global_batch_size}")
 
-    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
+    tokenizer = build_tokenizer(args.tokenizer,
+                                tokenizer_kwargs=build_tokenizer_kwargs(
+                                    args.tokenizer))
     model, fsdp_cfg = build_model(args.model_size,
                                   tokenizer=tokenizer,
                                   max_seq_len=args.max_seq_len)
@@ -171,14 +187,6 @@ def main(args):
         LanguageCrossEntropy.__name__: LanguageCrossEntropy()
     }  # Only metric we care about
 
-    loggers = []
-    if not args.no_wandb:
-        loggers = [
-            WandBLogger(project="amortize-selection-preprocess",
-                        entity="mosaic-ml",
-                        name=f"{args.model_size}-ref-loss")
-        ]
-
     print(f"Downloading data from {args.download_remote}")
     dataset = StreamingTextDataset(
         remote=args.download_remote,
@@ -186,7 +194,7 @@ def main(args):
         max_seq_len=args.max_seq_len,
         batch_size=args.device_batch_size,
         local="/tmp/train-data",
-        split="train",
+        split=None,
         shuffle=False,
     )
     lm_collate_fn = transformers.DataCollatorForLanguageModeling(
@@ -206,16 +214,16 @@ def main(args):
         persistent_workers=True,
     )
 
-    print(f"Uploading data to {args.upload_remote}")
     reference_loss_writer = ReferenceLossCallback(
-        streaming_writer_path=args.upload_remote)
-    trainer = Trainer(model=model,
-                      eval_dataloader=dataloader,
-                      callbacks=reference_loss_writer,
-                      progress_bar=True,
-                      load_path=args.model_ckpt,
-                      fsdp_config=fsdp_cfg,
-                      loggers=loggers)
+        ref_losses_path=args.upload_remote)
+    trainer = Trainer(
+        model=model,
+        eval_dataloader=dataloader,
+        callbacks=reference_loss_writer,
+        progress_bar=True,
+        load_path=args.model_ckpt,
+        fsdp_config=fsdp_cfg,
+    )
 
     trainer.eval()
     trainer.close()
@@ -223,22 +231,36 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+
+    # Ref model args
+    parser.add_argument("--ref-model-size",
+                        type=str,
+                        required=True,
+                        choices=["125M", "250M"])
+    parser.add_argument("--ref-num-tokens",
+                        type=str,
+                        required=True,
+                        choices=["2B", "5B", "20B", "26B", "52B", "130B"])
+
+    # Final model args
+    parser.add_argument("--final-num-tokens",
+                        type=str,
+                        required=True,
+                        choices=["52B"])
+
+    # Data args
     parser.add_argument("--device-batch-size", type=int, default=256)
-    parser.add_argument("--download-remote", type=str, required=True)
-    parser.add_argument("--upload-remote", type=str, required=True)
-    parser.add_argument("--model-size",
+    parser.add_argument("--tokenizer", type=str, default="gpt4-tiktoken")
+    parser.add_argument("--seq-len", type=int, default=4096)
+    parser.add_argument("--num-passes", type=str, required=True)
+    parser.add_argument("--dataset",
                         type=str,
-                        choices=["125M", "250M", "1B"],
-                        required=True)
-    parser.add_argument("--model-ckpt", type=str, required=True)
-    parser.add_argument("--tokenizer",
-                        type=str,
-                        default="EleutherAI/gpt-neox-20b")
-    parser.add_argument("--eos-token-id", type=int, default=0)
-    parser.add_argument("--max-seq-len", type=int, default=2048)
-    parser.add_argument("--no-wandb", action="store_true")
+                        default="mpt",
+                        choices=["mpt", "pile"])
+
     args = parser.parse_args()
 
-    dist.initialize_dist(device="gpu")
+    dist.initialize_dist(
+        device="gpu", timeout=1200)  # Setting high dist timeout for slow upload
 
     main(args)
