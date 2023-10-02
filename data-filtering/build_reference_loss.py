@@ -18,7 +18,7 @@ from llmfoundry.data.text_data import (ConcatenatedSequenceCollatorWrapper,
 from llmfoundry.models.mpt import ComposerMPTCausalLM
 from llmfoundry.utils.builders import build_tokenizer
 
-from pretrain_utils import build_dataset_base
+from pretrain_utils import CKPT_BASE, build_dataset_base
 
 
 class ReferenceLossCallback(Callback):
@@ -73,13 +73,21 @@ def build_model(model_size, tokenizer, max_seq_len):
             "n_layers": 12,
             "expansion_ratio": 4,
             "max_seq_len": max_seq_len,
-            "vocab_size": 50432,
+            "vocab_size": 100352,
             "no_bias": True,
+            "norm_type": "low_precision_layernorm",
+            "emb_pdrop": 0,
+            "resid_pdrop": 0,
+            "init_config": {
+                "init_nonlinearity": "relu",
+                "name": "kaiming_normal_"
+            },
             "attn_config": {
                 "alibi": True,
                 "attn_impl": "triton",
                 "clip_qkv": 6,
-                "attn_uses_sequence_id": False
+                "attn_uses_sequence_id": False,
+                "attn_pdrop": 0
             }
         })
         fsdp_cfg = OmegaConf.create({
@@ -102,13 +110,21 @@ def build_model(model_size, tokenizer, max_seq_len):
             "n_layers": 16,
             "expansion_ratio": 4,
             "max_seq_len": max_seq_len,
-            "vocab_size": 50432,
+            "vocab_size": 100352,
             "no_bias": True,
+            "norm_type": "low_precision_layernorm",
+            "emb_pdrop": 0,
+            "resid_pdrop": 0,
+            "init_config": {
+                "init_nonlinearity": "relu",
+                "name": "kaiming_normal_"
+            },
             "attn_config": {
                 "alibi": True,
                 "attn_impl": "triton",
                 "clip_qkv": 6,
-                "attn_uses_sequence_id": False
+                "attn_uses_sequence_id": False,
+                "attn_pdrop": 0
             }
         })
         fsdp_cfg = OmegaConf.create({
@@ -131,13 +147,21 @@ def build_model(model_size, tokenizer, max_seq_len):
             "n_layers": 24,
             "expansion_ratio": 4,
             "max_seq_len": 2048,
-            "vocab_size": 50432,  # update for hero run with custom tokenizer
+            "vocab_size": 100352,  # update for hero run with custom tokenizer
             "no_bias": True,
+            "norm_type": "low_precision_layernorm",
+            "emb_pdrop": 0,
+            "resid_pdrop": 0,
+            "init_config": {
+                "init_nonlinearity": "relu",
+                "name": "kaiming_normal_"
+            },
             "attn_config": {
                 "alibi": True,
                 "attn_impl": "triton",
                 "clip_qkv": 6,
-                "attn_uses_sequence_id": False
+                "attn_uses_sequence_id": False,
+                "attn_pdrop": 0
             }
         })
         fsdp_cfg = OmegaConf.create({
@@ -156,7 +180,7 @@ def build_model(model_size, tokenizer, max_seq_len):
 
 
 def build_tokenizer_kwargs(tokenizer_name: str):
-    if tokenizer_name == "gpt4-tiktoke":
+    if "tiktoken" in tokenizer_name:
         return {"model_name": "gpt-4"}
     else:
         raise ValueError(f"Unknown tokenizer: {tokenizer_name}")
@@ -166,32 +190,42 @@ def main(args):
 
     # Building the remote name
     remote_download = build_dataset_base(args.dataset, args.tokenizer,
-                                         args.seq_len, args.ref_num_tokens,
+                                         args.seq_len, args.final_num_tokens,
                                          args.num_passes, False)
-    reference_run_name = f"{args.final_num_tokens}tokens-from-{args.num_passes}-passes-ref-{args.ref_model_size}-{args.ref_num_tokens}"
+    reference_run_data_suffix = f"{args.final_num_tokens}tokens-from-{args.num_passes}-passes-ref-{args.ref_model_size}-{args.ref_num_tokens}-sd-{args.train_seed}"
     remote_upload = os.path.join(*remote_download.split("/")[:-3],
-                                 reference_run_name, "heuristic.parquet")
+                                 reference_run_data_suffix, "heuristic.parquet")
     print(f"Uploading losses to: {remote_upload}")
 
     global_batch_size = args.device_batch_size * dist.get_world_size()
     print(f"Global batch size: {global_batch_size}")
 
-    tokenizer = build_tokenizer(args.tokenizer,
+    # Building model ckpt name
+    ref_run_name = f"{args.dataset}-passes-{args.num_passes}-ref-{args.ref_model_size}-{args.ref_num_tokens}-sd-{args.train_seed}"
+    ref_ckpt = os.path.join(CKPT_BASE, args.dataset, "reference", ref_run_name, "ckpts", "latest-rank0.pt.symlink")
+
+    
+    
+    if args.tokenizer == "gpt4-tiktoken":
+        tokenizer_name = "tiktoken"
+    else:
+        tokenizer_name = args.tokenizer
+    tokenizer = build_tokenizer(tokenizer_name,
                                 tokenizer_kwargs=build_tokenizer_kwargs(
                                     args.tokenizer))
-    model, fsdp_cfg = build_model(args.model_size,
+    model, fsdp_cfg = build_model(args.ref_model_size,
                                   tokenizer=tokenizer,
-                                  max_seq_len=args.max_seq_len)
+                                  max_seq_len=args.seq_len)
     model.use_logits = False  # So that full ModellingOutputs passed to callback
     model.val_metrics = {
         LanguageCrossEntropy.__name__: LanguageCrossEntropy()
     }  # Only metric we care about
 
-    print(f"Downloading data from {args.download_remote}")
+    print(f"Downloading data from {remote_download}")
     dataset = StreamingTextDataset(
-        remote=args.download_remote,
+        remote=remote_download,
         tokenizer=tokenizer,
-        max_seq_len=args.max_seq_len,
+        max_seq_len=args.seq_len,
         batch_size=args.device_batch_size,
         local="/tmp/train-data",
         split=None,
@@ -215,13 +249,13 @@ def main(args):
     )
 
     reference_loss_writer = ReferenceLossCallback(
-        ref_losses_path=args.upload_remote)
+        ref_losses_path=remote_upload)
     trainer = Trainer(
         model=model,
         eval_dataloader=dataloader,
         callbacks=reference_loss_writer,
         progress_bar=True,
-        load_path=args.model_ckpt,
+        load_path=ref_ckpt,
         fsdp_config=fsdp_cfg,
     )
 
@@ -241,6 +275,7 @@ if __name__ == "__main__":
                         type=str,
                         required=True,
                         choices=["2B", "5B", "20B", "26B", "52B", "130B"])
+    parser.add_argument("--train-seed", type=int, required=True)
 
     # Final model args
     parser.add_argument("--final-num-tokens",
@@ -251,6 +286,7 @@ if __name__ == "__main__":
     # Data args
     parser.add_argument("--device-batch-size", type=int, default=256)
     parser.add_argument("--tokenizer", type=str, default="gpt4-tiktoken")
+    parser.add_argument("--eos-token-id", type=int, default=0)
     parser.add_argument("--seq-len", type=int, default=4096)
     parser.add_argument("--num-passes", type=str, required=True)
     parser.add_argument("--dataset",
