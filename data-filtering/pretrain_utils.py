@@ -26,14 +26,11 @@ def set_common_args(args,
     base_run.cluster = args.cluster
     base_run.gpu_num = args.ngpus
     # Set rest of cluster params
-    if args.cluster == "r9z1":
-        base_run.image = "mosaicml/llm-foundry:2.0.1_cu118-latest"
+    if args.cluster in ["r9z1", "r14z3"]:
         base_run.gpu_type = "h100_80gb"
     elif args.cluster in ["r8z6", "r1z1"]:
-        base_run.image = "mosaicml/llm-foundry:1.13.1_cu117-latest"
         base_run.gpu_type = "a100_80gb"
     else:
-        base_run.image = "mosaicml/llm-foundry:1.13.1_cu117-latest"
         base_run.gpu_type = "a100_40gb"
 
     # Set modeling args
@@ -56,8 +53,9 @@ def set_common_args(args,
 
     # Handle preemption
     if args.preemptible:
-        assert args.autoresume is True, "Preemptible training requires autoresume"
-        base_run.scheduling = {"resumable": True, "priority": "low"}
+        if not args.autoresume:
+            print("WARNING: Preemptible training suggested autoresume")
+        base_run.scheduling = {"resumable": True, "priority": "lowest"}
         base_run.parameters["autoresume"] = True
     else:
         base_run.parameters["autoresume"] = args.autoresume
@@ -75,13 +73,11 @@ def set_common_args(args,
         duration_tokens = 20_000_000_000
     elif duration == "26B":
         duration_tokens = 26_000_000_000
+    elif duration == "52B":
+        duration_tokens = 52_000_000_000
     elif duration == "130B":
         duration_tokens = 130_000_000_000
-    duration_tokens *= token_multiplier
     base_run.parameters["max_duration"] = f"{duration_tokens}tok"
-
-    base_run.parameters["eval_interval"] = "1000ba"
-    base_run.parameters["save_interval"] = "500ba"
 
 
 def launch_run(run, local_debug, seed):
@@ -100,6 +96,8 @@ def build_model_arch(model_size):
         model_cfg = {"d_model": 1024, "n_heads": 16, "n_layers": 16}
     elif model_size == "1B":
         model_cfg = {"d_model": 2048, "n_heads": 16, "n_layers": 24}
+    elif model_size == "3B":
+        model_cfg = {"d_model": 2560, "n_heads": 32, "n_layers": 32}
     else:
         raise ValueError(f"Unknown model size {model_size}")
     return model_cfg
@@ -107,7 +105,7 @@ def build_model_arch(model_size):
 
 def build_dataset_base(dataset: str, tokenizer_name: str, seq_len: int,
                        num_tokens: int, num_passes: str, holdout: bool):
-    return f"s3://data-force-one-datasets/selection-via-proxy/{dataset}/{tokenizer_name}-seqlen-{seq_len}/52B-total-available-holdout-tokens-partition-sd-17/{'holdout' if holdout else 'train'}/{num_tokens}-tokens-from-{num_passes}-passes/combined/mds"
+    return f"s3://data-force-one-datasets/__unitystorage/catalogs/36798a58-e180-4029-8cd7-842e61841ef0/volumes/b9e4994e-997d-4cbf-b76b-e38ff5533785/{dataset}/{tokenizer_name}-seqlen-{seq_len}/52B-total-available-holdout-tokens-partition-sd-17/{'holdout' if holdout else 'train'}/{num_tokens}-tokens-from-{num_passes}-passes/combined/mds"
 
 
 def build_ref_base(num_tokens, num_params):
