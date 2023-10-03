@@ -1,16 +1,25 @@
 run_name: build-ref-loss
 platform: # Set in launch script
 gpu_type: # Set in launch script
-gpu_num: # Set in launch script 
+gpu_num: # Set in launch script
 image: # Set in launch script
 integrations:
   - integration_type: git_repo
     git_repo: zankner/llm-foundry
-    git_branch: zack/amortized-selection
-    # git_commit: # OR use your commit hash
+    git_branch: zack/data-filtering
     pip_install: -e .[gpu]
-    ssh_clone: false # Should be true if using a private repo
+    ssh_clone: true # Should be true if using a private repo
+  - integration_type: "pip_packages"
+    packages:
+      - tiktoken
+      - s3fs
+      - pandas
+env_variables:
+  - key: AWS_PROFILE
+    value: data-force-one
+  - key: NCCL_IB_PCI_RELAXED_ORDERING
+    value: 1
 
 command: |
   cd llm-foundry
-  composer amortized-obs/build_reference_loss.py --device-batch-size {device_batch_size} --model-size {model_size} --model-ckpt {model_ckpt} --download-remote {download_remote} --upload-remote {upload_remote} --no-wandb
+  composer data-filtering/build_reference_loss.py --ref-model-size {ref_model_size} --ref-num-tokens {ref_num_tokens} --final-num-tokens {final_num_tokens} --tokenizer {tokenizer} --dataset {dataset} --num-passes {num_passes} --train-seed {seed} --device-batch-size {device_batch_size}
