@@ -5,6 +5,8 @@ env_variables:
     value: data-force-one
   - key: NCCL_IB_PCI_RELAXED_ORDERING
     value: 1
+  - key: NCCL_COLLNET_ENABLE
+    value: "0"
 
 integrations:
   - integration_type: git_repo
@@ -12,6 +14,16 @@ integrations:
     git_repo: zankner/llm-foundry
     pip_install: .[gpu]
     ssh_clone: true
+  # - integration_type: git_repo
+  #   git_repo: mosaicml/streaming
+  #   git_commit: d95aefa09e00970328ed7277b9c56d0d882f7000
+  #   pip_install: "."
+  #   ssh_clone: true
+  # - integration_type: git_repo
+  #   git_repo: mosaicml/composer
+  #   git_commit: 130bde55a7a4fa7e147a1dd01186dd5504080a3c #92c84aa1e7f5769a08eedc49cc8ee0a9b37113bd
+  #   pip_install: .[gpu]
+  #   ssh_clone: true
   - integration_type: wandb
     entity: mosaic-ml
     project: neural-data-filtering
@@ -20,11 +32,13 @@ integrations:
       - slack-sdk
       - tiktoken
 
-image: # Set in launch script
+# image: mosaicml/pytorch:2.1.0_cu121-nightly20230827-python3.10-ubuntu20.04
+image: mosaicml/llm-foundry:2.1.0_cu121-e772a47
 cluster: # Set in launch script
 gpu_num: # Set in launch script
 
 command: |-
+  pip install -U wandb==0.15.4
   cd llm-foundry/scripts
   composer train/train.py /mnt/config/parameters.yaml || (echo "Command failed - killing python" && pkill python && exit 1)
 
@@ -101,7 +115,7 @@ parameters:
     verbose: false
 
   # Logging
-  eval_first: true
+  eval_first: false
   eval_interval: 0.1dur
   log_to_console: true
   console_log_interval: 100ba
@@ -118,7 +132,7 @@ parameters:
   autoresume: # Set by launch script
   save_filename: ba{batch}/rank{rank}.pt
   save_folder: # Set by launch script
-  save_interval: 1000ba # update for hero run, e.g. 2000ba
+  save_interval: 500ba # update for hero run, e.g. 2000ba
   save_num_checkpoints_to_keep: 1
 
   # Algos and Callbacks
@@ -176,9 +190,10 @@ parameters:
       max_seq_len: ${max_seq_len}
       num_canonical_nodes: ${num_canonical_nodes}
       shuffle: true
+      sampling_method: fixed
       shuffle_algo: py1br
-      predownload: 16777216
-      shuffle_block_size: 16777216
+      predownload: 4194304
+      shuffle_block_size: 4194304
       shuffle_seed: ${global_seed}
       local: /tmp/dataset/train
       remote: # Set by launch script

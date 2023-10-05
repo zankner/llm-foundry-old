@@ -4,8 +4,7 @@ import os
 from mcli import RunConfig
 
 from pretrain_utils import (CKPT_BASE, set_common_args, launch_run,
-                            build_remote_base, build_proxy_base, build_ref_base,
-                            build_final_base)
+                            build_dataset_base, build_final_base, assert_args)
 
 if __name__ == "__main__":
     # System args
@@ -17,12 +16,13 @@ if __name__ == "__main__":
     parser.add_argument("--seeds", nargs="+", type=int,
                         required=True)  # Add more later
     parser.add_argument("--local-debug", action="store_true")
+    parser.add_argument("--device-batch-size", type=int, default=32)
 
     # Reference args
     parser.add_argument("--ref-model-size", type=str, choices=["125M", "250M"])
     parser.add_argument("--ref-num-tokens",
                         type=str,
-                        choices=["2B", "5B", "20B", "26B", "130B"])
+                        choices=["2B", "5B", "20B", "26B", "52B", "130B"])
 
     # Proxy args
     parser.add_argument("--proxy-model-size",
@@ -30,104 +30,84 @@ if __name__ == "__main__":
                         choices=["125M", "250M", "1B"])
     parser.add_argument("--proxy-num-tokens",
                         type=str,
-                        choices=["2B", "5B", "20B", "26B", "130B"])
-    parser.add_argument(
-        "--full-batch-size",
-        help="Batch size for points to be labeled that will then be pruned",
-        type=int,
-        choices=[1024, 2048, 4096])
-    parser.add_argument("--num-pplx-filter", type=int, default=0)
-    parser.add_argument(
-        "--selection-algo",
-        type=str,
-        required=True,
-        choices=["offline", "rho", "hard-mine", "easy-mine",
-                 "baseline"])  # Treat baseline as a selection algo
+                        choices=["2B", "5B", "20B", "26B", "52B", "130B"])
+    parser.add_argument("--proxy-off-policy", action="store_true")
 
     # Final args
     parser.add_argument("--final-model-size",
                         type=str,
                         required=True,
-                        choices=["125M", "250M", "1B"])
+                        choices=["125M", "250M", "1B", "3B"])
     parser.add_argument("--final-num-tokens",
                         type=str,
                         required=True,
-                        choices=["2B", "5B", "20B", "26B", "130B"])
+                        choices=["2B", "5B", "20B", "26B", "52B", "130B"])
 
-    # Offline pruning args
-    parser.add_argument("--final-offline-score-method",
-                        type=str,
-                        choices=["llm", "ngram"])
-    parser.add_argument("--final-offline-mine-type",
-                        type=str,
-                        choices=["easy", "mid", "hard"])
-    parser.add_argument("--final-offline-reduction-rate",
-                        type=float,
-                        choices=[0.9, 0.75, 0.5, 0.25, 0.125])
-
-    # Data args
-    parser.add_argument("--dataset", type=str, default="pile", choices=["pile"])
-    parser.add_argument("--device-batch-size", type=int, default=32)
-    parser.add_argument("--holdout-num-tokens",
+    # Selection args
+    parser.add_argument("--selection-algo",
                         type=str,
                         required=True,
-                        choices=["2B", "5B", "20B", "26B", "130B"])
+                        choices=["offline", "rhol", "online", "baseline"
+                                ])  # Treat baseline as a selection algo
+    parser.add_argument("--selection-rank",
+                        type=str,
+                        default="hard",
+                        choices=["hard", "medium",
+                                 "easy"])  # Treat baseline as a selection algo
+    parser.add_argument("--selection-rate",
+                        type=float,
+                        default=0.5,
+                        choices=[0.1, 0.25, 0.5])
+
+    # Data args
+    parser.add_argument("--tokenizer", type=str, default="gpt4-tiktoken")
+    parser.add_argument("--seq-len", type=int, default=4096)
+    parser.add_argument("--num-passes", type=str, required=True)
+    parser.add_argument("--dataset",
+                        type=str,
+                        default="mpt",
+                        choices=["mpt", "pile"])
 
     args = parser.parse_args()
 
     final_run_base = build_final_base(args.final_num_tokens,
                                       args.final_model_size)
-    if args.selection_algo == "baseline":
-        run_name = f"final-{args.dataset}-baseline-{final_run_base}-holdt-{args.holdout_num_tokens}"
-    elif args.selection_algo == "offline":
-        assert (args.final_offline_score_method is not None and
-                args.final_offline_reduction_rate is not None)
-        if args.final_offline_score_method == "llm":
-            assert args.ref_num_tokens is not None and args.ref_model_size is not None
 
-            ref_run_base = build_ref_base(args.ref_num_tokens,
-                                          args.ref_model_size)
-            run_name = f"final-{args.dataset}-off-{args.final_offline_mine_type}-red-{args.final_offline_reduction_rate}-{ref_run_base}-{final_run_base}-holdt-{args.holdout_num_tokens}"
-        else:
-            upload_name = f"{args.final_offline_mine_type}-mine-reduction-{args.final_offline_reduction_rate}-ngram"
-            pass
-    else:
-        proxy_run_base = build_proxy_base(
-            args.selection_algo, args.proxy_num_tokens, args.proxy_model_size,
-            args.full_batch_size, args.num_pplx_filter, args.ref_num_tokens,
-            args.ref_model_size)
-        fmt_proxy_run_base = proxy_run_base.replace(f"{args.selection_algo}-",
-                                                    "")
-        run_name = f"final-{args.dataset}-{args.selection_algo}-{final_run_base}-{fmt_proxy_run_base}-holdt-{args.holdout_num_tokens}"
+    run_base = f"{args.dataset}-passes-{args.num_passes}-final-{args.final_model_size}-{args.final_num_tokens}"
+    if args.selection_algo == "baseline":
+        run_name = f"{run_base}-baseline"
+    elif args.selection_algo == "offline":
+        assert_args([
+            "selection_rank", "selection_rate", "ref_model_size",
+            "ref_num_tokens"
+        ], args)
+        run_name = f"{run_base}-offline-{args.selection_rank}-{args.selection_rate}-ref-{args.ref_model_size}-{args.ref_num_tokens}"
+    elif args.selection_algo == "online":
+        run_name = f"{run_base}-online-{args.selection_rank}-proxy-{args.proxy_model_size}-{args.proxy_num_tokens}"
+    elif args.selection_algo == "rhols":
+        run_name = f"{run_base}-rhols-{args.selection_rank}{'-zscore' if args.proxy_z_score else '-raw'}-{'-off-policy' if args.proxy_off_policy else ''}-proxy-{args.proxy_model_size}-{args.proxy_num_tokens}-ref-{args.ref_model_size}-{args.ref_num_tokens}"
 
     for seed in args.seeds:
         base_run = RunConfig.from_file(
-            f"amortized-obs/yamls/pretrain_base.yaml")
+            f"data-filtering/yamls/pretrain_base.yaml")
 
         if args.selection_algo == "baseline":
-            # Making the choice to select baseline from the partitioned data for consistency
-            remote_base = build_remote_base(
-                num_holdout_tokens=args.holdout_num_tokens,
-                dataset=args.dataset,
-            )
-            data_remote = os.path.join(
-                remote_base,
-                "train",
-                "base",
-            )
+            data_remote = build_dataset_base(args.dataset,
+                                             args.tokenizer,
+                                             args.seq_len,
+                                             args.final_num_tokens,
+                                             args.num_passes,
+                                             holdout=False)
         elif args.selection_algo == "offline":
-            if args.final_offline_score_method == "llm":
-                remote_base = build_remote_base(
-                    num_holdout_tokens=args.holdout_num_tokens,
-                    dataset=args.dataset)
-                offline_name = f"{args.final_offline_mine_type}-mine-reduction-{args.final_offline_reduction_rate}-{ref_run_base}"
-                data_remote = os.path.join(
-                    remote_base, "pruned",
-                    f"{args.final_num_tokens}-final-tokens-pruned-from-offline-{offline_name}-sd-{seed}"
-                )
-            else:
-                pass
-        else:
+            filter_suffix = f"offline-{args.selection_rank}-{args.selection_rate}-ref-{args.ref_model_size}-{args.ref_num_tokens}-sd-{seed}"
+            data_remote = build_dataset_base(args.dataset,
+                                             args.tokenizer,
+                                             args.seq_len,
+                                             args.final_num_tokens,
+                                             args.num_passes,
+                                             holdout=False,
+                                             filter_suffix=filter_suffix)
+        elif args.selection_algo == "online":
             remote_base = build_remote_base(
                 num_holdout_tokens=args.holdout_num_tokens,
                 dataset=args.dataset,
@@ -153,17 +133,17 @@ if __name__ == "__main__":
                         args.final_model_size, args.final_num_tokens, seed)
 
         base_run.parameters["loggers"]["wandb"]["tags"] += [
-            "final", f"fp-{args.final_model_size}",
-            f"ft-{args.final_num_tokens}"
-        ]
-        base_run.parameters["loggers"]["wandb"]["tags"] += [
-            f"holdt-{args.holdout_num_tokens}", f"refp-{args.ref_model_size}",
-            f"reft-{args.ref_num_tokens}", f"proxp-{args.proxy_model_size}",
-            f"proxt-{args.proxy_num_tokens}", f"fb-{args.full_batch_size}",
-            f"fillpplx-{args.num_pplx_filter}", args.selection_algo,
-            f"final-off-score-{args.final_offline_score_method}",
-            f"final-{args.final_offline_mine_type}-mine",
-            f"final-off-reduction-{args.final_offline_reduction_rate}"
+            "final", f"final-params-{args.final_model_size}",
+            f"final-tok-{args.final_num_tokens}",
+            f"selection-algo-{args.selection_algo}",
+            f"selection-rank-{args.selection_rank}",
+            f"selection-rate-{args.selection_rate}",
+            f"{'off-policy' if args.proxy_off_policy else 'on-policy'}",
+            f"proxy-params-{args.proxy_model_size}",
+            f"proxy-tok-{args.proxy_num_tokens}",
+            f"ref-params-{args.ref_model_size}",
+            f"ref-tok-{args.ref_num_tokens}", f"num-passes-{args.num_passes}",
+            f"tokenizer-{args.tokenizer}", f"seq-len-{args.seq_len}"
         ]
 
         launch_run(base_run, args.local_debug, seed)

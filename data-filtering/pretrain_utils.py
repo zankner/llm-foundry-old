@@ -1,5 +1,7 @@
 import os
 
+from typing import Optional
+
 from omegaconf import OmegaConf as om
 from mcli import create_run
 
@@ -32,6 +34,10 @@ def set_common_args(args,
         base_run.gpu_type = "a100_80gb"
     else:
         base_run.gpu_type = "a100_40gb"
+
+    # Set timeout for slow clusters
+    if args.cluster in ["r9z1"]:
+        base_run.parameters["dist_timeout"] = 1800
 
     # Set modeling args
     model_cfg = build_model_arch(model_size)
@@ -103,9 +109,14 @@ def build_model_arch(model_size):
     return model_cfg
 
 
-def build_dataset_base(dataset: str, tokenizer_name: str, seq_len: int,
-                       num_tokens: int, num_passes: str, holdout: bool):
-    return f"s3://data-force-one-datasets/__unitystorage/catalogs/36798a58-e180-4029-8cd7-842e61841ef0/volumes/b9e4994e-997d-4cbf-b76b-e38ff5533785/{dataset}/{tokenizer_name}-seqlen-{seq_len}/52B-total-available-holdout-tokens-partition-sd-17/{'holdout' if holdout else 'train'}/{num_tokens}-tokens-from-{num_passes}-passes/combined/mds"
+def build_dataset_base(dataset: str,
+                       tokenizer_name: str,
+                       seq_len: int,
+                       num_tokens: int,
+                       num_passes: str,
+                       holdout: bool,
+                       filter_suffix: Optional[str] = None):
+    return f"s3://data-force-one-datasets/__unitystorage/catalogs/36798a58-e180-4029-8cd7-842e61841ef0/volumes/b9e4994e-997d-4cbf-b76b-e38ff5533785/{dataset}/{tokenizer_name}-seqlen-{seq_len}/52B-total-available-holdout-tokens-partition-sd-17/{'holdout' if holdout else 'train'}/{num_tokens}-tokens-from-{num_passes}-passes{f'-{filter_suffix}' if filter_suffix is not None else ''}/combined/mds"
 
 
 def build_ref_base(num_tokens, num_params):
@@ -132,3 +143,9 @@ def build_proxy_base(selection_algo,
 
 def build_final_base(num_tokens, num_params):
     return f"finp-{num_params}-fint-{num_tokens}"
+
+
+def assert_args(vals, args):
+    for val in vals:
+        assert val in vars(args) and vars(
+            args)[val] is not None, f"Missing arg {val}"

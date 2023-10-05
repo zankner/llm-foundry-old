@@ -57,7 +57,7 @@ if __name__ == "__main__":
 
         base_run.parameters["loggers"]["wandb"]["tags"] += [
             "ref", f"ref-params-{args.ref_model_size}",
-            f"ref-tok-{args.ref_num_tokens}", f"ref-passes-{args.num_passes}",
+            f"ref-tok-{args.ref_num_tokens}", f"num-passes-{args.num_passes}",
             f"tokenizer-{args.tokenizer}", f"seq-len-{args.seq_len}"
         ]
 
