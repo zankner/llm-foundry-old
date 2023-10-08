@@ -745,7 +745,6 @@ class ComposerMPTCausalLM(HuggingFaceModel):
     def forward(self, batch: MutableMapping) -> CausalLMOutputWithPast:
         if self.model.transformer.prefix_lm:
             add_bidirectional_mask_if_missing(batch)
-        print(batch["uid"])
         # Note: prefix_mask is only used if model.prefix_lm is True
         return self.model(
             input_ids=batch['input_ids'],
