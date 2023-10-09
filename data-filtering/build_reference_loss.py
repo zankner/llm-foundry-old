@@ -194,8 +194,9 @@ def main(args):
                                          args.seq_len, args.final_num_tokens,
                                          args.num_passes, False)
     reference_run_data_suffix = f"{args.final_num_tokens}-tokens-from-{args.num_passes}-passes-ref-{args.ref_model_size}-{args.ref_num_tokens}-sd-{args.train_seed}"
-    remote_upload = os.path.join(*remote_download.replace("s3://", "").split("/")[:-3],
-                                 reference_run_data_suffix, "heuristic.parquet")
+    remote_upload = os.path.join(
+        *remote_download.replace("s3://", "").split("/")[:-3],
+        reference_run_data_suffix, "heuristic.parquet")
     print(f"Uploading losses to: {remote_upload}")
 
     global_batch_size = args.device_batch_size * dist.get_world_size()
@@ -203,10 +204,9 @@ def main(args):
 
     # Building model ckpt name
     ref_run_name = f"{args.dataset}-passes-{args.num_passes}-ref-{args.ref_model_size}-{args.ref_num_tokens}-sd-{args.train_seed}"
-    ref_ckpt = os.path.join(CKPT_BASE, args.dataset, "reference", ref_run_name, "ckpts", "latest-rank0.pt.symlink")
+    ref_ckpt = os.path.join(CKPT_BASE, args.dataset, "reference", ref_run_name,
+                            "ckpts", "latest-rank0.pt.symlink")
 
-    
-    
     if args.tokenizer == "gpt4-tiktoken":
         tokenizer_name = "tiktoken"
     else:
@@ -249,8 +249,7 @@ def main(args):
         persistent_workers=True,
     )
 
-    reference_loss_writer = ReferenceLossCallback(
-        ref_losses_path=remote_upload)
+    reference_loss_writer = ReferenceLossCallback(ref_losses_path=remote_upload)
     trainer = Trainer(
         model=model,
         eval_dataloader=dataloader,
@@ -282,7 +281,7 @@ if __name__ == "__main__":
     parser.add_argument("--final-num-tokens",
                         type=str,
                         required=True,
-                        choices=["52B", "DEBUG"])
+                        choices=["26B", "52B", "DEBUG"])
 
     # Data args
     parser.add_argument("--device-batch-size", type=int, default=256)
