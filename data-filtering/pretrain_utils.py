@@ -81,7 +81,7 @@ def set_common_args(args,
 
     # Set predownload based on device batch size
     base_run.parameters["train_loader"]["dataset"]["predownload"] = int(
-        1024 / args.ngpus) * 4
+        args.global_batch_size / args.ngpus) * 4
 
     # Set training duration
     if duration == "2B":
