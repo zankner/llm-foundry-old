@@ -33,7 +33,10 @@ if __name__ == "__main__":
     parser.add_argument("--device-batch-size", type=int, default=128)
     parser.add_argument("--tokenizer", type=str, default="gpt4-tiktoken")
     parser.add_argument("--seq-len", type=int, default=4096)
-    parser.add_argument("--dataset", type=str, default="mpt")
+    parser.add_argument("--dataset",
+                        type=str,
+                        default="mpt",
+                        choices=["mpt", "pile"])
     parser.add_argument("--num-passes", type=str, required=True)
     args = parser.parse_args()
 

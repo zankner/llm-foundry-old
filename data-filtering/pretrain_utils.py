@@ -22,7 +22,10 @@ def set_common_args(args,
     base_run.parameters["run_name"] = run_name
 
     # Set seed
-    base_run.parameters["global_seed"] = seed
+    if args.overwrite_shuffle_seed is not None:
+        base_run.parameters["global_seed"] = args.overwrite_shuffle_seed
+    else:
+        base_run.parameters["global_seed"] = seed
 
     # Set compute
     base_run.cluster = args.cluster
@@ -30,20 +33,26 @@ def set_common_args(args,
     # Set rest of cluster params
     if args.cluster in ["r9z1", "r14z3"]:
         base_run.gpu_type = "h100_80gb"
-    elif args.cluster in ["r8z6", "r1z1"]:
+    elif args.cluster in ["r4z5", "r8z6", "r1z1"]:
         base_run.gpu_type = "a100_80gb"
     else:
         base_run.gpu_type = "a100_40gb"
 
-    # Set timeout for slow clusters
-    if args.cluster in ["r9z1"]:
-        base_run.parameters["dist_timeout"] = 1800
+    # Special images
+    if args.cluster in ["r4z5"]:
+        base_run.image = "mosaicml/pytorch:2.1.0_cu121-python3.10-ubuntu20.04-aws"
+
+    # # Set timeout for slow clusters
+    # if args.cluster in ["r9z1"]:
+    base_run.parameters["dist_timeout"] = 1800
 
     # Set modeling args
     model_cfg = build_model_arch(model_size)
     base_run.parameters["model"]["d_model"] = model_cfg["d_model"]
     base_run.parameters["model"]["n_heads"] = model_cfg["n_heads"]
     base_run.parameters["model"]["n_layers"] = model_cfg["n_layers"]
+    base_run.parameters["optimizer"]["lr"] = model_cfg["lr"]
+    base_run.parameters["optimizer"]["weight_decay"] = model_cfg["weight_decay"]
 
     # Set ckpt save folder
     base_run.parameters["save_folder"] = save_folder
@@ -61,7 +70,7 @@ def set_common_args(args,
     if args.preemptible:
         if not args.autoresume:
             print("WARNING: Preemptible training suggested autoresume")
-        base_run.scheduling = {"resumable": True, "priority": "lowest"}
+        base_run.scheduling = {"resumable": True, "priority": args.priority}
         base_run.parameters["autoresume"] = True
     else:
         base_run.parameters["autoresume"] = args.autoresume
@@ -69,6 +78,10 @@ def set_common_args(args,
     # Set batch size
     base_run.parameters["device_train_microbatch_size"] = args.device_batch_size
     base_run.parameters["device_eval_batch_size"] = args.device_batch_size
+
+    # Set predownload based on device batch size
+    base_run.parameters["train_loader"]["dataset"]["predownload"] = int(
+        1024 / args.ngpus) * 4
 
     # Set training duration
     if duration == "2B":
@@ -97,13 +110,37 @@ def launch_run(run, local_debug, seed):
 
 def build_model_arch(model_size):
     if model_size == "125M":
-        model_cfg = {"d_model": 768, "n_heads": 12, "n_layers": 12}
+        model_cfg = {
+            "d_model": 768,
+            "n_heads": 12,
+            "n_layers": 12,
+            "lr": 0.0002,  # Setting lr low for now since ref is 10x chinchilla
+            "weight_decay": 0.0002
+        }
     elif model_size == "250M":
-        model_cfg = {"d_model": 1024, "n_heads": 16, "n_layers": 16}
+        model_cfg = {
+            "d_model": 1024,
+            "n_heads": 16,
+            "n_layers": 16,
+            "lr": 0.0002,
+            "weight_decay": 0.0002
+        }
     elif model_size == "1B":
-        model_cfg = {"d_model": 2048, "n_heads": 16, "n_layers": 24}
+        model_cfg = {
+            "d_model": 2048,
+            "n_heads": 16,
+            "n_layers": 24,
+            "lr": 0.0002,
+            "weight_decay": 0.0002
+        }
     elif model_size == "3B":
-        model_cfg = {"d_model": 2560, "n_heads": 32, "n_layers": 32}
+        model_cfg = {
+            "d_model": 2560,
+            "n_heads": 32,
+            "n_layers": 32,
+            "lr": 0.00016,
+            "weight_decay": 0.00016
+        }
     else:
         raise ValueError(f"Unknown model size {model_size}")
     return model_cfg

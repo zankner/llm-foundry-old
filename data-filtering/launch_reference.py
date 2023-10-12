@@ -13,6 +13,11 @@ if __name__ == "__main__":
     parser.add_argument("--ngpus", type=int, default=16)
     parser.add_argument("--autoresume", action="store_true")
     parser.add_argument("--preemptible", action="store_true")
+    parser.add_argument("--priority",
+                        type=str,
+                        default="lowest",
+                        choices=["lowest", "low", "medium"])
+    parser.add_argument("--overwrite-shuffle-seed", type=int, default=None)
     parser.add_argument("--seeds", nargs="+", type=int,
                         required=True)  # Add more later
     parser.add_argument("--local-debug", action="store_true")

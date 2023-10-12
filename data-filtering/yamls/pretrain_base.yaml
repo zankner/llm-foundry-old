@@ -1,8 +1,8 @@
 name: # set by launch script
 
 env_variables:
-  - key: AWS_PROFILE
-    value: data-force-one
+  # - key: AWS_PROFILE
+  #   value: data-force-one
   - key: NCCL_IB_PCI_RELAXED_ORDERING
     value: 1
   - key: NCCL_COLLNET_ENABLE
@@ -38,6 +38,8 @@ cluster: # Set in launch script
 gpu_num: # Set in launch script
 
 command: |-
+  source /secrets/secrets.env
+  export AWS_PROFILE=data-force-one
   pip install -U wandb==0.15.4
   cd llm-foundry/scripts
   composer train/train.py /mnt/config/parameters.yaml || (echo "Command failed - killing python" && pkill python && exit 1)

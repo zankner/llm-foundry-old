@@ -13,8 +13,13 @@ if __name__ == "__main__":
     parser.add_argument("--ngpus", type=int, default=16)
     parser.add_argument("--autoresume", action="store_true")
     parser.add_argument("--preemptible", action="store_true")
+    parser.add_argument("--priority",
+                        type=str,
+                        default="lowest",
+                        choices=["lowest", "low", "medium"])
     parser.add_argument("--seeds", nargs="+", type=int,
                         required=True)  # Add more later
+    parser.add_argument("--overwrite-shuffle-seed", type=int, default=None)
     parser.add_argument("--local-debug", action="store_true")
     parser.add_argument("--device-batch-size", type=int, default=32)
 
@@ -58,6 +63,7 @@ if __name__ == "__main__":
                         type=float,
                         default=0.5,
                         choices=[0.1, 0.25, 0.5])
+    parser.add_argument("--selection-local", action="store_true")
 
     # Data args
     parser.add_argument("--tokenizer", type=str, default="gpt4-tiktoken")
@@ -81,7 +87,7 @@ if __name__ == "__main__":
             "selection_rank", "selection_rate", "ref_model_size",
             "ref_num_tokens"
         ], args)
-        run_name = f"{run_base}-offline-{args.selection_rank}-{args.selection_rate}-ref-{args.ref_model_size}-{args.ref_num_tokens}"
+        run_name = f"{run_base}-offline-{'local' if args.selection_local else 'global'}-{args.selection_rank}-{args.selection_rate}-ref-{args.ref_model_size}-{args.ref_num_tokens}"
     elif args.selection_algo == "online":
         run_name = f"{run_base}-online-{args.selection_rank}-proxy-{args.proxy_model_size}-{args.proxy_num_tokens}"
     elif args.selection_algo == "rhols":
@@ -99,7 +105,7 @@ if __name__ == "__main__":
                                              args.num_passes,
                                              holdout=False)
         elif args.selection_algo == "offline":
-            filter_suffix = f"offline-{args.selection_rank}-{args.selection_rate}-ref-{args.ref_model_size}-{args.ref_num_tokens}-sd-{seed}"
+            filter_suffix = f"offline-{'local' if args.selection_local else 'global'}-{args.selection_rank}-{args.selection_rate}-ref-{args.ref_model_size}-{args.ref_num_tokens}-sd-{seed}"
             data_remote = build_dataset_base(args.dataset,
                                              args.tokenizer,
                                              args.seq_len,
@@ -138,6 +144,7 @@ if __name__ == "__main__":
             f"selection-algo-{args.selection_algo}",
             f"selection-rank-{args.selection_rank}",
             f"selection-rate-{args.selection_rate}",
+            f"selection-local-{args.selection_local}",
             f"{'off-policy' if args.proxy_off_policy else 'on-policy'}",
             f"proxy-params-{args.proxy_model_size}",
             f"proxy-tok-{args.proxy_num_tokens}",
