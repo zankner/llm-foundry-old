@@ -98,6 +98,22 @@ def set_common_args(args,
         duration_tokens = 130_000_000_000
     base_run.parameters["max_duration"] = f"{duration_tokens}tok"
 
+    # Set batch information
+    base_run.parameters["global_train_batch_size"] = args.global_batch_size
+
+    # Set tokenization args
+    base_run.parameters["max_seq_len"] = args.seq_len
+    if args.tokenizer == "gpt4-tiktoken":
+        base_run.parameters["model"]["vocab_size"] = 100352
+        base_run.parameters["tokenizer_name"] = "tiktoken"
+        base_run.parameters["tokenizer"]["kwargs"] = {"model_name": "gpt-4"}
+    elif args.tokenizer == "gpt-neox-20b":
+        base_run.parameters["model"]["vocab_size"] = 50432
+        base_run.parameters["tokenizer_name"] = "EleutherAI/gpt-neox-20b"
+        base_run.parameters["tokenizer"]["kwargs"] = {
+            "model_max_length": args.seq_len
+        }
+
 
 def launch_run(run, local_debug, seed):
     if local_debug:

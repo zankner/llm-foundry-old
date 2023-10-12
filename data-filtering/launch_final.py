@@ -22,6 +22,10 @@ if __name__ == "__main__":
     parser.add_argument("--overwrite-shuffle-seed", type=int, default=None)
     parser.add_argument("--local-debug", action="store_true")
     parser.add_argument("--device-batch-size", type=int, default=32)
+    parser.add_argument("--global-batch-size",
+                        type=int,
+                        default=1024,
+                        choices=[512, 1024])
 
     # Reference args
     parser.add_argument("--ref-model-size", type=str, choices=["125M", "250M"])
@@ -66,7 +70,10 @@ if __name__ == "__main__":
     parser.add_argument("--selection-local", action="store_true")
 
     # Data args
-    parser.add_argument("--tokenizer", type=str, default="gpt4-tiktoken")
+    parser.add_argument("--tokenizer",
+                        type=str,
+                        default="gpt4-tiktoken",
+                        choices=["gpt4-tiktoken", "gpt-neox-20b"])
     parser.add_argument("--seq-len", type=int, default=4096)
     parser.add_argument("--num-passes", type=str, required=True)
     parser.add_argument("--dataset",
