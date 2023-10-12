@@ -21,6 +21,10 @@ if __name__ == "__main__":
     parser.add_argument("--seeds", nargs="+", type=int,
                         required=True)  # Add more later
     parser.add_argument("--local-debug", action="store_true")
+    parser.add_argument("--global-batch-size",
+                        type=int,
+                        default=1024,
+                        choices=[512, 1024])
 
     # Model args
     parser.add_argument("--ref-model-size",
@@ -34,7 +38,10 @@ if __name__ == "__main__":
     parser.add_argument("--device-batch-size", type=int, default=32)
 
     # Data args
-    parser.add_argument("--tokenizer", type=str, default="gpt4-tiktoken")
+    parser.add_argument("--tokenizer",
+                        type=str,
+                        default="gpt4-tiktoken",
+                        choices=["gpt4-tiktoken", "gpt-neox-20b"])
     parser.add_argument("--seq-len", type=int, default=4096)
     parser.add_argument("--dataset", type=str, default="mpt")
     parser.add_argument("--num-passes", type=str, required=True)
