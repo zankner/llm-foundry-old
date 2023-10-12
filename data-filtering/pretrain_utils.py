@@ -5,7 +5,7 @@ from typing import Optional
 from omegaconf import OmegaConf as om
 from mcli import create_run
 
-CKPT_BASE = "oci://mosaicml-internal-checkpoints/zack/data-filtering/"
+CKPT_BASE = "oci://mosaicml-internal-checkpoints/zack/debug-data-filtering/gpt-neox-20b"
 
 
 def set_common_args(args,
@@ -154,8 +154,8 @@ def build_model_arch(model_size):
             "d_model": 2560,
             "n_heads": 32,
             "n_layers": 32,
-            "lr": 0.00016,
-            "weight_decay": 0.00016
+            "lr": 0.0002,  # Setting lr low for now since ref is 10x chinchilla
+            "weight_decay": 0.0002
         }
     else:
         raise ValueError(f"Unknown model size {model_size}")
