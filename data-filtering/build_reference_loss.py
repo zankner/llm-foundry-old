@@ -180,9 +180,11 @@ def build_model(model_size, tokenizer, max_seq_len):
         raise ValueError(f"Unkown model size: {model_size}")
 
 
-def build_tokenizer_kwargs(tokenizer_name: str):
+def build_tokenizer_kwargs(tokenizer_name: str, args):
     if "tiktoken" in tokenizer_name:
         return {"model_name": "gpt-4"}
+    elif "EleutherAI/gpt-neox-20b" == tokenizer_name:
+        return {"model_max_length": args.seq_len}
     else:
         raise ValueError(f"Unknown tokenizer: {tokenizer_name}")
 
@@ -209,11 +211,13 @@ def main(args):
 
     if args.tokenizer == "gpt4-tiktoken":
         tokenizer_name = "tiktoken"
+    elif args.tokenizer == "gpt-neox-20b":
+        tokenizer_name = "EleutherAI/gpt-neox-20b"
     else:
         tokenizer_name = args.tokenizer
     tokenizer = build_tokenizer(tokenizer_name,
                                 tokenizer_kwargs=build_tokenizer_kwargs(
-                                    args.tokenizer))
+                                    args.tokenizer, args))
     model, fsdp_cfg = build_model(args.ref_model_size,
                                   tokenizer=tokenizer,
                                   max_seq_len=args.seq_len)
