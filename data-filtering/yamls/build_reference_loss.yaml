@@ -6,7 +6,7 @@ image: # Set in launch script
 integrations:
   - integration_type: git_repo
     git_repo: zankner/llm-foundry
-    git_branch: zack/data-filtering
+    git_branch: zack/debug-data-filtering
     pip_install: -e .[gpu]
     ssh_clone: true # Should be true if using a private repo
   - integration_type: "pip_packages"
@@ -15,11 +15,13 @@ integrations:
       - s3fs
       - pandas
 env_variables:
-  - key: AWS_PROFILE
-    value: data-force-one
+  # - key: AWS_PROFILE
+  #   value: data-force-one
   - key: NCCL_IB_PCI_RELAXED_ORDERING
     value: 1
 
 command: |
+  source /secrets/secrets.env
+  export AWS_PROFILE=data-force-one
   cd llm-foundry
-  composer data-filtering/build_reference_loss.py --ref-model-size {ref_model_size} --ref-num-tokens {ref_num_tokens} --final-num-tokens {final_num_tokens} --tokenizer {tokenizer} --dataset {dataset} --num-passes {num_passes} --train-seed {seed} --device-batch-size {device_batch_size}
+  composer data-filtering/build_reference_loss.py --ref-model-size {ref_model_size} --ref-num-tokens {ref_num_tokens} --final-num-tokens {final_num_tokens} --tokenizer {tokenizer} --dataset {dataset} --num-passes {num_passes} --seq-len {seq_len} --train-seed {seed} --device-batch-size {device_batch_size}

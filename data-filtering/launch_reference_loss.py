@@ -73,6 +73,7 @@ if __name__ == "__main__":
     base_run.command = base_run.command.replace(r"{dataset}", str(args.dataset))
     base_run.command = base_run.command.replace(r"{num_passes}",
                                                 str(args.num_passes))
+    base_run.command = base_run.command.replace(r"{seq_len}", str(args.seq_len))
     base_run.command = base_run.command.replace(r"{device_batch_size}",
                                                 str(args.device_batch_size))
 

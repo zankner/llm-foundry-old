@@ -10,7 +10,7 @@ env_variables:
 
 integrations:
   - integration_type: git_repo
-    git_branch: zack/data-filtering
+    git_branch: zack/debug-data-filtering
     git_repo: zankner/llm-foundry
     pip_install: .[gpu]
     ssh_clone: true
@@ -26,7 +26,7 @@ integrations:
   #   ssh_clone: true
   - integration_type: wandb
     entity: mosaic-ml
-    project: neural-data-filtering
+    project: debug-neural-data-filtering
   - integration_type: "pip_packages"
     packages:
       - slack-sdk
@@ -125,7 +125,7 @@ parameters:
   python_log_level: DEBUG
   loggers:
     wandb:
-      project: neural-data-filtering
+      project: debug-neural-data-filtering
       tags:
         - seed-${global_seed}
       group: ${run_name}
