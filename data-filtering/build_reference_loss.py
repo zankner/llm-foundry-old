@@ -64,7 +64,7 @@ class ReferenceLossCallback(Callback):
         dist.barrier()
 
 
-def build_model(model_size, tokenizer, max_seq_len):
+def build_model(model_size, tokenizer, max_seq_len, vocab_size):
     if model_size == "125M":
         model_cfg = OmegaConf.create({
             "name": "mpt_causal_lm",
@@ -74,7 +74,7 @@ def build_model(model_size, tokenizer, max_seq_len):
             "n_layers": 12,
             "expansion_ratio": 4,
             "max_seq_len": max_seq_len,
-            "vocab_size": 100352,
+            "vocab_size": vocab_size,
             "no_bias": True,
             "norm_type": "low_precision_layernorm",
             "emb_pdrop": 0,
@@ -111,7 +111,7 @@ def build_model(model_size, tokenizer, max_seq_len):
             "n_layers": 16,
             "expansion_ratio": 4,
             "max_seq_len": max_seq_len,
-            "vocab_size": 100352,
+            "vocab_size": vocab_size,
             "no_bias": True,
             "norm_type": "low_precision_layernorm",
             "emb_pdrop": 0,
@@ -148,7 +148,8 @@ def build_model(model_size, tokenizer, max_seq_len):
             "n_layers": 24,
             "expansion_ratio": 4,
             "max_seq_len": 2048,
-            "vocab_size": 100352,  # update for hero run with custom tokenizer
+            "vocab_size":
+                vocab_size,  # update for hero run with custom tokenizer
             "no_bias": True,
             "norm_type": "low_precision_layernorm",
             "emb_pdrop": 0,
@@ -211,16 +212,19 @@ def main(args):
 
     if args.tokenizer == "gpt4-tiktoken":
         tokenizer_name = "tiktoken"
+        vocab_size = 100352
     elif args.tokenizer == "gpt-neox-20b":
         tokenizer_name = "EleutherAI/gpt-neox-20b"
+        vocab_size = 50432
     else:
-        tokenizer_name = args.tokenizer
+        raise ValueError(f"Unknown tokenizer: {args.tokenizer}")
     tokenizer = build_tokenizer(tokenizer_name,
                                 tokenizer_kwargs=build_tokenizer_kwargs(
                                     args.tokenizer, args))
     model, fsdp_cfg = build_model(args.ref_model_size,
                                   tokenizer=tokenizer,
-                                  max_seq_len=args.seq_len)
+                                  max_seq_len=args.seq_len,
+                                  vocab_size=vocab_size)
     model.use_logits = False  # So that full ModellingOutputs passed to callback
     model.val_metrics = {
         LanguageCrossEntropy.__name__: LanguageCrossEntropy()
