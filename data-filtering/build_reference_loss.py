@@ -183,7 +183,7 @@ def build_model(model_size, tokenizer, max_seq_len):
 def build_tokenizer_kwargs(tokenizer_name: str, args):
     if "tiktoken" in tokenizer_name:
         return {"model_name": "gpt-4"}
-    elif "EleutherAI/gpt-neox-20b" == tokenizer_name:
+    elif "gpt-neox-20b" == tokenizer_name:
         return {"model_max_length": args.seq_len}
     else:
         raise ValueError(f"Unknown tokenizer: {tokenizer_name}")
