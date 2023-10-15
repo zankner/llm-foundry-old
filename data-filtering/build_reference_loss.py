@@ -207,6 +207,7 @@ def main(args):
 
     # Building model ckpt name
     ref_run_name = f"{args.dataset}-passes-{args.num_passes}-ref-{args.ref_model_size}-{args.ref_num_tokens}-sd-{args.train_seed}"
+    ref_run_name = f"{args.tokenizer}-{args.global_batch_size}-{args.seq_len}-{ref_run_name}"
     ref_ckpt = os.path.join(CKPT_BASE, args.dataset, "reference", ref_run_name,
                             "ckpts", "latest-rank0.pt.symlink")
 
