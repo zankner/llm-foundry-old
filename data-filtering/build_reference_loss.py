@@ -294,6 +294,7 @@ if __name__ == "__main__":
 
     # Data args
     parser.add_argument("--device-batch-size", type=int, default=256)
+    parser.add_argument("--global-batch-size", type=int, default=512)
     parser.add_argument("--tokenizer", type=str, default="gpt4-tiktoken")
     parser.add_argument("--eos-token-id", type=int, default=0)
     parser.add_argument("--seq-len", type=int, default=4096)
