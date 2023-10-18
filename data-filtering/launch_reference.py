@@ -49,6 +49,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     run_name = f"{args.dataset}-passes-{args.num_passes}-ref-{args.ref_model_size}-{args.ref_num_tokens}"
+    run_name = f"{args.tokenizer}-{args.global_batch_size}-{args.seq_len}-{run_name}"
 
     for seed in args.seeds:
         base_run = RunConfig.from_file(

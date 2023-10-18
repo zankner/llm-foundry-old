@@ -31,6 +31,7 @@ if __name__ == "__main__":
 
     # Data args
     parser.add_argument("--device-batch-size", type=int, default=128)
+    parser.add_argument("--global-batch-size", type=int, default=512)
     parser.add_argument("--tokenizer", type=str, default="gpt4-tiktoken")
     parser.add_argument("--seq-len", type=int, default=4096)
     parser.add_argument("--dataset",
@@ -76,6 +77,8 @@ if __name__ == "__main__":
     base_run.command = base_run.command.replace(r"{seq_len}", str(args.seq_len))
     base_run.command = base_run.command.replace(r"{device_batch_size}",
                                                 str(args.device_batch_size))
+    base_run.command = base_run.command.replace(r"{global_batch_size}",
+                                                str(args.global_batch_size))
 
     # Set run name
     run_name = f"sd-{args.seed}-build-ref-loss"

@@ -99,7 +99,7 @@ if __name__ == "__main__":
         run_name = f"{run_base}-online-{args.selection_rank}-proxy-{args.proxy_model_size}-{args.proxy_num_tokens}"
     elif args.selection_algo == "rhols":
         run_name = f"{run_base}-rhols-{args.selection_rank}{'-zscore' if args.proxy_z_score else '-raw'}-{'-off-policy' if args.proxy_off_policy else ''}-proxy-{args.proxy_model_size}-{args.proxy_num_tokens}-ref-{args.ref_model_size}-{args.ref_num_tokens}"
-
+    run_name = f"{args.tokenizer}-{args.global_batch_size}-{args.seq_len}-{run_name}"
     for seed in args.seeds:
         base_run = RunConfig.from_file(
             f"data-filtering/yamls/pretrain_base.yaml")
