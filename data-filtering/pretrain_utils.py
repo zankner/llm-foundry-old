@@ -11,11 +11,12 @@ CKPT_BASE = "oci://mosaicml-internal-checkpoints/zack/data-filtering/"
 def set_common_args(args,
                     base_run,
                     run_name,
-                    save_folder,
+                    save_base,
                     data_remote,
                     model_size,
                     duration,
                     seed,
+                    save_suffix="",
                     token_multiplier=1):
     # Set run name
     base_run.name = f"sd-{seed}-{run_name.lower()}"[:56]  # Mcli things
@@ -33,14 +34,21 @@ def set_common_args(args,
     # Set rest of cluster params
     if args.cluster in ["r9z1", "r14z3"]:
         base_run.gpu_type = "h100_80gb"
-    elif args.cluster in ["r4z5", "r8z6", "r1z1"]:
+    elif args.cluster in ["r4z5", "r4z7", "r4z6", "r8z6", "r1z1"]:
         base_run.gpu_type = "a100_80gb"
     else:
         base_run.gpu_type = "a100_40gb"
 
     # Special images
-    if args.cluster in ["r4z5"]:
+    if args.cluster in ["r4z5", "r4z7", "r4z6"]:
         base_run.image = "mosaicml/pytorch:2.1.0_cu121-python3.10-ubuntu20.04-aws"
+        base_run.env_variables += [{
+            "key": "FI_EFA_FORK_SAFE",
+            "value": "1"
+        }, {
+            "key": "NCCL_DEBUG",
+            "value": "INFO"
+        }]
 
     # # Set timeout for slow clusters
     # if args.cluster in ["r9z1"]:
@@ -48,13 +56,18 @@ def set_common_args(args,
 
     # Set modeling args
     model_cfg = build_model_arch(model_size)
+    lr = model_cfg["lr"] if args.lr is None else args.lr
     base_run.parameters["model"]["d_model"] = model_cfg["d_model"]
     base_run.parameters["model"]["n_heads"] = model_cfg["n_heads"]
     base_run.parameters["model"]["n_layers"] = model_cfg["n_layers"]
-    base_run.parameters["optimizer"]["lr"] = model_cfg["lr"]
-    base_run.parameters["optimizer"]["weight_decay"] = model_cfg["weight_decay"]
+    base_run.parameters["optimizer"]["lr"] = lr
+    base_run.parameters["optimizer"]["weight_decay"] = lr  # Forcing lr = wd
 
     # Set ckpt save folder
+    save_folder = os.path.join(
+        save_base,
+        f"{run_name}{'-' + save_suffix if save_suffix else ''}-bs-{args.global_batch_size}-lr-{lr}-sd-{seed}",
+        "ckpts")
     base_run.parameters["save_folder"] = save_folder
 
     # Set data args
@@ -62,9 +75,12 @@ def set_common_args(args,
 
     # Common wandb tags
     base_run.parameters["loggers"]["wandb"]["tags"] += [
-        f"dataset-{args.dataset}", f"seed-{seed}"
+        f"dataset-{args.dataset}",
+        f"seed-{seed}",
+        f"lr-{lr}",
     ]
     base_run.parameters["loggers"]["wandb"]["name"] = f"{run_name}-sd-{seed}"
+    base_run.parameters["loggers"]["wandb"]["group"] = run_name
 
     # Handle preemption
     if args.preemptible:
@@ -118,7 +134,7 @@ def set_common_args(args,
 def launch_run(run, local_debug, seed):
     if local_debug:
         with open("debug.yaml", "w") as f:
-            om.save(config=om.create(run.parameters), f=f)
+            om.save(config=om.create(run), f=f)
     else:
         run = create_run(run)
         print(f"Launched seed {seed} with in {run.name}")
@@ -154,8 +170,8 @@ def build_model_arch(model_size):
             "d_model": 2560,
             "n_heads": 32,
             "n_layers": 32,
-            "lr": 0.00016,
-            "weight_decay": 0.00016
+            "lr": 0.002,
+            "weight_decay": 0.002
         }
     else:
         raise ValueError(f"Unknown model size {model_size}")

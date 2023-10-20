@@ -21,12 +21,16 @@ if __name__ == "__main__":
     parser.add_argument("--seeds", nargs="+", type=int,
                         required=True)  # Add more later
     parser.add_argument("--local-debug", action="store_true")
+
+    # Hparams
+    parser.add_argument("--lr", type=float, default=None)
+    parser.add_argument("--device-batch-size", type=int, default=32)
     parser.add_argument("--global-batch-size",
                         type=int,
                         default=1024,
                         choices=[512, 1024])
 
-    # Model args
+    # Ref Model args
     parser.add_argument("--ref-model-size",
                         type=str,
                         required=True,
@@ -35,7 +39,6 @@ if __name__ == "__main__":
                         type=str,
                         required=True,
                         choices=["2B", "5B", "20B", "26B", "52B", "130B"])
-    parser.add_argument("--device-batch-size", type=int, default=32)
 
     # Data args
     parser.add_argument("--tokenizer",
@@ -61,10 +64,9 @@ if __name__ == "__main__":
                                          args.num_passes,
                                          holdout=True)
 
-        save_folder = os.path.join(CKPT_BASE, args.dataset, "reference",
-                                   f"{run_name}-sd-{seed}", "ckpts")
+        save_base = os.path.join(CKPT_BASE, args.dataset, "reference")
 
-        set_common_args(args, base_run, run_name, save_folder, data_remote,
+        set_common_args(args, base_run, run_name, save_base, data_remote,
                         args.ref_model_size, args.ref_num_tokens, seed)
 
         base_run.parameters["loggers"]["wandb"]["tags"] += [

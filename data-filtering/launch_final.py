@@ -4,7 +4,8 @@ import os
 from mcli import RunConfig
 
 from pretrain_utils import (CKPT_BASE, set_common_args, launch_run,
-                            build_dataset_base, build_final_base, assert_args)
+                            build_model_arch, build_dataset_base,
+                            build_final_base, assert_args)
 
 if __name__ == "__main__":
     # System args
@@ -21,6 +22,9 @@ if __name__ == "__main__":
                         required=True)  # Add more later
     parser.add_argument("--overwrite-shuffle-seed", type=int, default=None)
     parser.add_argument("--local-debug", action="store_true")
+
+    # Model args
+    parser.add_argument("--lr", type=float, default=None)
     parser.add_argument("--device-batch-size", type=int, default=32)
     parser.add_argument("--global-batch-size",
                         type=int,
@@ -28,6 +32,7 @@ if __name__ == "__main__":
                         choices=[512, 1024])
 
     # Reference args
+    parser.add_argument("--ref-lr", type=float, default=None)
     parser.add_argument("--ref-model-size", type=str, choices=["125M", "250M"])
     parser.add_argument("--ref-num-tokens",
                         type=str,
@@ -104,6 +109,7 @@ if __name__ == "__main__":
         base_run = RunConfig.from_file(
             f"data-filtering/yamls/pretrain_base.yaml")
 
+        save_suffix = ""
         if args.selection_algo == "baseline":
             data_remote = build_dataset_base(args.dataset,
                                              args.tokenizer,
@@ -112,7 +118,12 @@ if __name__ == "__main__":
                                              args.num_passes,
                                              holdout=False)
         elif args.selection_algo == "offline":
-            filter_suffix = f"offline-{'local' if args.selection_local else 'global'}-{args.selection_rank}-{args.selection_rate}-ref-{args.ref_model_size}-{args.ref_num_tokens}-sd-{seed}"
+            ref_lr = build_model_arch(
+                args.ref_model_size
+            )["lr"] if args.ref_lr is None else args.ref_lr
+            base_run.parameters["ref_lr"] = ref_lr
+            filter_suffix = f"offline-{'local' if args.selection_local else 'global'}-{args.selection_rank}-{args.selection_rate}-ref-{args.ref_model_size}-{args.ref_num_tokens}-{run_name}-bs-{args.global_batch_size}-lr-{ref_lr}-sd-{seed}"
+            save_suffix = f"ref-lr-{ref_lr}"
             data_remote = build_dataset_base(args.dataset,
                                              args.tokenizer,
                                              args.seq_len,
@@ -139,11 +150,17 @@ if __name__ == "__main__":
             del base_run.parameters["train_loader"]["dataset"]["shuffle_seed"]
             del base_run.parameters["train_loader"]["dataset"]["shuffle_algo"]
 
-        save_folder = os.path.join(CKPT_BASE, args.dataset, "final",
-                                   f"{run_name}-sd-{seed}", "ckpts")
+        save_base = os.path.join(CKPT_BASE, args.dataset, "final")
 
-        set_common_args(args, base_run, run_name, save_folder, data_remote,
-                        args.final_model_size, args.final_num_tokens, seed)
+        set_common_args(args,
+                        base_run,
+                        run_name,
+                        save_base,
+                        data_remote,
+                        args.final_model_size,
+                        args.final_num_tokens,
+                        seed,
+                        save_suffix=save_suffix)
 
         base_run.parameters["loggers"]["wandb"]["tags"] += [
             "final", f"final-params-{args.final_model_size}",
@@ -154,7 +171,7 @@ if __name__ == "__main__":
             f"selection-local-{args.selection_local}",
             f"{'off-policy' if args.proxy_off_policy else 'on-policy'}",
             f"proxy-params-{args.proxy_model_size}",
-            f"proxy-tok-{args.proxy_num_tokens}",
+            f"proxy-tok-{args.proxy_num_tokens}", f"ref-lr-{args.ref_lr}",
             f"ref-params-{args.ref_model_size}",
             f"ref-tok-{args.ref_num_tokens}", f"num-passes-{args.num_passes}",
             f"tokenizer-{args.tokenizer}", f"seq-len-{args.seq_len}"
