@@ -101,7 +101,7 @@ def build_model(model_size, tokenizer, max_seq_len):
             "state_dict_type": "full",
             "verbose": False
         })
-        return ComposerMPTCausalLM(model_cfg, tokenizer), fsdp_cfg
+        return ComposerMPTCausalLM(model_cfg, tokenizer), fsdp_cfg, 0.0002
     elif model_size == "250M":
         model_cfg = OmegaConf.create({
             "name": "mpt_causal_lm",
@@ -138,7 +138,7 @@ def build_model(model_size, tokenizer, max_seq_len):
             "state_dict_type": "full",
             "verbose": False
         })
-        return ComposerMPTCausalLM(model_cfg, tokenizer), fsdp_cfg
+        return ComposerMPTCausalLM(model_cfg, tokenizer), fsdp_cfg, 0.0002
     elif model_size == "1B":
         model_cfg = OmegaConf.create({
             "name": "mpt_causal_lm",
@@ -175,7 +175,7 @@ def build_model(model_size, tokenizer, max_seq_len):
             "state_dict_type": "full",
             "verbose": False
         })
-        return ComposerMPTCausalLM(model_cfg, tokenizer), fsdp_cfg
+        return ComposerMPTCausalLM(model_cfg, tokenizer), fsdp_cfg, 0.0002
     else:
         raise ValueError(f"Unkown model size: {model_size}")
 
@@ -189,11 +189,30 @@ def build_tokenizer_kwargs(tokenizer_name: str):
 
 def main(args):
 
+    # Building the model config
+    if args.tokenizer == "gpt4-tiktoken":
+        tokenizer_name = "tiktoken"
+    else:
+        tokenizer_name = args.tokenizer
+    tokenizer = build_tokenizer(tokenizer_name,
+                                tokenizer_kwargs=build_tokenizer_kwargs(
+                                    args.tokenizer))
+    model, fsdp_cfg, lr = build_model(args.ref_model_size,
+                                      tokenizer=tokenizer,
+                                      max_seq_len=args.seq_len)
+    if args.lr is not None:
+        lr = args.lr
+
+    model.use_logits = False  # So that full ModellingOutputs passed to callback
+    model.val_metrics = {
+        LanguageCrossEntropy.__name__: LanguageCrossEntropy()
+    }  # Only metric we care about
+
     # Building the remote name
     remote_download = build_dataset_base(args.dataset, args.tokenizer,
                                          args.seq_len, args.final_num_tokens,
                                          args.num_passes, False)
-    reference_run_data_suffix = f"{args.final_num_tokens}-tokens-from-{args.num_passes}-passes-ref-{args.ref_model_size}-{args.ref_num_tokens}-sd-{args.train_seed}"
+    reference_run_data_suffix = f"{args.final_num_tokens}-tokens-from-{args.num_passes}-passes-ref-{args.ref_model_size}-{args.ref_num_tokens}-bs-{args.ref_global_batch_size}-lr-{lr}-sd-{args.train_seed}"
     remote_upload = os.path.join(
         *remote_download.replace("s3://", "").split("/")[:-3],
         reference_run_data_suffix, "heuristic.parquet")
@@ -203,24 +222,11 @@ def main(args):
     print(f"Global batch size: {global_batch_size}")
 
     # Building model ckpt name
-    ref_run_name = f"{args.dataset}-passes-{args.num_passes}-ref-{args.ref_model_size}-{args.ref_num_tokens}-sd-{args.train_seed}"
-    ref_ckpt = os.path.join(CKPT_BASE, args.dataset, "reference", ref_run_name,
-                            "ckpts", "latest-rank0.pt.symlink")
-
-    if args.tokenizer == "gpt4-tiktoken":
-        tokenizer_name = "tiktoken"
-    else:
-        tokenizer_name = args.tokenizer
-    tokenizer = build_tokenizer(tokenizer_name,
-                                tokenizer_kwargs=build_tokenizer_kwargs(
-                                    args.tokenizer))
-    model, fsdp_cfg = build_model(args.ref_model_size,
-                                  tokenizer=tokenizer,
-                                  max_seq_len=args.seq_len)
-    model.use_logits = False  # So that full ModellingOutputs passed to callback
-    model.val_metrics = {
-        LanguageCrossEntropy.__name__: LanguageCrossEntropy()
-    }  # Only metric we care about
+    ref_run_name = f"{args.dataset}-passes-{args.num_passes}-ref-{args.ref_model_size}-{args.ref_num_tokens}-bs-{args.ref_global_batch_size}-lr-{lr}-sd-{args.train_seed}"
+    ref_ckpt = os.path.join(CKPT_BASE, args.dataset,
+                            f"{args.tokenizer}-seqlen-{args.seq_len}",
+                            "reference", ref_run_name, "ckpts",
+                            "latest-rank0.pt.symlink")
 
     print(f"Downloading data from {remote_download}")
     dataset = StreamingTextDataset(
@@ -267,6 +273,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     # Ref model args
+    parser.add_argument("--lr", type=float, default=None)
+    parser.add_argument("--ref-global-batch-size", type=int, default=512)
     parser.add_argument("--ref-model-size",
                         type=str,
                         required=True,
