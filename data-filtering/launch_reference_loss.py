@@ -14,6 +14,8 @@ if __name__ == "__main__":
     parser.add_argument("--local-debug", action="store_true")
 
     # Model args
+    parser.add_argument("--lr", type=float, default=None)
+    parser.add_argument("--ref-global-batch-size", type=int, default=512)
     parser.add_argument("--ref-model-size",
                         type=str,
                         required=True,
@@ -62,6 +64,12 @@ if __name__ == "__main__":
     base_run.command = base_run.command.replace(r"{ref_num_tokens}",
                                                 str(args.ref_num_tokens))
     base_run.command = base_run.command.replace(r"{seed}", str(args.seed))
+    base_run.command = base_run.command.replace(r"{ref_global_batch_size}",
+                                                str(args.ref_global_batch_size))
+    if args.lr is not None:
+        base_run.command = base_run.command.replace(r"{lr}", str(args.lr))
+    else:
+        base_run.command = base_run.command.replace(r"--lr {lr}", "")
 
     # Set final args
     base_run.command = base_run.command.replace(r"{final_num_tokens}",
@@ -70,6 +78,7 @@ if __name__ == "__main__":
     # Set dataset args
     base_run.command = base_run.command.replace(r"{tokenizer}",
                                                 str(args.tokenizer))
+    base_run.command = base_run.command.replace(r"{seq_len}", str(args.seq_len))
     base_run.command = base_run.command.replace(r"{dataset}", str(args.dataset))
     base_run.command = base_run.command.replace(r"{num_passes}",
                                                 str(args.num_passes))

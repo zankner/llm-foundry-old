@@ -147,7 +147,7 @@ def build_model(model_size, tokenizer, max_seq_len):
             "n_heads": 16,
             "n_layers": 24,
             "expansion_ratio": 4,
-            "max_seq_len": 2048,
+            "max_seq_len": max_seq_len,
             "vocab_size": 100352,  # update for hero run with custom tokenizer
             "no_bias": True,
             "norm_type": "low_precision_layernorm",

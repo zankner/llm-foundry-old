@@ -64,7 +64,9 @@ if __name__ == "__main__":
                                          args.num_passes,
                                          holdout=True)
 
-        save_base = os.path.join(CKPT_BASE, args.dataset, "reference")
+        save_base = os.path.join(CKPT_BASE, args.dataset,
+                                 f"{args.tokenizer}-seqlen-{args.seq_len}",
+                                 "reference")
 
         set_common_args(args, base_run, run_name, save_base, data_remote,
                         args.ref_model_size, args.ref_num_tokens, seed)

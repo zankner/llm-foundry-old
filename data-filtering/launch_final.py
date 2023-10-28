@@ -33,6 +33,7 @@ if __name__ == "__main__":
 
     # Reference args
     parser.add_argument("--ref-lr", type=float, default=None)
+    parser.add_argument("--ref-global-batch-size", type=int, default=512)
     parser.add_argument("--ref-model-size", type=str, choices=["125M", "250M"])
     parser.add_argument("--ref-num-tokens",
                         type=str,
@@ -66,7 +67,7 @@ if __name__ == "__main__":
     parser.add_argument("--selection-rank",
                         type=str,
                         default="hard",
-                        choices=["hard", "medium",
+                        choices=["hard", "mid",
                                  "easy"])  # Treat baseline as a selection algo
     parser.add_argument("--selection-rate",
                         type=float,
@@ -122,8 +123,8 @@ if __name__ == "__main__":
                 args.ref_model_size
             )["lr"] if args.ref_lr is None else args.ref_lr
             base_run.parameters["ref_lr"] = ref_lr
-            filter_suffix = f"offline-{'local' if args.selection_local else 'global'}-{args.selection_rank}-{args.selection_rate}-ref-{args.ref_model_size}-{args.ref_num_tokens}-{run_name}-bs-{args.global_batch_size}-lr-{ref_lr}-sd-{seed}"
-            save_suffix = f"ref-lr-{ref_lr}"
+            filter_suffix = f"offline-{'local' if args.selection_local else 'global'}-{args.selection_rank}-{args.selection_rate}-ref-{args.ref_model_size}-{args.ref_num_tokens}-bs-{args.global_batch_size}-lr-{ref_lr}-sd-{seed}"
+            save_suffix = f"bs-{args.ref_global_batch_size}-lr-{ref_lr}"
             data_remote = build_dataset_base(args.dataset,
                                              args.tokenizer,
                                              args.seq_len,
@@ -150,8 +151,10 @@ if __name__ == "__main__":
             del base_run.parameters["train_loader"]["dataset"]["shuffle_seed"]
             del base_run.parameters["train_loader"]["dataset"]["shuffle_algo"]
 
-        save_base = os.path.join(CKPT_BASE, args.dataset, "final")
-
+        save_base = os.path.join(CKPT_BASE, args.dataset,
+                                 f"{args.tokenizer}-seqlen-{args.seq_len}",
+                                 "final")
+        print(save_suffix)
         set_common_args(args,
                         base_run,
                         run_name,
