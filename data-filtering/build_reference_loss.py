@@ -278,7 +278,7 @@ if __name__ == "__main__":
     parser.add_argument("--ref-model-size",
                         type=str,
                         required=True,
-                        choices=["125M", "250M"])
+                        choices=["125M", "250M", "1B"])
     parser.add_argument("--ref-num-tokens",
                         type=str,
                         required=True,
