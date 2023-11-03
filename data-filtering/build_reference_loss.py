@@ -209,9 +209,13 @@ def main(args):
     }  # Only metric we care about
 
     # Building the remote name
-    remote_download = build_dataset_base(args.dataset, args.tokenizer,
-                                         args.seq_len, args.final_num_tokens,
-                                         args.num_passes, False)
+    remote_download = build_dataset_base(args.dataset,
+                                         args.tokenizer,
+                                         args.seq_len,
+                                         args.final_num_tokens,
+                                         args.num_passes,
+                                         False,
+                                         seed=args.train_seed)
     reference_run_data_suffix = f"{args.final_num_tokens}-tokens-from-{args.num_passes}-passes-ref-{args.ref_model_size}-{args.ref_num_tokens}-bs-{args.ref_global_batch_size}-lr-{lr}-sd-{args.train_seed}"
     remote_upload = os.path.join(
         *remote_download.replace("s3://", "").split("/")[:-3],
