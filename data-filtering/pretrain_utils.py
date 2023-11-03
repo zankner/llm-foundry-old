@@ -184,8 +184,9 @@ def build_dataset_base(dataset: str,
                        num_tokens: int,
                        num_passes: str,
                        holdout: bool,
+                       seed: int,
                        filter_suffix: Optional[str] = None):
-    return f"s3://data-force-one-datasets/__unitystorage/catalogs/36798a58-e180-4029-8cd7-842e61841ef0/volumes/b9e4994e-997d-4cbf-b76b-e38ff5533785/{dataset}/{tokenizer_name}-seqlen-{seq_len}/52B-total-available-holdout-tokens-partition-sd-17/{'holdout' if holdout else 'train'}/{num_tokens}-tokens-from-{num_passes}-passes{f'-{filter_suffix}' if filter_suffix is not None else ''}/combined/mds"
+    return f"s3://data-force-one-datasets/__unitystorage/catalogs/36798a58-e180-4029-8cd7-842e61841ef0/volumes/b9e4994e-997d-4cbf-b76b-e38ff5533785/{dataset}/{tokenizer_name}-seqlen-{seq_len}/52B-total-available-holdout-tokens-partition-sd-{seed}/{'holdout' if holdout else 'train'}/{num_tokens}-tokens-from-{num_passes}-passes{f'-{filter_suffix}' if filter_suffix is not None else ''}/combined/mds"
 
 
 def build_ref_base(num_tokens, num_params):
