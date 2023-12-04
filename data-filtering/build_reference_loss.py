@@ -293,7 +293,7 @@ if __name__ == "__main__":
     parser.add_argument("--final-num-tokens",
                         type=str,
                         required=True,
-                        choices=["26B", "52B", "DEBUG"])
+                        choices=["26B", "52B", "130B", "DEBUG"])
 
     # Data args
     parser.add_argument("--device-batch-size", type=int, default=256)
