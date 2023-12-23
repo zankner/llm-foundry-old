@@ -242,6 +242,7 @@ def main(args):
         local="/tmp/train-data",
         split=None,
         shuffle=False,
+        download_timeout=360
     )
     lm_collate_fn = transformers.DataCollatorForLanguageModeling(
         tokenizer=dataset.tokenizer, mlm=False)
