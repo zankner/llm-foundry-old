@@ -34,7 +34,7 @@ if __name__ == "__main__":
     parser.add_argument("--ref-model-size",
                         type=str,
                         required=True,
-                        choices=["125M", "250M"])
+                        choices=["125M", "250M", "1B"])
     parser.add_argument("--ref-num-tokens",
                         type=str,
                         required=True,
@@ -45,6 +45,10 @@ if __name__ == "__main__":
                         type=str,
                         default="gpt4-tiktoken",
                         choices=["gpt4-tiktoken", "gpt-neox-20b"])
+    parser.add_argument("--available-holdout-tokens",
+                        type=str,
+                        default="52B",
+                        choices=["26B", "52B"])
     parser.add_argument("--seq-len", type=int, default=4096)
     parser.add_argument("--dataset", type=str, default="mpt")
     parser.add_argument("--num-passes", type=str, required=True)
@@ -62,6 +66,8 @@ if __name__ == "__main__":
                                          args.seq_len,
                                          args.ref_num_tokens,
                                          args.num_passes,
+                                         args.available_holdout_tokens,
+                                         seed=seed,
                                          holdout=True)
 
         save_base = os.path.join(CKPT_BASE, args.dataset,

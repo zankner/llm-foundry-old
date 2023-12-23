@@ -9,6 +9,7 @@ if __name__ == "__main__":
     # System args
     parser = argparse.ArgumentParser()
     parser.add_argument("--cluster", type=str, default="r9z1")
+    parser.add_argument("--priority", type=str, default="low")
     parser.add_argument("--ngpus", type=int, default=16)
     parser.add_argument("--seed", type=int, required=True)  # Add more later
     parser.add_argument("--local-debug", action="store_true")
@@ -19,7 +20,7 @@ if __name__ == "__main__":
     parser.add_argument("--ref-model-size",
                         type=str,
                         required=True,
-                        choices=["125M", "250M"])
+                        choices=["125M", "250M", "1B"])
     parser.add_argument("--ref-num-tokens",
                         type=str,
                         required=True,
@@ -38,7 +39,11 @@ if __name__ == "__main__":
     parser.add_argument("--dataset",
                         type=str,
                         default="mpt",
-                        choices=["mpt", "pile"])
+                        choices=["mpt", "pile", "pile-cc"])
+    parser.add_argument("--available-holdout-tokens",
+                        type=str,
+                        default="52B",
+                        choices=["26B", "52B"])
     parser.add_argument("--num-passes", type=str, required=True)
     args = parser.parse_args()
 
@@ -53,10 +58,24 @@ if __name__ == "__main__":
     # Set rest of cluster params
     if args.cluster in ["r9z1", "r14z3"]:
         base_run.gpu_type = "h100_80gb"
-    elif args.cluster in ["r8z6", "r1z1"]:
+    elif args.cluster in ["r4z5", "r4z7", "r4z6", "r8z6", "r1z1", "r4z8"]:
         base_run.gpu_type = "a100_80gb"
     else:
         base_run.gpu_type = "a100_40gb"
+
+    # Special images
+    if args.cluster in ["r4z5", "r4z7", "r4z6", "r4z8"]:
+        base_run.image = "mosaicml/pytorch:2.1.0_cu121-python3.10-ubuntu20.04-aws"
+        base_run.env_variables += [{
+            "key": "FI_EFA_FORK_SAFE",
+            "value": "1"
+        }, {
+            "key": "NCCL_DEBUG",
+            "value": "INFO"
+        }]
+
+    # Set scheduling
+    base_run.scheduling = {"priority": args.priority, "resumable": False}
 
     # Set ref model args
     base_run.command = base_run.command.replace(r"{ref_model_size}",
@@ -84,6 +103,8 @@ if __name__ == "__main__":
                                                 str(args.num_passes))
     base_run.command = base_run.command.replace(r"{device_batch_size}",
                                                 str(args.device_batch_size))
+    base_run.command = base_run.command.replace(r"{available_holdout_tokens}",
+                                                str(args.available_holdout_tokens))
 
     # Set run name
     run_name = f"sd-{args.seed}-build-ref-loss"

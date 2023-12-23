@@ -1,6 +1,6 @@
 global_seed: 42
 max_seq_len: 2048
-run_name: mpt-passes-0.5-ref-125M-26B
+run_name: pile-cc-passes-1-ref-125M-26B
 model:
   name: mpt_causal_lm
   init_device: meta
@@ -66,20 +66,20 @@ loggers:
     project: neural-data-filtering
     tags:
     - seed-${global_seed}
-    - dataset-mpt
+    - dataset-pile-cc
     - seed-42
     - lr-0.0002
     - ref
     - ref-params-125M
     - ref-tok-26B
-    - num-passes-0.5
+    - num-passes-1
     - tokenizer-gpt4-tiktoken
     - seq-len-2048
-    group: mpt-passes-0.5-ref-125M-26B
-    name: mpt-passes-0.5-ref-125M-26B-sd-42
+    group: pile-cc-passes-1-ref-125M-26B
+    name: pile-cc-passes-1-ref-125M-26B-sd-42
 autoresume: true
 save_filename: ba{batch}/rank{rank}.pt
-save_folder: oci://mosaicml-internal-checkpoints/zack/data-filtering/mpt/gpt4-tiktoken-seqlen-2048/reference/mpt-passes-0.5-ref-125M-26B-bs-512-lr-0.0002-sd-42/ckpts
+save_folder: oci://mosaicml-internal-checkpoints/zack/data-filtering/pile-cc/gpt4-tiktoken-seqlen-2048/reference/pile-cc-passes-1-ref-125M-26B-bs-512-lr-0.0002-sd-42/ckpts
 save_interval: 500ba
 save_num_checkpoints_to_keep: 1
 algorithms:
@@ -114,10 +114,10 @@ train_loader:
     shuffle: true
     sampling_method: fixed
     shuffle_algo: py1br
-    predownload: 256
+    predownload: 128
     shuffle_block_size: 4194304
     shuffle_seed: ${global_seed}
     local: /tmp/dataset/train
-    remote: s3://data-force-one-datasets/__unitystorage/catalogs/36798a58-e180-4029-8cd7-842e61841ef0/volumes/b9e4994e-997d-4cbf-b76b-e38ff5533785/mpt/gpt4-tiktoken-seqlen-2048/52B-total-available-holdout-tokens-partition-sd-42/holdout/26B-tokens-from-0.5-passes/combined/mds
+    remote: s3://data-force-one-datasets/__unitystorage/catalogs/36798a58-e180-4029-8cd7-842e61841ef0/volumes/b9e4994e-997d-4cbf-b76b-e38ff5533785/pile-cc/gpt4-tiktoken-seqlen-2048/26B-total-available-holdout-tokens-partition-sd-42/holdout/26B-tokens-from-1-passes/combined/mds
     split: null
 dist_timeout: 1800

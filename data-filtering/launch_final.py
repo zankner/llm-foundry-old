@@ -34,7 +34,9 @@ if __name__ == "__main__":
     # Reference args
     parser.add_argument("--ref-lr", type=float, default=None)
     parser.add_argument("--ref-global-batch-size", type=int, default=512)
-    parser.add_argument("--ref-model-size", type=str, choices=["125M", "250M"])
+    parser.add_argument("--ref-model-size",
+                        type=str,
+                        choices=["125M", "250M", "1B"])
     parser.add_argument("--ref-num-tokens",
                         type=str,
                         choices=["2B", "5B", "20B", "26B", "52B", "130B"])
@@ -61,7 +63,6 @@ if __name__ == "__main__":
     # Selection args
     parser.add_argument("--selection-algo",
                         type=str,
-                        required=True,
                         choices=["offline", "rhol", "online", "baseline"
                                 ])  # Treat baseline as a selection algo
     parser.add_argument("--selection-rank",
@@ -73,19 +74,23 @@ if __name__ == "__main__":
                         type=float,
                         default=0.5,
                         choices=[0.1, 0.25, 0.5])
-    parser.add_argument("--selection-local", action="store_true")
+    parser.add_argument("--selection-scope", choices=["global", "local", "web"])
 
     # Data args
     parser.add_argument("--tokenizer",
                         type=str,
                         default="gpt4-tiktoken",
                         choices=["gpt4-tiktoken", "gpt-neox-20b"])
+    parser.add_argument("--available-holdout-tokens",
+                        type=str,
+                        default="52B",
+                        choices=["26B", "52B"])
     parser.add_argument("--seq-len", type=int, default=4096)
     parser.add_argument("--num-passes", type=str, required=True)
     parser.add_argument("--dataset",
                         type=str,
                         default="mpt",
-                        choices=["mpt", "pile"])
+                        choices=["mpt", "pile", "pile-cc"])
 
     args = parser.parse_args()
 
@@ -100,7 +105,7 @@ if __name__ == "__main__":
             "selection_rank", "selection_rate", "ref_model_size",
             "ref_num_tokens"
         ], args)
-        run_name = f"{run_base}-offline-{'local' if args.selection_local else 'global'}-{args.selection_rank}-{args.selection_rate}-ref-{args.ref_model_size}-{args.ref_num_tokens}"
+        run_name = f"{run_base}-offline-{args.selection_scope}-{args.selection_rank}-{args.selection_rate}-ref-{args.ref_model_size}-{args.ref_num_tokens}"
     elif args.selection_algo == "online":
         run_name = f"{run_base}-online-{args.selection_rank}-proxy-{args.proxy_model_size}-{args.proxy_num_tokens}"
     elif args.selection_algo == "rhols":
@@ -112,26 +117,34 @@ if __name__ == "__main__":
 
         save_suffix = ""
         if args.selection_algo == "baseline":
-            data_remote = build_dataset_base(args.dataset,
-                                             args.tokenizer,
-                                             args.seq_len,
-                                             args.final_num_tokens,
-                                             args.num_passes,
-                                             holdout=False)
+            data_remote = build_dataset_base(
+                args.dataset,
+                args.tokenizer,
+                args.seq_len,
+                args.final_num_tokens,
+                args.num_passes,
+                args.available_holdout_tokens,
+                holdout=False,
+                seed=seed,
+            )
         elif args.selection_algo == "offline":
             ref_lr = build_model_arch(
                 args.ref_model_size
             )["lr"] if args.ref_lr is None else args.ref_lr
             base_run.parameters["ref_lr"] = ref_lr
-            filter_suffix = f"offline-{'local' if args.selection_local else 'global'}-{args.selection_rank}-{args.selection_rate}-ref-{args.ref_model_size}-{args.ref_num_tokens}-bs-{args.global_batch_size}-lr-{ref_lr}-sd-{seed}"
+            filter_suffix = f"offline-{args.selection_scope}-{args.selection_rank}-{args.selection_rate}-ref-{args.ref_model_size}-{args.ref_num_tokens}-bs-{args.global_batch_size}-lr-{ref_lr}-sd-{seed}"
             save_suffix = f"bs-{args.ref_global_batch_size}-lr-{ref_lr}"
-            data_remote = build_dataset_base(args.dataset,
-                                             args.tokenizer,
-                                             args.seq_len,
-                                             args.final_num_tokens,
-                                             args.num_passes,
-                                             holdout=False,
-                                             filter_suffix=filter_suffix)
+            data_remote = build_dataset_base(
+                args.dataset,
+                args.tokenizer,
+                args.seq_len,
+                args.final_num_tokens,
+                args.num_passes,
+                args.available_holdout_tokens,
+                holdout=False,
+                filter_suffix=filter_suffix,
+                seed=seed,
+            )
         elif args.selection_algo == "online":
             remote_base = build_remote_base(
                 num_holdout_tokens=args.holdout_num_tokens,
@@ -171,7 +184,7 @@ if __name__ == "__main__":
             f"selection-algo-{args.selection_algo}",
             f"selection-rank-{args.selection_rank}",
             f"selection-rate-{args.selection_rate}",
-            f"selection-local-{args.selection_local}",
+            f"selection-scope-{args.selection_scope}",
             f"{'off-policy' if args.proxy_off_policy else 'on-policy'}",
             f"proxy-params-{args.proxy_model_size}",
             f"proxy-tok-{args.proxy_num_tokens}", f"ref-lr-{args.ref_lr}",

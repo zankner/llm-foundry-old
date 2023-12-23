@@ -214,6 +214,7 @@ def main(args):
                                          args.seq_len,
                                          args.final_num_tokens,
                                          args.num_passes,
+                                         args.available_holdout_tokens,
                                          False,
                                          seed=args.train_seed)
     reference_run_data_suffix = f"{args.final_num_tokens}-tokens-from-{args.num_passes}-passes-ref-{args.ref_model_size}-{args.ref_num_tokens}-bs-{args.ref_global_batch_size}-lr-{lr}-sd-{args.train_seed}"
@@ -305,6 +306,10 @@ if __name__ == "__main__":
                         type=str,
                         default="mpt",
                         choices=["mpt", "pile"])
+    parser.add_argument("--available-holdout-tokens",
+                        type=str,
+                        default="52B",
+                        choices=["26B", "52B"])
 
     args = parser.parse_args()
 

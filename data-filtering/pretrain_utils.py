@@ -32,7 +32,7 @@ def set_common_args(args,
     base_run.cluster = args.cluster
     base_run.gpu_num = args.ngpus
     # Set rest of cluster params
-    if args.cluster in ["r9z1", "r14z3"]:
+    if args.cluster in ["r9z1", "r14z3", "r15z1"]:
         base_run.gpu_type = "h100_80gb"
     elif args.cluster in ["r4z5", "r4z7", "r4z6", "r8z6", "r1z1", "r4z8"]:
         base_run.gpu_type = "a100_80gb"
@@ -48,7 +48,12 @@ def set_common_args(args,
         }, {
             "key": "NCCL_DEBUG",
             "value": "INFO"
-        }]
+        },
+        {
+            "key": "NCCL_TOPO_FILE",
+            "value": "/opt/aws-ofi-nccl/install/share/aws-ofi-nccl/xml/p4de-24xl-topo.xml"
+        }
+        ]
 
     # # Set timeout for slow clusters
     # if args.cluster in ["r9z1"]:
@@ -134,7 +139,7 @@ def set_common_args(args,
 def launch_run(run, local_debug, seed):
     if local_debug:
         with open("debug.yaml", "w") as f:
-            om.save(config=om.create(run), f=f)
+            om.save(config=om.create(run.parameters), f=f)
     else:
         run = create_run(run)
         print(f"Launched seed {seed} with in {run.name}")
@@ -183,10 +188,11 @@ def build_dataset_base(dataset: str,
                        seq_len: int,
                        num_tokens: int,
                        num_passes: str,
+                       available_holdout_tokens: str,
                        holdout: bool,
                        seed: int,
                        filter_suffix: Optional[str] = None):
-    return f"s3://data-force-one-datasets/__unitystorage/catalogs/36798a58-e180-4029-8cd7-842e61841ef0/volumes/b9e4994e-997d-4cbf-b76b-e38ff5533785/{dataset}/{tokenizer_name}-seqlen-{seq_len}/52B-total-available-holdout-tokens-partition-sd-{seed}/{'holdout' if holdout else 'train'}/{num_tokens}-tokens-from-{num_passes}-passes{f'-{filter_suffix}' if filter_suffix is not None else ''}/combined/mds"
+    return f"s3://data-force-one-datasets/__unitystorage/catalogs/36798a58-e180-4029-8cd7-842e61841ef0/volumes/b9e4994e-997d-4cbf-b76b-e38ff5533785/{dataset}/{tokenizer_name}-seqlen-{seq_len}/{available_holdout_tokens}-total-available-holdout-tokens-partition-sd-{seed}/{'holdout' if holdout else 'train'}/{num_tokens}-tokens-from-{num_passes}-passes{f'-{filter_suffix}' if filter_suffix is not None else ''}/combined/mds"
 
 
 def build_ref_base(num_tokens, num_params):
