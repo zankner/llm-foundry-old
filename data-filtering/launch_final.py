@@ -85,7 +85,7 @@ if __name__ == "__main__":
                         type=str,
                         default="52B",
                         choices=["26B", "52B"])
-    parser.add_argument("--seq-len", type=int, default=4096)
+    parser.add_argument("--seq-len", type=int, default=2048)
     parser.add_argument("--num-passes", type=str, required=True)
     parser.add_argument("--dataset",
                         type=str,

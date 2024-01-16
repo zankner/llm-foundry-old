@@ -26,4 +26,4 @@ command: |
   source /secrets/secrets.env
   export AWS_PROFILE=data-force-one
   cd llm-foundry
-  composer data-filtering/build_reference_loss.py --ref-model-size {ref_model_size} --ref-num-tokens {ref_num_tokens} --lr {lr} --ref-global-batch-size {ref_global_batch_size} --final-num-tokens {final_num_tokens} --tokenizer {tokenizer} --dataset {dataset} --available-holdout-tokens {available_holdout_tokens} --seq-len {seq_len} --num-passes {num_passes} --train-seed {seed} --device-batch-size {device_batch_size}
+  composer data-filtering/build_reference_loss.py --ref-model-size {ref_model_size} --ref-num-tokens {ref_num_tokens} --lr {lr} --ref-global-batch-size {ref_global_batch_size} --final-num-tokens {final_num_tokens} --tokenizer {tokenizer} --dataset {dataset} --available-holdout-tokens {available_holdout_tokens} --seq-len {seq_len} --ref-num-passes {ref_num_passes} --final-num-passes {final_num_passes} --train-seed {seed} --device-batch-size {device_batch_size}

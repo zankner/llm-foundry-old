@@ -1,8 +1,6 @@
 name: # set by launch script
 
 env_variables:
-  # - key: AWS_PROFILE
-  #   value: data-force-one
   - key: NCCL_IB_PCI_RELAXED_ORDERING
     value: 1
   - key: NCCL_COLLNET_ENABLE
@@ -14,22 +12,11 @@ integrations:
     git_repo: zankner/llm-foundry
     pip_install: .[gpu]
     ssh_clone: true
-  # - integration_type: git_repo
-  #   git_repo: mosaicml/streaming
-  #   git_commit: d95aefa09e00970328ed7277b9c56d0d882f7000
-  #   pip_install: "."
-  #   ssh_clone: true
-  # - integration_type: git_repo
-  #   git_repo: mosaicml/composer
-  #   git_commit: 130bde55a7a4fa7e147a1dd01186dd5504080a3c #92c84aa1e7f5769a08eedc49cc8ee0a9b37113bd
-  #   pip_install: .[gpu]
-  #   ssh_clone: true
   - integration_type: wandb
     entity: mosaic-ml
-    project: neural-data-filtering
+    project: me-fomo-data-filtering
   - integration_type: "pip_packages"
     packages:
-      - slack-sdk
       - tiktoken
 
 # image: mosaicml/pytorch:2.1.0_cu121-nightly20230827-python3.10-ubuntu20.04
@@ -125,7 +112,7 @@ parameters:
   python_log_level: DEBUG
   loggers:
     wandb:
-      project: neural-data-filtering
+      project: me-fomo-data-filtering
       tags:
         - seed-${global_seed}
       group: ${run_name}
@@ -152,28 +139,10 @@ parameters:
     speed_monitor:
       window_size: 1
     gpu_hour_logger: {}
-    slack_logger: {}
 
   # Dataloaders
   eos_token_id: 0 # update for hero run with custom tokenizer
   num_canonical_nodes: 128 # update for hero run, must be codivisible by # physical nodes
-
-  # TMP NOT EVALUATING TEST PPLX
-  # # Eval loader
-  # eval_loader:
-  #   name: text
-  #   drop_last: false
-  #   num_workers: 8
-  #   dataset:
-  #     eos_token_id: ${eos_token_id}
-  #     max_seq_len: ${max_seq_len}
-  #     num_canonical_nodes: ${num_canonical_nodes}
-  #     shuffle: false
-  #     shuffle_algo: py1b
-  #     shuffle_seed: ${global_seed}
-  #     local: /tmp/dataset/val
-  #     remote: oci://mosaicml-internal-dataset-pile/pre-concat/gpt-neox-20b-seqlen-2048
-  #     split: val
 
   # In-context-learning tasks
   icl_tasks: eval/yamls/tasks.yaml

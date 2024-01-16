@@ -213,11 +213,11 @@ def main(args):
                                          args.tokenizer,
                                          args.seq_len,
                                          args.final_num_tokens,
-                                         args.num_passes,
+                                         args.final_num_passes,
                                          args.available_holdout_tokens,
                                          False,
                                          seed=args.train_seed)
-    reference_run_data_suffix = f"{args.final_num_tokens}-tokens-from-{args.num_passes}-passes-ref-{args.ref_model_size}-{args.ref_num_tokens}-bs-{args.ref_global_batch_size}-lr-{lr}-sd-{args.train_seed}"
+    reference_run_data_suffix = f"{args.final_num_tokens}-tokens-from-{args.final_num_passes}-passes-ref-{args.ref_model_size}-{args.ref_num_tokens}-bs-{args.ref_global_batch_size}-lr-{lr}-sd-{args.train_seed}"
     remote_upload = os.path.join(
         *remote_download.replace("s3://", "").split("/")[:-3],
         reference_run_data_suffix, "heuristic.parquet")
@@ -227,7 +227,7 @@ def main(args):
     print(f"Global batch size: {global_batch_size}")
 
     # Building model ckpt name
-    ref_run_name = f"{args.dataset}-passes-{args.num_passes}-ref-{args.ref_model_size}-{args.ref_num_tokens}-bs-{args.ref_global_batch_size}-lr-{lr}-sd-{args.train_seed}"
+    ref_run_name = f"{args.dataset}-passes-{args.ref_num_passes}-ref-{args.ref_model_size}-{args.ref_num_tokens}-bs-{args.ref_global_batch_size}-lr-{lr}-sd-{args.train_seed}"
     ref_ckpt = os.path.join(CKPT_BASE, args.dataset,
                             f"{args.tokenizer}-seqlen-{args.seq_len}",
                             "reference", ref_run_name, "ckpts",
@@ -275,6 +275,7 @@ def main(args):
     trainer.close()
 
 
+# ZACK: CHANGE SO THAT THE NUM PASSES IS DIFFERENT FOR HOLDOUT AND FINAL
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
@@ -301,8 +302,9 @@ if __name__ == "__main__":
     parser.add_argument("--device-batch-size", type=int, default=256)
     parser.add_argument("--tokenizer", type=str, default="gpt4-tiktoken")
     parser.add_argument("--eos-token-id", type=int, default=0)
-    parser.add_argument("--seq-len", type=int, default=4096)
-    parser.add_argument("--num-passes", type=str, required=True)
+    parser.add_argument("--seq-len", type=int, default=2048)
+    parser.add_argument("--ref-num-passes", type=str, required=True)
+    parser.add_argument("--final-num-passes", type=str, required=True)
     parser.add_argument("--dataset",
                         type=str,
                         default="mpt",

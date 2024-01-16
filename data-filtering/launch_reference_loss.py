@@ -35,7 +35,7 @@ if __name__ == "__main__":
     # Data args
     parser.add_argument("--device-batch-size", type=int, default=128)
     parser.add_argument("--tokenizer", type=str, default="gpt4-tiktoken")
-    parser.add_argument("--seq-len", type=int, default=4096)
+    parser.add_argument("--seq-len", type=int, default=2048)
     parser.add_argument("--dataset",
                         type=str,
                         default="mpt",
@@ -44,7 +44,8 @@ if __name__ == "__main__":
                         type=str,
                         default="52B",
                         choices=["26B", "52B"])
-    parser.add_argument("--num-passes", type=str, required=True)
+    parser.add_argument("--ref-num-passes", type=str, required=True)
+    parser.add_argument("--final-num-passes", type=str, required=True)
     args = parser.parse_args()
 
     base_run = RunConfig.from_file(
@@ -99,8 +100,10 @@ if __name__ == "__main__":
                                                 str(args.tokenizer))
     base_run.command = base_run.command.replace(r"{seq_len}", str(args.seq_len))
     base_run.command = base_run.command.replace(r"{dataset}", str(args.dataset))
-    base_run.command = base_run.command.replace(r"{num_passes}",
-                                                str(args.num_passes))
+    base_run.command = base_run.command.replace(r"{ref_num_passes}",
+                                                str(args.ref_num_passes))
+    base_run.command = base_run.command.replace(r"{final_num_passes}",
+                                                str(args.final_num_passes))
     base_run.command = base_run.command.replace(r"{device_batch_size}",
                                                 str(args.device_batch_size))
     base_run.command = base_run.command.replace(r"{available_holdout_tokens}",

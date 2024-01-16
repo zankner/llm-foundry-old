@@ -5,7 +5,7 @@ from typing import Optional
 from omegaconf import OmegaConf as om
 from mcli import create_run
 
-CKPT_BASE = "oci://mosaicml-internal-checkpoints/zack/data-filtering/"
+CKPT_BASE = "oci://mosaicml-internal-checkpoints/zack/me-fomo-data-filtering/"
 
 
 def set_common_args(args,
