@@ -1,43 +1,79 @@
 integrations:
-- integration_type: git_repo
-  git_repo: zankner/llm-foundry
-  git_branch: zack/amortized-selection
-  pip_install: -e ".[gpu]"
-  ssh_clone: false # Should be true if using a private repo
-- integration_type: "pip_packages"
-  packages:
-  - oci-cli
-  - slack-sdk
+  - integration_type: git_repo
+    git_branch: zack/me-fomo-data-pruning
+    git_repo: zankner/llm-foundry
+    pip_install: .[gpu]
+    ssh_clone: true
+  - integration_type: wandb
+    entity: mosaic-ml
+    project: me-fomo-data-filtering
+  - integration_type: "pip_packages"
+    packages:
+      - tiktoken
 command: |
-  {download_cmd}
   cd llm-foundry/scripts
-  composer eval/eval.py /mnt/config/parameters.yaml
+  composer eval/eval.py /mnt/config/parameters.yaml || (echo "Command failed - killing python" && pkill python && exit 1)
 
 # Mosaic Cloud will use run_name (with a unique suffix) to populate the env var $RUN_NAME
 run_name: # Set in launch script
-gpu_num: 8 
 compute:
-  cluster: # Set in launch script
-  gpu_type: # Set in launch script
+  gpus: 8 
+  cluster: r1z1
+  gpu_type: a100_80gb
 
-image: # Set in launch script
+schudling:
+  resumable: False
+  priority: low
+
+image: mosaicml/llm-foundry:2.1.0_cu121-e772a47
 
 # The below is injected as a YAML file: /mnt/config/parameters.yaml
 parameters:
-  dist_timeout: 6000
-  seed: 1
-  max_seq_len: 2048
-  device_eval_batch_size: # Set in launch script 
+  max_seq_len: 2048 # max tokens per sequence during training
+
+  run_name: mpt-passes-0.25-final-1B-26B-baseline # SET!!!!
+  dataset: mpt # SET!!!!
+  seed: 17 # SET!!!! 
+
+  # Model (supports > 1 model but only using 1 for wandb logging)
+  models:
+  -
+    model_name: ${run_name} # Set in launch script
+    load_path:  zack/me-fomo-data-filtering/${dataset}/gpt4-tiktoken-seqlen-${seq_len}/final/${run_name}-sd-${seed}/ckpts/latest-rank0.pt.symlink # Set in launch script
+    model:
+      name: mpt_causal_lm
+      init_device: meta
+      d_model: 2048 # Change for 3b runs
+      n_heads: 16 
+      n_layers: 24
+      expansion_ratio: 4
+      max_seq_len: ${max_seq_len}
+      vocab_size: 100352 # update for hero run with custom tokenizer
+      tokenizer_name: ${tokenizer_name}
+      no_bias: true
+      norm_type: low_precision_layernorm
+      emb_pdrop: 0
+      resid_pdrop: 0
+      init_config:
+        init_nonlinearity: relu
+        name: kaiming_normal_
+      attn_config:
+        alibi: true
+        attn_impl: triton
+        clip_qkv: 6
+        attn_uses_sequence_id: false
+        attn_pdrop: 0
+    tokenizer:
+      name: ${tokenizer_name} # default tokenizer used for MPT
+      kwargs:
+        model_name: gpt-4
+     
+  # System
   precision: amp_bf16
+  tokenizer_name: tiktoken
+  device_eval_batch_size: 8 
 
-  loggers: {}
-
-  callbacks:
-    slack_logger: {}
-
-  models: # Set in launch script
-
-  # FSDP config for model sharding
+  # FSDP
   fsdp_config:
     activation_checkpointing: false
     activation_checkpointing_reentrant: false
@@ -48,5 +84,17 @@ parameters:
     state_dict_type: full
     verbose: false
 
-  icl_tasks: 'eval/yamls/tasks.yaml'
-  model_gauntlet: 'eval/yamls/model_gauntlet.yaml'
+  # Logging
+  loggers:
+    wandb:
+      project: me-fomo-data-filtering
+      tags:
+        - eval
+        - dataset-${dataset}
+      name: eval-${run_name}-sd-${seed}
+      group: eval-${run_name}
+
+  # In-context-learning tasks
+  icl_tasks: eval/yamls/tasks.yaml
+  eval_gauntlet: eval/yamls/eval_gauntlet.yaml
+  icl_seq_len: 2048

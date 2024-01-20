@@ -125,7 +125,9 @@ class EvalGauntlet(Callback):
         if len(new_metrics) == 0:
             return {}
         composite_scores = {}
+        task_wise_composite_scores = [] 
         raw_composite_scores = {}
+        task_wise_raw_composite_scores = [] 
 
         for category in self.categories:
             missing_metrics = []
@@ -161,6 +163,9 @@ class EvalGauntlet(Callback):
                         'weighting': benchmark['weighting']
                     })
 
+                    task_wise_composite_scores.append(normalized_score)
+                    task_wise_raw_composite_scores.append(score)
+
             if len(missing_metrics) > 0:
                 log.warning(
                     f"Removing category `{category['name']}` from scores because benchmarks were missing: {missing_metrics}"
@@ -194,9 +199,15 @@ class EvalGauntlet(Callback):
             raw_composite_scores.values()) / len(
                 raw_composite_scores.values()) if len(
                     raw_composite_scores.values()) > 0 else 0
+        
+        avg_task_wise_composite_scores = sum(task_wise_composite_scores) / len(task_wise_composite_scores) if len(task_wise_composite_scores) > 0 else 0
+        avg_task_wise_raw_composite_scores = sum(task_wise_raw_composite_scores) / len(task_wise_raw_composite_scores) if len(task_wise_raw_composite_scores) > 0 else 0
+
+        logging_task_wise_composite_scores = {"icl/metrics/eval_gauntlet/task_wise_average": avg_task_wise_composite_scores}
+        logging_task_wise_raw_composite_scores = {"icl/metrics/raw_eval_gauntlet/task_wise_average": avg_task_wise_raw_composite_scores}
 
         if logger is not None:
-            combined_scores = {**composite_scores, **raw_composite_scores}
+            combined_scores = {**composite_scores, **raw_composite_scores, **logging_task_wise_composite_scores, **logging_task_wise_raw_composite_scores}
             logger.log_metrics(combined_scores)
 
         return composite_scores

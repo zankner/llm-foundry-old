@@ -8,7 +8,7 @@ scheduling:
 integrations:
   - integration_type: git_repo
     git_repo: zankner/llm-foundry
-    git_branch: zack/data-filtering
+    git_branch: zack/me-fomo-data-pruning
     pip_install: -e .[gpu]
     ssh_clone: true # Should be true if using a private repo
   - integration_type: "pip_packages"
