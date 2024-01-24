@@ -73,7 +73,7 @@ if __name__ == "__main__":
     parser.add_argument("--selection-rate",
                         type=float,
                         default=0.5,
-                        choices=[0.1, 0.25, 0.5])
+                        choices=[0.1, 0.25, 0.5, 0.75])
     parser.add_argument("--selection-scope", choices=["global", "local", "web"])
 
     # Data args

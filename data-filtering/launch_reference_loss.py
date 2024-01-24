@@ -13,6 +13,7 @@ if __name__ == "__main__":
     parser.add_argument("--ngpus", type=int, default=16)
     parser.add_argument("--seed", type=int, required=True)  # Add more later
     parser.add_argument("--local-debug", action="store_true")
+    parser.add_argument("--preemptible", action="store_true")
 
     # Model args
     parser.add_argument("--lr", type=float, default=None)
@@ -57,7 +58,7 @@ if __name__ == "__main__":
     base_run.image = "mosaicml/llm-foundry:2.1.0_cu121-e772a47"
 
     # Set rest of cluster params
-    if args.cluster in ["r9z1", "r14z3"]:
+    if args.cluster in ["r9z1", "r14z3", "r15z1"]:
         base_run.gpu_type = "h100_80gb"
     elif args.cluster in ["r4z5", "r4z7", "r4z6", "r8z6", "r1z1", "r4z8"]:
         base_run.gpu_type = "a100_80gb"
@@ -76,7 +77,7 @@ if __name__ == "__main__":
         }]
 
     # Set scheduling
-    base_run.scheduling = {"priority": args.priority, "resumable": False}
+    base_run.scheduling = {"priority": args.priority, "resumable": args.preemptible}
 
     # Set ref model args
     base_run.command = base_run.command.replace(r"{ref_model_size}",

@@ -175,8 +175,8 @@ def build_model_arch(model_size):
             "d_model": 2560,
             "n_heads": 32,
             "n_layers": 32,
-            "lr": 0.002,
-            "weight_decay": 0.002
+            "lr": 0.00016,
+            "weight_decay": 0.00016
         }
     else:
         raise ValueError(f"Unknown model size {model_size}")

@@ -1,3 +1,4 @@
+name: eval-data-pruning
 integrations:
   - integration_type: git_repo
     git_branch: zack/me-fomo-data-pruning
@@ -15,7 +16,6 @@ command: |
   composer eval/eval.py /mnt/config/parameters.yaml || (echo "Command failed - killing python" && pkill python && exit 1)
 
 # Mosaic Cloud will use run_name (with a unique suffix) to populate the env var $RUN_NAME
-run_name: # Set in launch script
 compute:
   gpus: 8 
   cluster: r1z1
@@ -34,12 +34,14 @@ parameters:
   run_name: mpt-passes-0.25-final-1B-26B-baseline # SET!!!!
   dataset: mpt # SET!!!!
   seed: 17 # SET!!!! 
+  lr: 0.0002 # SET!!!!
+  bs: 512 # SET!!!!
 
   # Model (supports > 1 model but only using 1 for wandb logging)
   models:
   -
     model_name: ${run_name} # Set in launch script
-    load_path:  zack/me-fomo-data-filtering/${dataset}/gpt4-tiktoken-seqlen-${seq_len}/final/${run_name}-sd-${seed}/ckpts/latest-rank0.pt.symlink # Set in launch script
+    load_path: oci://mosaicml-internal-checkpoints/zack/me-fomo-data-filtering/${dataset}/gpt4-tiktoken-seqlen-${max_seq_len}/final/${run_name}-bs-${bs}-lr-${lr}-sd-${seed}/ckpts/latest-rank0.pt.symlink # Set in launch script
     model:
       name: mpt_causal_lm
       init_device: meta
