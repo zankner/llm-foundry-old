@@ -11,7 +11,7 @@ def build_model_cfg(step, model_size):
         step_fmt = f"ba{step}/rank0.pt"
     model_cfg = {
         "model_name": "${run_name}",  # Set in launch script
-        "load_path": "oci://mosaicml-internal-checkpoints/zack/me-fomo-data-filtering/${dataset}/gpt4-tiktoken-seqlen-${max_seq_len}/final/${run_name}-bs-${bs}-lr-${lr}-sd-${seed}/ckpts/" + step_fmt,
+        "load_path": "oci://mosaicml-internal-checkpoints/zack/me-fomo-data-filtering/${dataset}/gpt4-tiktoken-seqlen-${max_seq_len}/final/${ckpt_fmt_run_name}-bs-${bs}-lr-${lr}-sd-${seed}/ckpts/" + step_fmt,
         "model": {
             "name": "mpt_causal_lm",
             "init_device": "meta",
@@ -65,56 +65,73 @@ if __name__ == "__main__":
     parser.add_argument("--dataset", type=str, required=True, choices=["pile", "mpt"])
     parser.add_argument("--training-duration", type=str, required=True, choices=["26B", "52B"])
     parser.add_argument("--num-params", type=str, required=True, choices=["1B", "3B"])
-    parser.add_argument("--seed", type=int, required=True)
+    parser.add_argument("--seeds", type=int, nargs="+", required=True)
     parser.add_argument("--run-name", type=str, required=True)
     parser.add_argument("--eval-freq", type=float, default=0.1)
+    parser.add_argument("--intermediate-eval", action="store_true")
 
     args = parser.parse_args()
 
-    base_run = RunConfig.from_file(f"data-filtering/yamls/gauntlet.yaml")
+    for seed in args.seeds:
+        base_run = RunConfig.from_file(f"data-filtering/yamls/gauntlet.yaml")
 
-    # Set name
-    base_run.name = args.run_name
-    base_run.run_name = args.run_name
+        # Set hparams
+        batch_size = 512 # Assuming that this is the bs for all models rn
+        seq_len = 2048 # Assuming that this is the seq_len for all models rn
+        lr = 0.0002 # Assuming that this is the lr for all models rn
 
-    # Set hparams
-    batch_size = 512 # Assuming that this is the bs for all models rn
-    seq_len = 2048 # Assuming that this is the seq_len for all models rn
-    lr = 0.0002 # Assuming that this is the lr for all models rn
-    base_run.parameters["dataset"] = args.dataset
-    base_run.parameters["bs"] = batch_size
-    base_run.parameters["lr"] = lr
-    base_run.parameters["max_seq_len"] = seq_len
+        ckpt_fmt_run_name = args.run_name
+        if "global" in ckpt_fmt_run_name:
+            ckpt_fmt_run_name += f"-bs-{batch_size}-lr-{lr}"
+
+        # Set name
+        base_run.name = (f"sd-{seed}-" + args.run_name)[:56]
+        base_run.name = base_run.name.replace(".", "-")
+        if base_run.name[-1] == "-":
+            base_run.name = base_run.name[:-1]
+        base_run.parameters["run_name"] = args.run_name
+        base_run.parameters["ckpt_fmt_run_name"] = ckpt_fmt_run_name
+
+        # Set hparams
+        base_run.parameters["dataset"] = args.dataset
+        base_run.parameters["bs"] = batch_size
+        base_run.parameters["lr"] = lr
+        base_run.parameters["max_seq_len"] = seq_len
 
 
-    # Set seed for reasons
-    base_run.parameters["seed"] = args.seed
+        # Set seed for reasons
+        base_run.parameters["seed"] = seed
 
-    # Set compute
-    base_run.cluster = args.cluster
-    base_run.gpu_num = args.ngpus
+        # Set compute
+        base_run.compute["cluster"] = args.cluster
+        base_run.compute["gpus"] = args.ngpus
 
-    # Set batch information
-    base_run.parameters["device_eval_batch_size"] = args.device_batch_size
+        # Set batch information
+        base_run.parameters["device_eval_batch_size"] = args.device_batch_size
 
-    # Build all model eval ckpts
-    if args.training_duration == "26B":
-        training_duration = 26 * 1e+9
-    elif args.training_duration == "52B":
-        training_duration = 52 * 1e+9
+        # Build all model eval ckpts
+        if args.training_duration == "26B":
+            training_duration = 26 * 1e+9
+        elif args.training_duration == "52B":
+            training_duration = 52 * 1e+9
 
-    ckpt_freq = 500 # Assuming that this is the ckpt_freq for all models rn
-    token_per_batch = batch_size * seq_len
-    all_model_cfgs = []
-    for eval_idx in range(1, int(1 / args.eval_freq)):
-        eval_percent = args.eval_freq * eval_idx
-        eval_token = eval_percent * training_duration
-        eval_batch = int(eval_token / token_per_batch / ckpt_freq) * ckpt_freq
-        model_cfg = build_model_cfg(eval_batch, args.num_params) 
-        all_model_cfgs.append(model_cfg)
-    all_model_cfgs.append(build_model_cfg("final", args.num_params))
+        ckpt_freq = 500 # Assuming that this is the ckpt_freq for all models rn
+        token_per_batch = batch_size * seq_len
+        all_model_cfgs = []
+        if args.intermediate_eval:
+            for eval_idx in range(1, int(1 / args.eval_freq)):
+                eval_percent = args.eval_freq * eval_idx
+                eval_token = eval_percent * training_duration
+                eval_batch = int(eval_token / token_per_batch / ckpt_freq) * ckpt_freq
+                model_cfg = build_model_cfg(eval_batch, args.num_params) 
+                all_model_cfgs.append(model_cfg)
+        else:
+            all_model_cfgs.append(build_model_cfg("final", args.num_params))
 
-    base_run.parameters["models"] = all_model_cfgs
+        base_run.parameters["models"] = all_model_cfgs
 
-    with open("debug.yaml", "w") as f:
-        om.save(config=om.create(base_run.parameters), f=f)
+        # with open("debug.yaml", "w") as f:
+        #             f.write(str(base_run))
+
+        launched_run = create_run(base_run)
+        print(f"Launched run: {launched_run.name}")

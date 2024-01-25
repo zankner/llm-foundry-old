@@ -12,6 +12,7 @@ integrations:
     packages:
       - tiktoken
 command: |
+  pip install --upgrade mosaicml
   cd llm-foundry/scripts
   composer eval/eval.py /mnt/config/parameters.yaml || (echo "Command failed - killing python" && pkill python && exit 1)
 
@@ -19,14 +20,10 @@ command: |
 compute:
   gpus: 8 
   cluster: r1z1
-  gpu_type: a100_80gb
 
-# schudling:
-#   resumable: False
-#   priority: low
-schudling:
-  resumable: False
-  priority: high
+scheduling:
+  resumable: True
+  priority: low
 
 image: mosaicml/llm-foundry:2.1.0_cu121-e772a47
 
@@ -34,8 +31,9 @@ image: mosaicml/llm-foundry:2.1.0_cu121-e772a47
 parameters:
   max_seq_len: 2048 # max tokens per sequence during training
 
-  run_name: mpt-passes-0.25-final-1B-26B-baseline # SET!!!!
-  dataset: mpt # SET!!!!
+  run_name: # SET!!!!
+  ckpt_fmt_run_name: # Set in launch script
+  dataset: # SET!!!!
   seed: 17 # SET!!!! 
   lr: 0.0002 # SET!!!!
   bs: 512 # SET!!!!
@@ -44,7 +42,7 @@ parameters:
   models:
   -
     model_name: ${run_name} # Set in launch script
-    load_path: oci://mosaicml-internal-checkpoints/zack/me-fomo-data-filtering/${dataset}/gpt4-tiktoken-seqlen-${max_seq_len}/final/${run_name}-bs-${bs}-lr-${lr}-sd-${seed}/ckpts/latest-rank0.pt.symlink # Set in launch script
+    load_path: oci://mosaicml-internal-checkpoints/zack/me-fomo-data-filtering/${dataset}/gpt4-tiktoken-seqlen-${max_seq_len}/final/${ckpt_fmt_run_name}-bs-${bs}-lr-${lr}-sd-${seed}/ckpts/latest-rank0.pt.symlink # Set in launch script
     model:
       name: mpt_causal_lm
       init_device: meta
