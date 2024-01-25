@@ -4,168 +4,88 @@ import argparse
 from mcli import RunConfig, create_run
 from omegaconf import OmegaConf as om
 
-from pretrain_utils import (CKPT_BASE, build_model_arch, build_final_base,
-                            build_proxy_base, build_ref_base)
-
-
-def build_ckpt_base(run_name, run_type, dataset, seed):
-    return os.path.join(CKPT_BASE, dataset, run_type, f"{run_name}-sd-{seed}",
-                        "ckpts")
-
-
-def build_ckpt_path(run_name, run_type, step, dataset, seed):
+def build_model_cfg(step, model_size):
     if step == "final":
-        prefix = CKPT_BASE
         step_fmt = "latest-rank0.pt.symlink"
     else:
-        prefix = "/tmp/models/zack/amortized-obs"
-        prefix = CKPT_BASE
         step_fmt = f"ba{step}/rank0.pt"
-    return os.path.join(prefix, dataset, run_type, f"{run_name}-sd-{seed}",
-                        "ckpts", step_fmt)
-
-
-def build_wandb_logger(run_name, model_tags):
-    return {
-        "project": "amortized-selection",
-        "group": f"eval-{run_name}",
-        "tags": model_tags
+    model_cfg = {
+        "model_name": "${run_name}",  # Set in launch script
+        "load_path": "oci://mosaicml-internal-checkpoints/zack/me-fomo-data-filtering/${dataset}/gpt4-tiktoken-seqlen-${max_seq_len}/final/${run_name}-bs-${bs}-lr-${lr}-sd-${seed}/ckpts/" + step_fmt,
+        "model": {
+            "name": "mpt_causal_lm",
+            "init_device": "meta",
+            "d_model": 2048,  # Change for 3b runs
+            "n_heads": 16,
+            "n_layers": 24,
+            "expansion_ratio": 4,
+            "max_seq_len": "${max_seq_len}",
+            "vocab_size": 100352,  # update for hero run with custom tokenizer
+            "tokenizer_name": "${tokenizer_name}",
+            "no_bias": True,
+            "norm_type": "low_precision_layernorm",
+            "emb_pdrop": 0,
+            "resid_pdrop": 0,
+            "init_config": {
+                "init_nonlinearity": "relu",
+                "name": "kaiming_normal_"
+            },
+            "attn_config": {
+                "alibi": True,
+                "attn_impl": "triton",
+                "clip_qkv": 6,
+                "attn_uses_sequence_id": False,
+                "attn_pdrop": 0
+            }
+        },
+        "tokenizer": {
+            "name": "${tokenizer_name}",  # default tokenizer used for MPT
+            "kwargs": {
+                "model_name": "gpt-4"
+            }
+        }
     }
 
+    if model_size == "1B":
+        model_cfg["model"]["d_model"] = 2048
+        model_cfg["model"]["n_heads"] = 16
+        model_cfg["model"]["n_layers"] = 24
+    elif model_size == "3B":
+        model_cfg["model"]["d_model"] = 2560
+        model_cfg["model"]["n_heads"] = 32
+        model_cfg["model"]["n_layers"] = 32
 
-def build_model_cfg(run_name, step, run_type, dataset, seed):
-    return {
-        "model_name": f"eval-{run_name}-step-{step}",
-        "load_path": build_ckpt_path(run_name, run_type, step, dataset, seed)
-    }
-
+    return model_cfg
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--cluster", type=str, default="r1z1")
+    parser.add_argument("--cluster", type=str, default="r15z1")
     parser.add_argument("--ngpus", type=str, default=8)
     parser.add_argument("--device-batch-size", type=int, default=8)
-
-    # Run config
-    parser.add_argument("--run-type",
-                        type=str,
-                        required=True,
-                        choices=["final", "reference", "proxy"])
-    parser.add_argument("--eval-type",
-                        type=str,
-                        required=True,
-                        choices=["final", "sweep"])
-    parser.add_argument("--selection-algo",
-                        type=str,
-                        required=True,
-                        choices=[
-                            "offline", "baseline", "rho", "hard-mine",
-                            "easy-mine", "baseline"
-                        ])  # Treat baseline as a selection algo
-
-    # Reference args
-    parser.add_argument("--ref-model-size", type=str, choices=["125M", "250M"])
-    parser.add_argument("--ref-num-tokens",
-                        type=str,
-                        choices=["2B", "5B", "20B", "26B", "130B"])
-
-    # Proxy args
-    parser.add_argument("--proxy-model-size",
-                        type=str,
-                        choices=["125M", "250M", "1B"])
-    parser.add_argument("--proxy-num-tokens",
-                        type=str,
-                        choices=["2B", "5B", "20B", "26B", "130B"])
-    parser.add_argument(
-        "--full-batch-size",
-        help="Batch size for points to be labeled that will then be pruned",
-        type=int,
-        choices=[1024, 2048, 4096])
-    parser.add_argument("--num-pplx-filter", type=int, default=0)
-
-    # Final args
-    parser.add_argument("--final-model-size",
-                        type=str,
-                        choices=["125M", "250M", "1B"])
-    parser.add_argument("--final-num-tokens",
-                        type=str,
-                        choices=["2B", "5B", "20B", "26B", "130B"])
-
-    # Offline pruning args
-    parser.add_argument("--final-offline-score-method",
-                        type=str,
-                        choices=["llm", "ngram"])
-    parser.add_argument("--final-offline-mine-type",
-                        type=str,
-                        required=True,
-                        choices=["easy", "mid", "hard"])
-    parser.add_argument("--final-offline-reduction-rate",
-                        type=float,
-                        choices=[0.75, 0.5, 0.25, 0.125])
-
-    # Misc
-    parser.add_argument("--holdout-num-tokens",
-                        type=str,
-                        choices=["2B", "5B", "20B", "26B", "130B"])
-    parser.add_argument("--dataset", type=str, default="pile", required=True)
-    parser.add_argument("--local-debug", action="store_true")
+    parser.add_argument("--dataset", type=str, required=True, choices=["pile", "mpt"])
+    parser.add_argument("--training-duration", type=str, required=True, choices=["26B", "52B"])
+    parser.add_argument("--num-params", type=str, required=True, choices=["1B", "3B"])
     parser.add_argument("--seed", type=int, required=True)
+    parser.add_argument("--run-name", type=str, required=True)
+    parser.add_argument("--eval-freq", type=float, default=0.1)
+
     args = parser.parse_args()
 
-    base_run = RunConfig.from_file(f"amortized-obs/yamls/gauntlet.yaml")
-
-    # Building the run name
-    if args.run_type == "final":
-        model_size = args.final_model_size
-        num_tokens = args.final_num_tokens
-        model_tags = [
-            f"model-size-{args.final_model_size}",
-            f"num-tokens-{args.final_num_tokens}"
-        ]
-        final_base = build_final_base(args.final_num_tokens,
-                                      args.final_model_size)
-        if args.selection_algo == "baseline":
-            run_name = f"final-{args.dataset}-baseline-{final_base}-holdt-{args.holdout_num_tokens}"
-        elif args.selection_algo == "offline":
-            assert (args.final_offline_score_method is not None and
-                    args.final_offline_reduction_rate is not None)
-            if args.final_offline_score_method == "llm":
-                assert args.ref_num_tokens is not None and args.ref_model_size is not None
-
-                ref_run_base = build_ref_base(args.ref_num_tokens,
-                                              args.ref_model_size)
-                run_name = f"final-{args.dataset}-off-{args.final_offline_mine_type}-red-{args.final_offline_reduction_rate}-{ref_run_base}-{final_base}-holdt-{args.holdout_num_tokens}"
-            else:
-                upload_name = f"{args.final_offline_mine_type}-mine-reduction-{args.final_offline_reduction_rate}-ngram-holdt-{args.holdout_num_tokens}"
-                pass
-        else:
-            proxy_run_base = build_proxy_base(
-                args.selection_algo, args.proxy_num_tokens,
-                args.proxy_model_size, args.full_batch_size,
-                args.num_pplx_filter, args.ref_num_tokens, args.ref_model_size)
-            fmt_proxy_run_base = proxy_run_base.replace(
-                f"{args.selection_algo}-", "")
-            run_name = f"final-{args.dataset}-{args.selection_algo}-{final_base}-{fmt_proxy_run_base}-holdt-{args.holdout_num_tokens}"
-    elif args.run_type == "proxy":
-        model_tags = [
-            f"model-size-{args.proxy_model_size}",
-            f"num-tokens-{args.proxy_num_tokens}"
-        ]
-        model_size = args.proxy_model_size
-        num_tokens = args.proxy_num_tokens
-        proxy_run_base = build_proxy_base(
-            args.selection_algo, args.proxy_num_tokens, args.proxy_model_size,
-            args.full_batch_size, args.num_pplx_filter, args.ref_num_tokens,
-            args.ref_model_size)
-        run_name = f"proxy-{args.dataset}-{proxy_run_base}-holdt-{args.holdout_num_tokens}"
-    else:
-        raise ValueError("Not supporting eval reference runs yet")
+    base_run = RunConfig.from_file(f"data-filtering/yamls/gauntlet.yaml")
 
     # Set name
-    base_run.name = f"sd-{args.seed}-eval-{args.eval_type}-{run_name}"[:56]
-    base_run.run_name = f"eval-{args.eval_type}-{run_name}-sd-{args.seed}"
-    base_run.parameters[
-        "run_name"] = f"eval-{args.eval_type}-{run_name}-sd-{args.seed}"
+    base_run.name = args.run_name
+    base_run.run_name = args.run_name
+
+    # Set hparams
+    batch_size = 512 # Assuming that this is the bs for all models rn
+    seq_len = 2048 # Assuming that this is the seq_len for all models rn
+    lr = 0.0002 # Assuming that this is the lr for all models rn
+    base_run.parameters["dataset"] = args.dataset
+    base_run.parameters["bs"] = batch_size
+    base_run.parameters["lr"] = lr
+    base_run.parameters["max_seq_len"] = seq_len
+
 
     # Set seed for reasons
     base_run.parameters["seed"] = args.seed
@@ -174,108 +94,27 @@ if __name__ == "__main__":
     base_run.cluster = args.cluster
     base_run.gpu_num = args.ngpus
 
-    # Set rest of cluster params
-    if args.cluster == "r9z1":
-        base_run.image = "mosaicml/llm-foundry:2.0.1_cu118-latest"
-        base_run.gpu_type = "h100_80gb"
-    elif args.cluster in ["r8z6", "r1z1"]:
-        base_run.image = "mosaicml/llm-foundry:1.13.1_cu117-latest"
-        base_run.gpu_type = "a100_80gb"
-    else:
-        base_run.image = "mosaicml/llm-foundry:1.13.1_cu117-latest"
-        base_run.gpu_type = "a100_40gb"
-
     # Set batch information
     base_run.parameters["device_eval_batch_size"] = args.device_batch_size
 
-    # Set model / tokenizer information
-    base_run.parameters["tokenizer"] = {
-        "name": "EleutherAI/gpt-neox-20b",
-        "kwargs": {
-            "model_max_length": "${max_seq_len}"
-        }
-    }
-    base_run.parameters["model"] = {
-        "name": "mpt_causal_lm",
-        "init_device": "meta",
-        "max_seq_len": "${max_seq_len}",
-        "vocab_size": 50432,
-        "expansion_ratio": 4,
-        "no_bias": True,
-        "attn_config": {
-            "alibi": True,
-            "attn_impl": "triton",
-            "clip_qkv": 6,
-            "attn_use_sequence_id": True
-        },
-        **build_model_arch(model_size)
-    }
+    # Build all model eval ckpts
+    if args.training_duration == "26B":
+        training_duration = 26 * 1e+9
+    elif args.training_duration == "52B":
+        training_duration = 52 * 1e+9
 
-    # Set logger information
-    model_tags += [
-        f"holdt-{args.holdout_num_tokens}",
-        f"refp-{args.ref_model_size}",
-        f"reft-{args.ref_num_tokens}",
-        f"proxp-{args.proxy_model_size}",
-        f"proxt-{args.proxy_num_tokens}",
-        f"fb-{args.full_batch_size}",
-        f"fillpplx-{args.num_pplx_filter}",
-        f"fp-{args.final_model_size}",
-        f"ft-{args.final_num_tokens}",
-        args.selection_algo,
-        "eval",
-        f"eval-{args.eval_type}",
-        f"seed-{args.seed}",
-        args.run_type,
-        f"final-off-score-{args.final_offline_score_method}",
-        f"final-{args.final_offline_mine_type}-mine",
-        f"final-off-reduction-{args.final_offline_reduction_rate}",
-    ]
-    base_run.parameters["loggers"]["wandb"] = build_wandb_logger(
-        run_name, model_tags)
+    ckpt_freq = 500 # Assuming that this is the ckpt_freq for all models rn
+    token_per_batch = batch_size * seq_len
+    all_model_cfgs = []
+    for eval_idx in range(1, int(1 / args.eval_freq)):
+        eval_percent = args.eval_freq * eval_idx
+        eval_token = eval_percent * training_duration
+        eval_batch = int(eval_token / token_per_batch / ckpt_freq) * ckpt_freq
+        model_cfg = build_model_cfg(eval_batch, args.num_params) 
+        all_model_cfgs.append(model_cfg)
+    all_model_cfgs.append(build_model_cfg("final", args.num_params))
 
-    if args.eval_type == "final":
-        base_run.command = base_run.command.replace("{download_cmd}", "")
-        base_run.parameters["models"] = [
-            build_model_cfg(run_name, "final", args.run_type, args.dataset,
-                            args.seed)
-        ]
-    elif args.eval_type == "sweep":
-        assert num_tokens is not None
+    base_run.parameters["models"] = all_model_cfgs
 
-        if num_tokens == "20B":
-            start_step = 1_000
-            end_step = 19_000
-            step = 1_000
-        elif num_tokens == "26B":
-            start_step = 1_000
-            end_step = 24_000
-            step = 1_000
-        elif num_tokens == "130B":
-            start_step = 5_000
-            end_step = 1230_000
-            step = 5_000
-        else:
-            raise ValueError("need to define steps for given token count")
-
-        # Fixing to be eval every 1k batches for now
-        steps = list(range(start_step, end_step + 1, step))
-
-        #download_prefix = os.path.join("zack", "amortized-obs", args.dataset,
-        #args.run_type,
-        #f"{run_name}-sd-{args.seed}", "ckpts")
-        #download_cmd = f"oci os object bulk-download -bn mosaicml-internal-checkpoints --prefix {download_prefix} --dest-dir /tmp/models/ --parallel-operations-count 128"
-        base_run.command = base_run.command.replace("{download_cmd}", "")
-
-        models = [
-            build_model_cfg(run_name, step, args.run_type, args.dataset,
-                            args.seed) for step in steps
-        ]
-        base_run.parameters["models"] = models
-
-    if args.local_debug:
-        with open("debug.yaml", "w") as f:
-            om.save(config=om.create(base_run), f=f)
-    else:
-        run = create_run(base_run)
-        print(f"Created run: {run.name}")
+    with open("debug.yaml", "w") as f:
+        om.save(config=om.create(base_run.parameters), f=f)

@@ -101,7 +101,7 @@ def evaluate_model(
     eval_gauntlet_config: Optional[Union[str, DictConfig]],
     fsdp_config: Optional[Dict],
     num_retries: int,
-    loggers_cfg: Dict[str, Any],
+    loggers,
     python_log_level: Optional[str],
     precision: str,
     eval_gauntlet_df: Optional[pd.DataFrame],
@@ -124,10 +124,10 @@ def evaluate_model(
     if eval_gauntlet_callback is not None:
         callbacks.append(eval_gauntlet_callback)
 
-    loggers: List[LoggerDestination] = [
-        build_logger(name, logger_cfg)
-        for name, logger_cfg in loggers_cfg.items()
-    ]
+    # loggers: List[LoggerDestination] = [
+    #     build_logger(name, logger_cfg)
+    #     for name, logger_cfg in loggers_cfg.items()
+    # ]
 
     if fsdp_config and model_cfg.model.get('load_in_8bit', False):
         raise ValueError(
@@ -164,7 +164,7 @@ def evaluate_model(
         precision=precision,
         fsdp_config=fsdp_config,
         load_path=load_path,
-        load_weights_only=True,
+        load_weights_only=False,
         progress_bar=False,
         log_to_console=True,
         dist_timeout=dist_timeout,
@@ -249,6 +249,12 @@ def main(cfg: DictConfig):
     # Pop out interpolation variables.
     pop_config(cfg, 'model_name_or_path', must_exist=False, default_value=None)
 
+    # Build loggers that will be shared by all models
+    loggers: List[LoggerDestination] = [
+        build_logger(name, logger_cfg)
+        for name, logger_cfg in loggers_cfg.items()
+    ]
+
     # Warn for unused parameters
     for key in cfg:
         warnings.warn(
@@ -282,7 +288,7 @@ def main(cfg: DictConfig):
              eval_gauntlet_config=eval_gauntlet_config,
              fsdp_config=fsdp_config,
              num_retries=num_retries,
-             loggers_cfg=loggers_cfg,
+             loggers=loggers,
              python_log_level=python_log_level,
              precision=precision,
              eval_gauntlet_df=eval_gauntlet_df,
