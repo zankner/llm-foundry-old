@@ -1,0 +1,138 @@
+name: # set by launch script
+
+integrations:
+  - integration_type: git_repo
+    git_branch: zack/data-filtering
+    git_repo: zankner/llm-foundry
+    pip_install: .[gpu]
+    ssh_clone: true
+  - integration_type: wandb
+    entity: mosaic-ml
+    project: me-fomo-data-filtering
+  - integration_type: "pip_packages"
+    packages:
+      - tiktoken
+
+image: mosaicml/llm-foundry:2.1.0_cu121-e772a47
+cluster: # Set in launch script
+gpu_num: # Set in launch script
+
+command: |-
+  source /secrets/secrets.env
+  export AWS_PROFILE=data-force-one
+  pip install -U wandb==0.15.4
+  cd llm-foundry/scripts
+  composer train/pplx_eval.py /mnt/config/parameters.yaml || (echo "Command failed - killing python" && pkill python && exit 1)
+
+parameters:
+  global_seed: # Set in launch script
+  max_seq_len: 2048 # max tokens per sequence during training
+
+  run_name: # SET!!!!
+  ckpt_fmt_run_name: # Set in launch script
+  dataset: # SET!!!!
+  seed: 17 # SET!!!! 
+  lr: 0.0002 # SET!!!!
+  bs: 512 # SET!!!!
+
+  # Model
+  model:
+    name: mpt_causal_lm
+    init_device: meta
+    d_model: # Set in launch script
+    n_heads: # Set in launch script
+    n_layers: # Set in launch script
+    expansion_ratio: 4
+    max_seq_len: ${max_seq_len}
+    vocab_size: 100352 # update for hero run with custom tokenizer
+    tokenizer_name: ${tokenizer_name}
+    no_bias: true
+    norm_type: low_precision_layernorm
+    emb_pdrop: 0
+    resid_pdrop: 0
+    init_config:
+      init_nonlinearity: relu
+      name: kaiming_normal_
+    attn_config:
+      alibi: true
+      attn_impl: triton
+      clip_qkv: 6
+      attn_uses_sequence_id: false
+      attn_pdrop: 0
+
+  # Tokenizer
+  tokenizer_name: tiktoken
+  tokenizer:
+    name: ${tokenizer_name} # default tokenizer used for MPT
+    kwargs:
+      model_name: gpt-4
+
+  # System
+  seed: ${global_seed}
+  precision: amp_bf16
+  device_eval_batch_size: # Set in launch script
+
+  # FSDP
+  fsdp_config:
+    activation_checkpointing: false
+    activation_checkpointing_reentrant: false
+    activation_cpu_offload: false
+    limit_all_gathers: true
+    mixed_precision: PURE
+    sharding_strategy: FULL_SHARD
+    state_dict_type: full
+    verbose: false
+
+  # Logging
+  log_to_console: true
+  console_log_interval: 100ba
+  progress_bar: false
+  python_log_level: DEBUG
+  loggers:
+    wandb:
+      project: me-fomo-data-filtering
+      tags:
+        - eval
+        - dataset-${dataset}
+      name: pplx-eval-${run_name}-sd-${seed}
+      group: pplx-eval-${run_name}
+
+  # Checkpointing
+  load_path: oci://mosaicml-internal-checkpoints/zack/me-fomo-data-filtering/${dataset}/gpt4-tiktoken-seqlen-${max_seq_len}/final/${ckpt_fmt_run_name}-bs-${bs}-lr-${lr}-sd-${seed}/ckpts/latest-rank0.pt.symlink # Set in launch script
+
+  # Algos and Callbacks
+  algorithms:
+    gradient_clipping:
+      clipping_threshold: 1
+      clipping_type: norm
+
+  callbacks:
+    lr_monitor: {}
+    memory_monitor: {}
+    runtime_estimator: {}
+    scheduled_gc:
+      batch_interval: 2000
+    speed_monitor:
+      window_size: 1
+    gpu_hour_logger: {}
+
+  # Dataloaders
+  eos_token_id: 0 # update for hero run with custom tokenizer
+  num_canonical_nodes: 128 # update for hero run, must be codivisible by # physical nodes
+
+  # Train loader
+  eval_loader:
+    name: text
+    drop_last: false
+    num_workers: 1
+    dataset:
+      cache_limit: 2tb
+      download_timeout: 360
+      eos_token_id: ${eos_token_id}
+      max_seq_len: ${max_seq_len}
+      num_canonical_nodes: ${num_canonical_nodes}
+      shuffle: false
+      predownload: 4194304
+      local: /tmp/dataset/val
+      remote: # Set by launch script
+      split: null
