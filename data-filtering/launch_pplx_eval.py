@@ -114,8 +114,8 @@ if __name__ == "__main__":
         eval_dataset_remote = "s3://data-force-one-datasets/__unitystorage/catalogs/36798a58-e180-4029-8cd7-842e61841ef0/volumes/b9e4994e-997d-4cbf-b76b-e38ff5533785/mpt/gpt4-tiktoken-seqlen-2048/26B-total-available-holdout-tokens-partition-sd-17/holdout/26B-tokens-from-1.0-passes/combined/mds"
         base_run.parameters["eval_loader"]["dataset"]["remote"] = eval_dataset_remote
 
-        with open("debug.yaml", "w") as f:
-            f.write(str(base_run))
+        # with open("debug.yaml", "w") as f:
+        #     f.write(str(base_run))
 
-        # launched_run = create_run(base_run)
-        # print(f"Launched run: {launched_run.name}")
+        launched_run = create_run(base_run)
+        print(f"Launched run: {launched_run.name}")

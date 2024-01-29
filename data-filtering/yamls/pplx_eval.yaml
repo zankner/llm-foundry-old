@@ -22,7 +22,7 @@ command: |-
   export AWS_PROFILE=data-force-one
   pip install -U wandb==0.15.4
   cd llm-foundry/scripts
-  composer train/pplx_eval.py /mnt/config/parameters.yaml || (echo "Command failed - killing python" && pkill python && exit 1)
+  composer eval/pplx_eval.py /mnt/config/parameters.yaml || (echo "Command failed - killing python" && pkill python && exit 1)
 
 parameters:
   global_seed: # Set in launch script
