@@ -203,7 +203,7 @@ def main(cfg: DictConfig) -> Trainer:
     dist.initialize_dist(get_device(None), timeout=dist_timeout)
 
     # Get global and device batch size information from distributed/single node setting
-    cfg = update_batch_size_info(cfg)
+    # cfg = update_batch_size_info(cfg)
     logged_cfg.update(cfg, merge=True)
 
     # Mandatory model training configs
