@@ -29,9 +29,7 @@ from llmfoundry.utils.config_utils import (log_config, pop_config,
 
 def validate_config(cfg: DictConfig):
     """Validates compatible model and dataloader selection."""
-    loaders = [cfg.train_loader]
-    if 'eval_loader' in cfg:
-        loaders.append(cfg.eval_loader)
+    loaders = [cfg.eval_loader]
     for loader in loaders:
         if loader.name == 'text':
             if cfg.model.name in ['hf_prefix_lm', 'hf_t5']:
