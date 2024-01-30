@@ -383,6 +383,7 @@ def main(cfg: DictConfig) -> Trainer:
         seed=seed,
         model=model,
         eval_dataloader=evaluators,
+        eval_subset_num_batches=50,
         progress_bar=progress_bar,
         log_to_console=log_to_console,
         console_log_interval=console_log_interval,
