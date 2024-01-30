@@ -5,6 +5,8 @@ import logging
 import os
 import sys
 import warnings
+from typing import Any, Dict, List, Optional, Union
+
 import torch
 from composer import Trainer
 from composer.core import Evaluator
