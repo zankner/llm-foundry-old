@@ -2,7 +2,7 @@ name: # set by launch script
 
 integrations:
   - integration_type: git_repo
-    git_branch: zack/data-filtering
+    git_branch: zack/me-fomo-data-pruning
     git_repo: zankner/llm-foundry
     pip_install: .[gpu]
     ssh_clone: true

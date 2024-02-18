@@ -46,7 +46,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--cluster", type=str, default="r1z1")
     parser.add_argument("--ngpus", type=str, default=8)
-    parser.add_argument("--device-batch-size", type=int, default=8)
+    parser.add_argument("--device-batch-size", type=int, default=32)
     parser.add_argument("--seeds", type=int, nargs="+", required=True)
     parser.add_argument("--run-name", type=str, required=True)
     parser.add_argument("--priority", type=str, default="low")
@@ -110,8 +110,8 @@ if __name__ == "__main__":
 
         # Set the eval dataset
         tokenizer_name = "gpt4-tiktoken" # Hard fix for now
+        # eval_dataset_remote = f"s3://data-force-one-datasets/__unitystorage/catalogs/36798a58-e180-4029-8cd7-842e61841ef0/volumes/b9e4994e-997d-4cbf-b76b-e38ff5533785/{dataset}/{tokenizer_name}-seqlen-{seq_len}/26B-total-available-holdout-tokens-partition-sd-17/train/26B-tokens-from-0.25-passes/combined/mds"
         eval_dataset_remote = f"s3://data-force-one-datasets/__unitystorage/catalogs/36798a58-e180-4029-8cd7-842e61841ef0/volumes/b9e4994e-997d-4cbf-b76b-e38ff5533785/{dataset}/{tokenizer_name}-seqlen-{seq_len}/base/combined/mds/test"
-        eval_dataset_remote = "s3://data-force-one-datasets/__unitystorage/catalogs/36798a58-e180-4029-8cd7-842e61841ef0/volumes/b9e4994e-997d-4cbf-b76b-e38ff5533785/mpt/gpt4-tiktoken-seqlen-2048/26B-total-available-holdout-tokens-partition-sd-17/holdout/26B-tokens-from-1.0-passes/combined/mds"
         base_run.parameters["eval_loader"]["dataset"]["remote"] = eval_dataset_remote
 
         # with open("debug.yaml", "w") as f:

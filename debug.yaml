@@ -1,51 +1,50 @@
-name: mpt-passes-0.25-final-1B-26B-baseline
+name: sd-17-pile-passes-0-25-final-1B-26B-baseline
 image: mosaicml/llm-foundry:2.1.0_cu121-e772a47
 scheduling:
-  resumable: true
-  priority: low
+  priority: medium
+  preemptible: true
 compute:
+  cluster: r1z1
   gpus: 8
-  cluster: r15z1
 parameters:
+  global_seed: null
   max_seq_len: 2048
-  run_name: # Set in launch script
-  dataset: # Set in launch script
+  run_name: pile-passes-0.25-final-1B-26B-baseline
+  ckpt_fmt_run_name: pile-passes-0.25-final-1B-26B-baseline
+  dataset: pile
   seed: 17
   lr: 0.0002
   bs: 512
-  models:
-  - model_name: ${run_name}
-    load_path: oci://mosaicml-internal-checkpoints/zack/me-fomo-data-filtering/${dataset}/gpt4-tiktoken-seqlen-${max_seq_len}/final/${run_name}-bs-${bs}-lr-${lr}-sd-${seed}/ckpts/latest-rank0.pt.symlink
-    model:
-      name: mpt_causal_lm
-      init_device: meta
-      d_model: 2048
-      n_heads: 16
-      n_layers: 24
-      expansion_ratio: 4
-      max_seq_len: ${max_seq_len}
-      vocab_size: 100352
-      tokenizer_name: ${tokenizer_name}
-      no_bias: true
-      norm_type: low_precision_layernorm
-      emb_pdrop: 0
-      resid_pdrop: 0
-      init_config:
-        init_nonlinearity: relu
-        name: kaiming_normal_
-      attn_config:
-        alibi: true
-        attn_impl: triton
-        clip_qkv: 6
-        attn_uses_sequence_id: false
-        attn_pdrop: 0
-    tokenizer:
-      name: ${tokenizer_name}
-      kwargs:
-        model_name: gpt-4
-  precision: amp_bf16
+  model:
+    name: mpt_causal_lm
+    init_device: meta
+    d_model: 2048
+    n_heads: 16
+    n_layers: 24
+    expansion_ratio: 4
+    max_seq_len: ${max_seq_len}
+    vocab_size: 100352
+    tokenizer_name: ${tokenizer_name}
+    no_bias: true
+    norm_type: low_precision_layernorm
+    emb_pdrop: 0
+    resid_pdrop: 0
+    init_config:
+      init_nonlinearity: relu
+      name: kaiming_normal_
+    attn_config:
+      alibi: true
+      attn_impl: triton
+      clip_qkv: 6
+      attn_uses_sequence_id: false
+      attn_pdrop: 0
   tokenizer_name: tiktoken
-  device_eval_batch_size: 8
+  tokenizer:
+    name: ${tokenizer_name}
+    kwargs:
+      model_name: gpt-4
+  precision: amp_bf16
+  device_eval_batch_size: 32
   fsdp_config:
     activation_checkpointing: false
     activation_checkpointing_reentrant: false
@@ -55,17 +54,49 @@ parameters:
     sharding_strategy: FULL_SHARD
     state_dict_type: full
     verbose: false
+  log_to_console: true
+  console_log_interval: 100ba
+  progress_bar: false
+  python_log_level: DEBUG
   loggers:
     wandb:
       project: me-fomo-data-filtering
       tags:
       - eval
       - dataset-${dataset}
-      name: eval-${run_name}-sd-${seed}
-      group: eval-${run_name}
-  icl_tasks: eval/yamls/tasks_v2.yaml
-  eval_gauntlet: eval/yamls/eval_gauntlet_v2.yaml
-  icl_seq_len: 2048
+      name: pplx-eval-${run_name}-sd-${seed}
+      group: pplx-eval-${run_name}
+  load_path: oci://mosaicml-internal-checkpoints/zack/me-fomo-data-filtering/${dataset}/gpt4-tiktoken-seqlen-${max_seq_len}/final/${ckpt_fmt_run_name}-bs-${bs}-lr-${lr}-sd-${seed}/ckpts/latest-rank0.pt.symlink
+  algorithms:
+    gradient_clipping:
+      clipping_threshold: 1
+      clipping_type: norm
+  callbacks:
+    lr_monitor: {}
+    memory_monitor: {}
+    runtime_estimator: {}
+    scheduled_gc:
+      batch_interval: 2000
+    speed_monitor:
+      window_size: 1
+    gpu_hour_logger: {}
+  eos_token_id: 0
+  num_canonical_nodes: 128
+  eval_loader:
+    name: text
+    drop_last: false
+    num_workers: 1
+    dataset:
+      cache_limit: 2tb
+      download_timeout: 360
+      eos_token_id: ${eos_token_id}
+      max_seq_len: ${max_seq_len}
+      num_canonical_nodes: ${num_canonical_nodes}
+      shuffle: false
+      predownload: 4194304
+      local: /tmp/dataset/val
+      remote: s3://data-force-one-datasets/__unitystorage/catalogs/36798a58-e180-4029-8cd7-842e61841ef0/volumes/b9e4994e-997d-4cbf-b76b-e38ff5533785/pile/gpt4-tiktoken-seqlen-2048/26B-total-available-holdout-tokens-partition-sd-17/train/26B-tokens-from-0.25-passes/combined/mds
+      split: null
 integrations:
 - integration_type: git_repo
   git_branch: zack/me-fomo-data-pruning
@@ -78,7 +109,9 @@ integrations:
 - integration_type: pip_packages
   packages:
   - tiktoken
-command: |
-  pip install --upgrade mosaicml
+command: |-
+  source /secrets/secrets.env
+  export AWS_PROFILE=data-force-one
+  pip install -U wandb==0.15.4
   cd llm-foundry/scripts
-  composer eval/eval.py /mnt/config/parameters.yaml || (echo "Command failed - killing python" && pkill python && exit 1)
+  composer eval/pplx_eval.py /mnt/config/parameters.yaml || (echo "Command failed - killing python" && pkill python && exit 1)

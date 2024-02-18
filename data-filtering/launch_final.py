@@ -90,7 +90,7 @@ if __name__ == "__main__":
     parser.add_argument("--dataset",
                         type=str,
                         default="mpt",
-                        choices=["mpt", "pile", "pile-cc"])
+                        choices=["mpt", "dolma", "pile", "pile-cc"])
 
     args = parser.parse_args()
 

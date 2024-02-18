@@ -308,7 +308,7 @@ if __name__ == "__main__":
     parser.add_argument("--dataset",
                         type=str,
                         default="mpt",
-                        choices=["mpt", "pile", "pile-cc"])
+                        choices=["mpt", "dolma", "pile", "pile-cc"])
     parser.add_argument("--available-holdout-tokens",
                         type=str,
                         default="52B",

@@ -1,4 +1,5 @@
 import os
+import re
 import argparse
 
 from mcli import RunConfig, create_run
@@ -62,12 +63,11 @@ if __name__ == "__main__":
     parser.add_argument("--cluster", type=str, default="r15z1")
     parser.add_argument("--ngpus", type=str, default=8)
     parser.add_argument("--device-batch-size", type=int, default=8)
-    parser.add_argument("--dataset", type=str, required=True, choices=["pile", "mpt"])
-    parser.add_argument("--training-duration", type=str, required=True, choices=["26B", "52B"])
-    parser.add_argument("--num-params", type=str, required=True, choices=["1B", "3B"])
     parser.add_argument("--seeds", type=int, nargs="+", required=True)
     parser.add_argument("--run-name", type=str, required=True)
     parser.add_argument("--eval-freq", type=float, default=0.1)
+    parser.add_argument("--priority", type=str, default="low")
+    parser.add_argument("--not-preemptible", action="store_true")
     parser.add_argument("--intermediate-eval", action="store_true")
 
     args = parser.parse_args()
@@ -75,14 +75,24 @@ if __name__ == "__main__":
     for seed in args.seeds:
         base_run = RunConfig.from_file(f"data-filtering/yamls/gauntlet.yaml")
 
+        training_details = re.search(r"final-\d+B-\d+B", args.run_name).group().split("-")
+        num_params = training_details[1]
+        training_duration = training_details[2]
+        dataset = args.run_name.split("-")[0]
+
         # Set hparams
         batch_size = 512 # Assuming that this is the bs for all models rn
         seq_len = 2048 # Assuming that this is the seq_len for all models rn
-        lr = 0.0002 # Assuming that this is the lr for all models rn
+        if num_params == "1B":
+            lr = 0.0002 # Assuming that this is the lr for all models rn
+        elif num_params == "3B":
+            lr = 0.00016
+        ref_batch_size = 512
+        ref_lr = 0.0002
 
         ckpt_fmt_run_name = args.run_name
         if "global" in ckpt_fmt_run_name:
-            ckpt_fmt_run_name += f"-bs-{batch_size}-lr-{lr}"
+            ckpt_fmt_run_name += f"-bs-{ref_batch_size}-lr-{ref_lr}"
 
         # Set name
         base_run.name = (f"sd-{seed}-" + args.run_name)[:56]
@@ -92,8 +102,12 @@ if __name__ == "__main__":
         base_run.parameters["run_name"] = args.run_name
         base_run.parameters["ckpt_fmt_run_name"] = ckpt_fmt_run_name
 
+        # Set scheduling
+        base_run.scheduling["priority"] = args.priority
+        base_run.scheduling["preemptible"] = not args.not_preemptible
+
         # Set hparams
-        base_run.parameters["dataset"] = args.dataset
+        base_run.parameters["dataset"] = dataset
         base_run.parameters["bs"] = batch_size
         base_run.parameters["lr"] = lr
         base_run.parameters["max_seq_len"] = seq_len
@@ -110,9 +124,9 @@ if __name__ == "__main__":
         base_run.parameters["device_eval_batch_size"] = args.device_batch_size
 
         # Build all model eval ckpts
-        if args.training_duration == "26B":
+        if training_duration == "26B":
             training_duration = 26 * 1e+9
-        elif args.training_duration == "52B":
+        elif training_duration == "52B":
             training_duration = 52 * 1e+9
 
         ckpt_freq = 500 # Assuming that this is the ckpt_freq for all models rn
@@ -123,15 +137,16 @@ if __name__ == "__main__":
                 eval_percent = args.eval_freq * eval_idx
                 eval_token = eval_percent * training_duration
                 eval_batch = int(eval_token / token_per_batch / ckpt_freq) * ckpt_freq
-                model_cfg = build_model_cfg(eval_batch, args.num_params) 
+                model_cfg = build_model_cfg(eval_batch, num_params) 
                 all_model_cfgs.append(model_cfg)
         else:
-            all_model_cfgs.append(build_model_cfg("final", args.num_params))
+            all_model_cfgs.append(build_model_cfg("final", num_params))
 
-        base_run.parameters["models"] = all_model_cfgs
+        for model_cfg in all_model_cfgs:
+            base_run.parameters["models"] = [model_cfg]
 
-        # with open("debug.yaml", "w") as f:
-        #             f.write(str(base_run))
+            # with open("debug.yaml", "w") as f:
+            #             f.write(str(base_run))
 
-        launched_run = create_run(base_run)
-        print(f"Launched run: {launched_run.name}")
+            launched_run = create_run(base_run)
+            print(f"Launched run: {launched_run.name}")
