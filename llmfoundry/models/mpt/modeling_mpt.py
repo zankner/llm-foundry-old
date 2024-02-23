@@ -39,6 +39,8 @@ from llmfoundry.models.layers.ffn import build_ffn as build_ffn
 from llmfoundry.models.layers.norm import NORM_CLASS_REGISTRY
 from llmfoundry.models.mpt.configuration_mpt import MPTConfig
 
+from llmfoundry.metrics.token_acc import TokenAccuracy
+
 # NOTE: All utils are imported directly even if unused so that
 # HuggingFace can detect all the needed files to copy into its modules folder.
 # Otherwise, certain modules are missing.
@@ -688,7 +690,7 @@ class ComposerMPTCausalLM(HuggingFaceModel):
         hf_config = MPTConfig.from_dict(resolved_om_model_config)
         model = MPTForCausalLM(hf_config)
 
-        train_metrics = [LanguageCrossEntropy(), LanguagePerplexity()]
+        train_metrics = [LanguageCrossEntropy(), LanguagePerplexity(), TokenAccuracy()]
         eval_metrics = [
             LanguageCrossEntropy(),
             LanguagePerplexity(),
