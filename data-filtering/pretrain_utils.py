@@ -42,18 +42,11 @@ def set_common_args(args,
     # Special images
     if args.cluster in ["r4z5", "r4z7", "r4z6", "r4z8"]:
         base_run.image = "mosaicml/pytorch:2.1.0_cu121-python3.10-ubuntu20.04-aws"
-        base_run.env_variables += [{
-            "key": "FI_EFA_FORK_SAFE",
-            "value": "1"
-        }, {
-            "key": "NCCL_DEBUG",
-            "value": "INFO"
-        },
-        {
-            "key": "NCCL_TOPO_FILE",
-            "value": "/opt/aws-ofi-nccl/install/share/aws-ofi-nccl/xml/p4de-24xl-topo.xml"
-        }
-        ]
+        base_run.env_variables = {**base_run.env_variables, **{
+            'FI_EFA_FORK_SAFE': '1',
+            'NCCL_DEBUG': 'INFO',
+            'NCCL_TOPO_FILE': '/opt/aws-ofi-nccl/install/share/aws-ofi-nccl/xml/p4de-24xl-topo.xml'
+        }}
 
     # # Set timeout for slow clusters
     # if args.cluster in ["r9z1"]:

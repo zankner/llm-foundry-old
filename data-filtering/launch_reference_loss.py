@@ -58,7 +58,7 @@ if __name__ == "__main__":
     base_run.image = "mosaicml/llm-foundry:2.1.0_cu121-e772a47"
 
     # Set rest of cluster params
-    if args.cluster in ["r9z1", "r14z3", "r15z1"]:
+    if args.cluster in ["r9z1", "r14z3", "r14z3p2", "r15z1"]:
         base_run.gpu_type = "h100_80gb"
     elif args.cluster in ["r4z5", "r4z7", "r4z6", "r8z6", "r1z1", "r4z8"]:
         base_run.gpu_type = "a100_80gb"

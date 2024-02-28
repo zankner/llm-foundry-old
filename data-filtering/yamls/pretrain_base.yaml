@@ -1,10 +1,8 @@
 name: # set by launch script
 
 env_variables:
-  - key: NCCL_IB_PCI_RELAXED_ORDERING
-    value: 1
-  - key: NCCL_COLLNET_ENABLE
-    value: "0"
+  NCCL_IB_PCI_RELAXED_ORDERING: 1
+  NCCL_COLLNET_ENABLE: "0"
 
 integrations:
   - integration_type: git_repo
