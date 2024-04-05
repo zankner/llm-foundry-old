@@ -12,7 +12,7 @@ integrations:
     packages:
       - tiktoken
 command: |
-  pip install --upgrade mosaicml
+  pip install --upgrade "mosaicml==0.20.1"
   cd llm-foundry/scripts
   composer eval/eval.py /mnt/config/parameters.yaml || (echo "Command failed - killing python" && pkill python && exit 1)
 

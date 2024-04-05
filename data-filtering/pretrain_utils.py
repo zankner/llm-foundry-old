@@ -32,7 +32,7 @@ def set_common_args(args,
     base_run.cluster = args.cluster
     base_run.gpu_num = args.ngpus
     # Set rest of cluster params
-    if args.cluster in ["r9z1", "r14z3", "r14z3p2", "r15z1"]:
+    if args.cluster in ["r9z1", "r14z3", "r14z3p2", "r15z1", "r15z1p1", "r9z3"]:
         base_run.gpu_type = "h100_80gb"
     elif args.cluster in ["r4z5", "r4z7", "r4z6", "r8z6", "r1z1", "r4z8"]:
         base_run.gpu_type = "a100_80gb"

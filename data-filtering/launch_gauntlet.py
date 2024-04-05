@@ -62,13 +62,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--cluster", type=str, default="r15z1")
     parser.add_argument("--ngpus", type=str, default=8)
-    parser.add_argument("--device-batch-size", type=int, default=8)
+    parser.add_argument("--device-batch-size", type=int, default=16)
     parser.add_argument("--seeds", type=int, nargs="+", required=True)
     parser.add_argument("--run-name", type=str, required=True)
     parser.add_argument("--eval-freq", type=float, default=0.1)
     parser.add_argument("--priority", type=str, default="low")
     parser.add_argument("--not-preemptible", action="store_true")
     parser.add_argument("--intermediate-eval", action="store_true")
+    parser.add_argument("--debug", action="store_true")
 
     args = parser.parse_args()
 
@@ -128,7 +129,7 @@ if __name__ == "__main__":
             training_duration = 26 * 1e+9
         elif training_duration == "52B":
             training_duration = 52 * 1e+9
-
+        
         ckpt_freq = 500 # Assuming that this is the ckpt_freq for all models rn
         token_per_batch = batch_size * seq_len
         all_model_cfgs = []
@@ -145,8 +146,9 @@ if __name__ == "__main__":
         for model_cfg in all_model_cfgs:
             base_run.parameters["models"] = [model_cfg]
 
-            # with open("debug.yaml", "w") as f:
-            #             f.write(str(base_run))
-
-            launched_run = create_run(base_run)
-            print(f"Launched run: {launched_run.name}")
+            if args.debug:
+                with open("debug.yaml", "w") as f:
+                            f.write(str(base_run))
+            else:
+                launched_run = create_run(base_run)
+                print(f"Launched run: {launched_run.name}")

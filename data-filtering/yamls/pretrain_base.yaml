@@ -103,7 +103,7 @@ parameters:
 
   # Logging
   eval_first: false
-  eval_interval: 0.1dur
+  eval_interval: 0.2dur
   log_to_console: true
   console_log_interval: 100ba
   progress_bar: false
@@ -154,7 +154,7 @@ parameters:
     num_workers: 1
     dataset:
       cache_limit: 2tb
-      download_timeout: 360
+      download_timeout: 1200
       eos_token_id: ${eos_token_id}
       max_seq_len: ${max_seq_len}
       num_canonical_nodes: ${num_canonical_nodes}
