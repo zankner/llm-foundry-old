@@ -3,7 +3,7 @@ integrations:
   - integration_type: git_repo
     git_branch: zack/me-fomo-data-pruning
     git_repo: zankner/llm-foundry
-    pip_install: .[gpu]
+    pip_install: -e .[gpu]
     ssh_clone: true
   - integration_type: wandb
     entity: mosaic-ml
