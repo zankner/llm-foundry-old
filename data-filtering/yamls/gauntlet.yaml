@@ -13,7 +13,9 @@ integrations:
       - tiktoken
 command: |
   pip install --upgrade "mosaicml==0.20.1"
-  cd llm-foundry/scripts
+  cd llm-foundry
+  pip install -e ".[gpu]"
+  cd scripts
   composer eval/eval.py /mnt/config/parameters.yaml || (echo "Command failed - killing python" && pkill python && exit 1)
 
 # Mosaic Cloud will use run_name (with a unique suffix) to populate the env var $RUN_NAME
