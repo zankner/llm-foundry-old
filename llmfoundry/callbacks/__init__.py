@@ -5,9 +5,7 @@ try:
     from llmfoundry.callbacks.eval_gauntlet_callback import EvalGauntlet
     from llmfoundry.callbacks.fdiff_callback import FDiffMetrics
     from llmfoundry.callbacks.generate_callback import Generate
-    from llmfoundry.callbacks.log_average_icl import AverageICLLogger
     from llmfoundry.callbacks.gpu_hours_logger import GpuHourLogger
-    from llmfoundry.callbacks.log_domain_loss import LogDomainLoss
     from llmfoundry.callbacks.hf_checkpointer import HuggingFaceCheckpointer
     from llmfoundry.callbacks.monolithic_ckpt_callback import \
         MonolithicCheckpointSaver
@@ -15,7 +13,6 @@ try:
                                                            LayerFreezing)
     from llmfoundry.callbacks.scheduled_gc_callback import \
         ScheduledGarbageCollector
-    from llmfoundry.callbacks.slack_logger import SlackLogger
 except ImportError as e:
     raise ImportError(
         'Please make sure to pip install . to get requirements for llm-foundry.'
@@ -24,15 +21,11 @@ except ImportError as e:
 __all__ = [
     'FDiffMetrics',
     'Generate',
-    'AverageICLLogger',
     'GpuHourLogger',
-    'LogDomainLoss',
     'MonolithicCheckpointSaver',
     'GlobalLRScaling',
     'LayerFreezing',
     'ScheduledGarbageCollector',
-    'SlackLogger',
     'EvalGauntlet',
-    'ModelGauntlet',
     'HuggingFaceCheckpointer',
 ]

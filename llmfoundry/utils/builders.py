@@ -26,11 +26,10 @@ from omegaconf import OmegaConf as om
 from torch.optim.optimizer import Optimizer
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
-from llmfoundry.algorithms import DomainWeightSetter, OnlineBatchSelection
-from llmfoundry.callbacks import (EvalGauntlet, FDiffMetrics, Generate, AverageICLLogger,
-                                  LogDomainLoss, GpuHourLogger, GlobalLRScaling, HuggingFaceCheckpointer,
+from llmfoundry.callbacks import (EvalGauntlet, FDiffMetrics, Generate,
+                                  GpuHourLogger, GlobalLRScaling, HuggingFaceCheckpointer,
                                   LayerFreezing, MonolithicCheckpointSaver,
-                                  ScheduledGarbageCollector, SlackLogger)
+                                  ScheduledGarbageCollector)
 from llmfoundry.optim import (DecoupledAdaLRLion, DecoupledClipLion,
                               DecoupledLionW, DecoupledLionW_8bit)
 from llmfoundry.tokenizers.tiktoken import TiktokenTokenizerWrapper
@@ -143,10 +142,6 @@ def build_algorithm(name: str, kwargs: Dict[str, Any]) -> Algorithm:
         return algorithms.GatedLinearUnits(**kwargs)
     elif name == 'low_precision_layernorm':
         return algorithms.LowPrecisionLayerNorm(**kwargs)
-    elif name == 'doremi':
-        return DomainWeightSetter(**kwargs)
-    elif name == 'online_batch_selection':
-        return OnlineBatchSelection(**kwargs)
     else:
         raise ValueError(f'Not sure how to build algorithm: {name}')
 
